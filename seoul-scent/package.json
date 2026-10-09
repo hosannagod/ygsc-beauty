@@ -1,0 +1,38 @@
+{
+  "name": "seoul-scent",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/seoul/server.ts",
+    "start": "tsx src/seoul/server.ts",
+    "start:prod": "NODE_ENV=production node dist/server.js",
+    "build": "esbuild src/seoul/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
+    "preview": "node dist/server.js",
+    "test": "tsx --test tests/*.test.ts",
+    "admin:create": "tsx src/seoul/create-admin.ts",
+    "typecheck": "tsc -p tsconfig.seoul.json",
+    "db:backup": "tsx src/seoul/backup.ts",
+    "test:browser": "npm run build && node scripts/browser-smoke.cjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "better-sqlite3": "^12.6.2",
+    "exceljs": "^4.4.0",
+    "hono": "^4.13.13",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.64.0",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "brace-expansion@^2.0.1": "^2.1.7",
+    "uuid": "^11.1.1"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
