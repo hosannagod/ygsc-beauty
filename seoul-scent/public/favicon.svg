@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Seoul Scent — K-beauty</title>
+  <rect width="64" height="64" rx="16" fill="#284e3b"/>
+  <path d="M33 53C43 52 50 46 51 38C41 38 34 43 33 53Z" fill="#abc29b"/>
+  <path d="M31 52C21 51 14 46 13 39C23 39 29 43 31 52Z" fill="#abc29b"/>
+  <g fill="#f8efd9">
+    <ellipse cx="32" cy="22" rx="8" ry="12"/>
+    <ellipse cx="32" cy="22" rx="8" ry="12" transform="rotate(72 32 30)"/>
+    <ellipse cx="32" cy="22" rx="8" ry="12" transform="rotate(144 32 30)"/>
+    <ellipse cx="32" cy="22" rx="8" ry="12" transform="rotate(216 32 30)"/>
+    <ellipse cx="32" cy="22" rx="8" ry="12" transform="rotate(288 32 30)"/>
+  </g>
+  <circle cx="32" cy="30" r="5" fill="#d7ae65"/>
+</svg>

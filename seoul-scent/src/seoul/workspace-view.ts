@@ -38,7 +38,7 @@ export function workspacePage(user: User, lang: Language = "ko") {
   ];
   return html`<!doctype html>
     <html lang="${lang}">
-      <head>
+      <head><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1">
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Seoul Scent · 협업 워크스페이스</title>
