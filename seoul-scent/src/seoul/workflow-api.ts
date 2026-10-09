@@ -1,3 +1,4 @@
+import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
 import type { User } from "./db.js";
@@ -24,6 +25,21 @@ export function registerWorkflow(
   app: Hono<{ Variables: { user: User | null } }>,
   db: DB,
 ) {
+  const translateContent = contentTranslator(db);
+  app.get("/api/work/campaigns/:id/english", async (c) => {
+    try {
+      const u = c.get("user");
+      if (!u) return c.json({ error: "Please sign in." }, 401);
+      const campaign = campaignFor(db, Number(c.req.param("id")), u);
+      return c.json(
+        await translateContent(campaign, c.req.query("scope") === "summary"),
+      );
+    } catch (e) {
+      if (e instanceof WorkflowError)
+        return c.json({ error: e.message }, e.status as any);
+      throw e;
+    }
+  });
   const current = (c: any): User => {
     const u = c.get("user");
     if (!u) fail("로그인이 필요합니다.", 401);
@@ -148,6 +164,21 @@ export function registerWorkflow(
           "모집 마감 < 초안 마감 < 최종 마감 순서로 미래 날짜를 설정해 주세요.",
         );
       const { start } = recruitmentDates(startDate, b.recruit_date, draft);
+      const english = Object.fromEntries(
+        englishFields.map((field) => [
+          field,
+          text(
+            b[field + "_en"] ?? "",
+            "영어 " + field,
+            0,
+            field === "guidelines"
+              ? 12000
+              : field === "description"
+                ? 8000
+                : 400,
+          ),
+        ]),
+      );
       const result = db
         .prepare(
           `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -171,6 +202,11 @@ export function registerWorkflow(
           startDate,
           start,
           review ? 1 : 0,
+        );
+      for (const field of englishFields)
+        db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(
+          english[field],
+          result.lastInsertRowid,
         );
       return c.json({ id: Number(result.lastInsertRowid) }, 201);
     }),
@@ -305,6 +341,30 @@ export function registerWorkflow(
           review ? 1 : 0,
           campaign.id,
         );
+        const sources = { title, product, description, guidelines };
+        for (const field of englishFields) {
+          const value =
+            b[field + "_en"] === undefined ||
+            (sources[field] !== campaign[field] &&
+              b[field + "_en"] === campaign[field + "_en"])
+              ? sources[field] === campaign[field]
+                ? campaign[field + "_en"]
+                : ""
+              : text(
+                  b[field + "_en"],
+                  "영어 " + field,
+                  0,
+                  field === "guidelines"
+                    ? 12000
+                    : field === "description"
+                      ? 8000
+                      : 400,
+                );
+          db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(
+            value,
+            campaign.id,
+          );
+        }
         if (
           title !== campaign.title ||
           product !== campaign.product ||

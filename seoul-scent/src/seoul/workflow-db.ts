@@ -121,4 +121,20 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       "ALTER TABLE campaigns ADD COLUMN review_required INTEGER NOT NULL DEFAULT 1 CHECK(review_required IN (0,1))",
     );
   db.exec("INSERT OR IGNORE INTO schema_version VALUES(5)");
+  const fields = db.prepare("PRAGMA table_info(campaigns)").all() as {
+    name: string;
+  }[];
+  for (const field of [
+    "title_en",
+    "product_en",
+    "description_en",
+    "guidelines_en",
+  ])
+    if (!fields.some((c) => c.name === field))
+      db.exec(
+        `ALTER TABLE campaigns ADD COLUMN ${field} TEXT NOT NULL DEFAULT ''`,
+      );
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS content_translation_cache(source_hash TEXT PRIMARY KEY,translated TEXT NOT NULL,created_at INTEGER NOT NULL); INSERT OR IGNORE INTO schema_version VALUES(6)`,
+  );
 }

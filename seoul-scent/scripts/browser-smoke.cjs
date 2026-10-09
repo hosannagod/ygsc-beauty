@@ -88,6 +88,17 @@ const { spawn, spawnSync } = require("node:child_process"),
       ["final_date", 10],
     ])
       await brand.locator(`[name=${key}]`).fill(future(n));
+    await brand
+      .getByText("English campaign content (optional)", { exact: true })
+      .click();
+    await brand.locator("[name=title_en]").fill("Air Mood influencer campaign");
+    await brand.locator("[name=product_en]").fill("Air Mood skincare");
+    await brand
+      .locator("[name=description_en]")
+      .fill("Air Mood skincare collaboration details.");
+    await brand
+      .locator("[name=guidelines_en]")
+      .fill("Show the product and follow these filming guidelines.");
     await brand.getByRole("button", { name: "캠페인 등록" }).click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const campaignId = brand.url().split("/").pop();
@@ -112,6 +123,12 @@ const { spawn, spawnSync } = require("node:child_process"),
       .fill(
         "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
       );
+    await brand
+      .locator('form[data-task="campaign-details"] details summary')
+      .click();
+    await brand
+      .locator("[name=description_en]")
+      .fill("Updated product information. Please review before filming.");
     await brand.getByRole("button", { name: "캠페인 수정 저장" }).click();
     await brand.locator('a[href="https://example.com/updated"]').waitFor();
     assert.equal(
@@ -348,10 +365,20 @@ const { spawn, spawnSync } = require("node:child_process"),
       .getByRole("heading", { name: "Product description", exact: true })
       .waitFor();
     await influencer
-      .getByText(
-        "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
-        { exact: true },
-      )
+      .getByText("Updated product information. Please review before filming.", {
+        exact: true,
+      })
+      .waitFor();
+    await influencer
+      .getByRole("heading", {
+        name: "Air Mood influencer campaign",
+        exact: true,
+      })
+      .waitFor();
+    await influencer
+      .getByText("Show the product and follow these filming guidelines.", {
+        exact: true,
+      })
       .waitFor();
     await influencer.reload();
     await influencer
@@ -378,6 +405,17 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand
       .locator("[name=guidelines]")
       .fill("제품을 사용한 후 최종 SNS 콘텐츠를 게시해 주세요.");
+    await brand
+      .getByText("English campaign content (optional)", { exact: true })
+      .click();
+    await brand.locator("[name=title_en]").fill("No review campaign");
+    await brand.locator("[name=product_en]").fill("Test skincare product");
+    await brand
+      .locator("[name=description_en]")
+      .fill("Campaign without a draft review step.");
+    await brand
+      .locator("[name=guidelines_en]")
+      .fill("Publish your final content after receiving the product.");
     await brand.locator("[name=review_required]").uncheck();
     assert.equal(await brand.locator("[name=draft_date]").isVisible(), false);
     await brand.locator("[name=recruit_date]").fill(future(2));

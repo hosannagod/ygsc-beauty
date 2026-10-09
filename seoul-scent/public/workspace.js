@@ -66,6 +66,48 @@
     `<div class="empty"><div class="empty-icon">◇</div><h3>${heading}</h3><p>${message}</p></div>`;
   const heading = (title, description, cta = "") =>
     `<div class="page-heading"><div><p class="eyebrow">SEOUL SCENT WORKSPACE</p><h1>${title}</h1><p class="muted">${description}</p></div>${cta}</div>`;
+  const englishRequests = new Map();
+  async function englishCopy(row, campaignId, summary = true) {
+    if (!campaignId) return row;
+    const key = JSON.stringify([
+      campaignId,
+      summary,
+      row.title,
+      row.product,
+      row.description,
+      row.guidelines,
+    ]);
+    if (!englishRequests.has(key))
+      englishRequests.set(
+        key,
+        fetch(
+          `/api/work/campaigns/${campaignId}/english${summary ? "?scope=summary" : ""}`,
+        ).then(async (r) => {
+          if (!r.ok) throw new Error("Translation unavailable");
+          return r.json();
+        }),
+      );
+    try {
+      const data = await englishRequests.get(key);
+      return {
+        ...row,
+        ...data.translated,
+        _original: row,
+        _translationUnavailable: data.unavailable.length > 0,
+      };
+    } catch {
+      englishRequests.delete(key);
+      return { ...row, _translationUnavailable: true };
+    }
+  }
+  async function englishRows(rows, campaignList = false) {
+    const result = [];
+    for (const row of rows)
+      result.push(
+        await englishCopy(row, campaignList ? row.id : row.campaign_id),
+      );
+    return result;
+  }
   async function api(path, method = "GET", body) {
     const response = await fetch("/api/work" + path, {
       method,
@@ -76,6 +118,23 @@
     if (!response.ok) {
       if (response.status === 401) location.assign("/login");
       throw new Error(t(data.error) || t("요청을 처리하지 못했습니다."));
+    }
+    if (window.ScentI18n.lang === "en" && method === "GET") {
+      if (data.campaign)
+        data.campaign = await englishCopy(
+          data.campaign,
+          data.campaign.id,
+          false,
+        );
+      if (data.application)
+        data.application = await englishCopy(
+          data.application,
+          data.application.campaign_id,
+        );
+      if (data.campaigns)
+        data.campaigns = await englishRows(data.campaigns, true);
+      if (data.applications)
+        data.applications = await englishRows(data.applications);
     }
     return data;
   }
@@ -307,6 +366,9 @@
     document.querySelector("#campaign-status").onchange = render;
     render();
   }
+  function englishEditor(c = {}) {
+    return `<details><summary>English campaign content (optional)</summary><p class="note left">Leave blank for automatic English translation. Enter English text to override the translation.</p>${input("title_en", "Campaign title (English)", "text", 'maxlength="400"', c.title_en || "")}${input("product_en", "Product name (English)", "text", 'maxlength="400"', c.product_en || "")}${textarea("description_en", "Product description (English)", 'maxlength="8000" rows="4"', c.description_en || "")}${textarea("guidelines_en", "Content guidelines (English)", 'maxlength="12000" rows="5"', c.guidelines_en || "")}</details>`;
+  }
   function campaignForm() {
     root.innerHTML =
       heading(
@@ -336,7 +398,7 @@
         <div class="form-grid">
           ${input("recruit_start_date", t("모집 시작일"), "date", "required", today())}${input("recruit_date", t("모집 마감일"), "date", "required")}${input("draft_date", t("초안 제출 마감일"), "date", "required")}${input("final_date", t("최종 업로드 마감일"), "date", "required")}
         </div>
-        ${submit(t("캠페인 등록"))}
+        ${englishEditor()}${submit(t("캠페인 등록"))}
       </form>`;
   }
   document.addEventListener("change", (event) => {
@@ -378,6 +440,9 @@
             ><span>한국 시간 · 당일 자정 마감</span>
           </div>
         </section>`;
+    if (c._translationUnavailable)
+      root.innerHTML +=
+        '<div class="warning">English translation is temporarily unavailable for some content. The original is shown. Please try again later or ask the brand to add English content.</div>';
     if (role === "influencer") {
       const { profile } = await api("/profile");
       root.innerHTML += applications.length
@@ -431,7 +496,7 @@
           <details>
             <summary>캠페인 편집</summary>
             <form class="editor" data-task="campaign-details" data-id="${id}">
-              ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', c.title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', c.product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', c.description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"', c.guidelines)}
+              ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', (c._original || c).title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', (c._original || c).product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', (c._original || c).description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"', (c._original || c).guidelines)}
               <div class="form-grid">
                 ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', c.capacity)}<label
                   >보상 유형<select name="pay_type" ${locked ? "disabled" : ""}>
@@ -469,7 +534,7 @@
                 모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시
                 진행 중인 지원자에게 알림이 전달됩니다.
               </p>
-              ${submit(t("캠페인 수정 저장"))}
+              ${englishEditor(c)}${submit(t("캠페인 수정 저장"))}
             </form>
           </details>
         </section>`;

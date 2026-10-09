@@ -1142,3 +1142,53 @@ test("drafts accept arbitrary web hosts, ports and fragments but reject unsafe s
     f.db.close();
   }
 });
+
+test("English campaign copy is authorized, editable and cleared when its source changes", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create({
+      title_en: "Skincare creator campaign",
+      product_en: "Air Mood skincare",
+      description_en: "English product description",
+      guidelines_en: "English filming guidelines",
+    });
+    const path = `/campaigns/${id}`;
+    assert.equal((await f.req("otherbrand", path + "/english")).status, 403);
+    assert.equal((await f.req("", path + "/english")).status, 401);
+    let en = (await (
+      await f.req("influencer", path + "/english")
+    ).json()) as any;
+    assert.equal(en.translated.title, "Skincare creator campaign");
+    assert.equal(en.translated.guidelines, "English filming guidelines");
+    assert.deepEqual(en.unavailable, []);
+    assert.equal(
+      (
+        await f.req("brand", path + "/details", "PUT", {
+          title: "변경된 캠페인 제목",
+          title_en: "Skincare creator campaign",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (f.db.prepare("SELECT title_en FROM campaigns WHERE id=?").get(id) as any)
+        .title_en,
+      "",
+    );
+    assert.equal(
+      (
+        await f.req("brand", path + "/details", "PUT", {
+          title_en: "Updated skincare campaign",
+        })
+      ).status,
+      200,
+    );
+    en = (await (
+      await f.req("influencer", path + "/english?scope=summary")
+    ).json()) as any;
+    assert.equal(en.translated.title, "Updated skincare campaign");
+    assert.equal(en.translated.guidelines, undefined);
+  } finally {
+    f.db.close();
+  }
+});
