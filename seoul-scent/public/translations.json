@@ -366,5 +366,15 @@
   "배송 조회": "Track shipment",
   "배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.": "Tracking opens the carrier website in a new tab. Tracking details may not be available immediately after dispatch.",
   "이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.": "Automatic tracking links are unavailable for this carrier. Use the tracking number on the carrier website.",
-  "택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.": "A tracking link appears once the carrier and tracking number are registered."
+  "택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.": "A tracking link appears once the carrier and tracking number are registered.",
+  "캠페인 사진 (최대 4장)": "Campaign photos (up to 4)",
+  "캠페인 사진 선택": "Choose campaign photos",
+  "캠페인 사진": "Campaign photo",
+  "삭제": "Remove",
+  "JPG·PNG·WebP 사진을 선택하세요. 업로드 시 크기를 줄여 저장합니다. 사진 변경은 저장 버튼을 눌러야 반영됩니다.": "Choose JPG, PNG or WebP photos. Images are resized before upload. Save the campaign to apply photo changes.",
+  "20MB 이하의 JPG·PNG·WebP 사진을 선택해 주세요.": "Choose a JPG, PNG or WebP photo smaller than 20 MB.",
+  "사진 파일을 읽을 수 없습니다.": "Unable to read this photo file.",
+  "사진 크기를 줄이지 못했습니다. 다른 사진을 선택해 주세요.": "Unable to resize this photo. Please choose another image.",
+  "캠페인 사진은 최대 4장까지 등록할 수 있습니다.": "You can attach up to 4 campaign photos.",
+  "사진 준비 중입니다. 잠시 후 저장해 주세요.": "Photos are being prepared. Please save in a moment."
 }

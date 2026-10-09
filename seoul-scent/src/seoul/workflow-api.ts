@@ -1,3 +1,8 @@
+import {
+  parseCampaignImages,
+  saveCampaignImages,
+  campaignImages,
+} from "./campaign-images.js";
 import { shippingTrackingUrl } from "./shipping-tracking.js";
 import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
@@ -180,36 +185,42 @@ export function registerWorkflow(
           ),
         ]),
       );
-      const result = db
-        .prepare(
-          `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        )
-        .run(
-          u.id,
-          title,
-          product,
-          description,
-          guidelines,
-          capacity,
-          b.pay_type,
-          b.pay_type === "gifted" ? 0 : compensation,
-          b.recruit_date,
-          review ? b.draft_date : b.final_date,
-          b.final_date,
-          recruit,
-          draft,
-          final,
-          productUrl,
-          startDate,
-          start,
-          review ? 1 : 0,
-        );
-      for (const field of englishFields)
-        db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(
-          english[field],
-          result.lastInsertRowid,
-        );
-      return c.json({ id: Number(result.lastInsertRowid) }, 201);
+      const images = parseCampaignImages(db, b.images);
+      const campaignId = db.transaction(() => {
+        const result = db
+          .prepare(
+            `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          )
+          .run(
+            u.id,
+            title,
+            product,
+            description,
+            guidelines,
+            capacity,
+            b.pay_type,
+            b.pay_type === "gifted" ? 0 : compensation,
+            b.recruit_date,
+            review ? b.draft_date : b.final_date,
+            b.final_date,
+            recruit,
+            draft,
+            final,
+            productUrl,
+            startDate,
+            start,
+            review ? 1 : 0,
+          );
+        for (const field of englishFields)
+          db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(
+            english[field],
+            result.lastInsertRowid,
+          );
+        const newId = Number(result.lastInsertRowid);
+        saveCampaignImages(db, newId, images);
+        return newId;
+      })();
+      return c.json({ id: campaignId }, 201);
     }),
   );
   app.put(
@@ -219,6 +230,7 @@ export function registerWorkflow(
         b = await body(c);
       db.transaction(() => {
         const campaign = campaignFor(db, id(c), u, true);
+        const images = parseCampaignImages(db, b.images, campaign.id);
         if (campaign.status === "completed")
           fail("종료된 캠페인은 수정할 수 없습니다.", 409);
         const applicants = db
@@ -342,6 +354,7 @@ export function registerWorkflow(
           review ? 1 : 0,
           campaign.id,
         );
+        saveCampaignImages(db, campaign.id, images);
         const sources = { title, product, description, guidelines };
         for (const field of englishFields) {
           const value =
@@ -405,7 +418,32 @@ export function registerWorkflow(
                 `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
               )
               .all(campaign.id);
-      return c.json({ campaign, applications });
+      return c.json({
+        campaign: { ...campaign, images: campaignImages(db, campaign.id) },
+        applications,
+      });
+    }),
+  );
+  app.get(
+    "/api/work/campaigns/:id/images/:imageId",
+    wrap((c) => {
+      const u = current(c),
+        campaign = campaignFor(db, id(c), u);
+      const imageId = integer(Number(c.req.param("imageId")), "사진 ID", 1);
+      const row = db
+        .prepare(
+          "SELECT data FROM campaign_images WHERE id=? AND campaign_id=?",
+        )
+        .get(imageId, campaign.id) as { data: Buffer } | undefined;
+      if (!row) fail("사진을 찾을 수 없습니다.", 404);
+      return new Response(new Uint8Array(row!.data), {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Disposition": "inline",
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
     }),
   );
   app.post(

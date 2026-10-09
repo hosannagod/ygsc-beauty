@@ -137,4 +137,7 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   db.exec(
     `CREATE TABLE IF NOT EXISTS content_translation_cache(source_hash TEXT PRIMARY KEY,translated TEXT NOT NULL,created_at INTEGER NOT NULL); INSERT OR IGNORE INTO schema_version VALUES(6)`,
   );
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS campaign_images(id INTEGER PRIMARY KEY,campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,position INTEGER NOT NULL,data BLOB NOT NULL); CREATE INDEX IF NOT EXISTS campaign_images_campaign ON campaign_images(campaign_id,position); INSERT OR IGNORE INTO schema_version VALUES(7)`,
+  );
 }

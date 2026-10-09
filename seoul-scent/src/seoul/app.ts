@@ -34,7 +34,7 @@ export function createApp(
     c.header("Cache-Control", "no-store");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
     if (!["GET", "HEAD"].includes(c.req.method)) {
       const origin = c.req.header("Origin");

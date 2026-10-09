@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
@@ -1188,6 +1189,111 @@ test("English campaign copy is authorized, editable and cleared when its source 
     ).json()) as any;
     assert.equal(en.translated.title, "Updated skincare campaign");
     assert.equal(en.translated.guidelines, undefined);
+  } finally {
+    f.db.close();
+  }
+});
+
+test("campaign photos enforce limits and ownership, support replacement and roll back invalid changes", async () => {
+  const f = await fixture();
+  const photo = readFileSync(
+    new URL("./fixtures/campaign-photo.jpg", import.meta.url),
+  ).toString("base64");
+  try {
+    const invalid = await f.req("brand", "/campaigns", "POST", {
+      ...campaign,
+      images: [{ data: "not-an-image" }],
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(
+      (f.db.prepare("SELECT COUNT(*) AS n FROM campaigns").get() as any).n,
+      0,
+    );
+    const c = await f.create({
+      images: Array.from({ length: 4 }, () => ({ data: photo })),
+    });
+    let detail = (await (
+      await f.req("influencer", `/campaigns/${c}`)
+    ).json()) as any;
+    assert.equal(detail.campaign.images.length, 4);
+    const images = detail.campaign.images;
+    const imagePath = images[0].url.replace("/api/work", "");
+    const image = await f.req("influencer", imagePath);
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get("content-type"), "image/jpeg");
+    assert.equal(
+      Buffer.from(await image.arrayBuffer()).toString("base64"),
+      photo,
+    );
+    assert.equal((await f.req("", imagePath)).status, 401);
+    assert.equal((await f.req("otherbrand", imagePath)).status, 403);
+    assert.equal(
+      (
+        await f.req("otherbrand", `/campaigns/${c}/details`, "PUT", {
+          images: [],
+        })
+      ).status,
+      403,
+    );
+    const path = `/campaigns/${c}/details`;
+    assert.equal(
+      (
+        await f.req("brand", path, "PUT", {
+          title: "잘못된 사진 수정",
+          images: Array.from({ length: 5 }, () => ({ data: photo })),
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (f.db.prepare("SELECT title FROM campaigns WHERE id=?").get(c) as any)
+        .title,
+      campaign.title,
+    );
+    const other = await f.create({ images: [{ data: photo }] });
+    const foreign = (
+      (await (await f.req("brand", `/campaigns/${other}`)).json()) as any
+    ).campaign.images[0].id;
+    assert.equal(
+      (await f.req("brand", path, "PUT", { images: [{ id: foreign }] })).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.req("brand", path, "PUT", {
+          images: [{ id: images[0].id }, { id: images[0].id }],
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.req("brand", path, "PUT", {
+          images: [{ id: images[2].id }, { data: photo }],
+        })
+      ).status,
+      200,
+    );
+    detail = (await (
+      await f.req("influencer", `/campaigns/${c}`)
+    ).json()) as any;
+    assert.equal(detail.campaign.images.length, 2);
+    assert.equal(detail.campaign.images[0].id, images[2].id);
+    assert.equal((await f.req("influencer", imagePath)).status, 404);
+    assert.equal(
+      (await f.req("brand", path, "PUT", { images: [] })).status,
+      200,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM campaign_images WHERE campaign_id=?",
+          )
+          .get(c) as any
+      ).n,
+      0,
+    );
   } finally {
     f.db.close();
   }

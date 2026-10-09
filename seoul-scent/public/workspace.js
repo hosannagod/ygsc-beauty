@@ -366,6 +366,102 @@
     document.querySelector("#campaign-status").onchange = render;
     render();
   }
+  const photoStates = new WeakMap();
+  function photoCard(image, index) {
+    return `<div class="photo-preview"><img src="${esc(image.url)}" alt="${esc(t("캠페인 사진"))} ${index + 1}"><button type="button" class="secondary" data-remove-photo="${index}">${t("삭제")}</button></div>`;
+  }
+  function photoEditor(images = []) {
+    return `<section class="photo-editor" data-images="${esc(JSON.stringify(images))}"><h3>${t("캠페인 사진 (최대 4장)")}</h3><p class="note left">${t("JPG·PNG·WebP 사진을 선택하세요. 업로드 시 크기를 줄여 저장합니다. 사진 변경은 저장 버튼을 눌러야 반영됩니다.")}</p><input type="file" data-campaign-photos multiple accept="image/jpeg,image/png,image/webp" aria-label="${esc(t("캠페인 사진 선택"))}"><div class="photo-previews">${images.map(photoCard).join("")}</div><p class="photo-error form-error" role="alert" hidden></p></section>`;
+  }
+  function photoState(editor) {
+    if (!photoStates.has(editor))
+      photoStates.set(editor, JSON.parse(editor.dataset.images));
+    return photoStates.get(editor);
+  }
+  async function preparePhoto(file) {
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 20 * 1024 * 1024
+    )
+      throw new Error(t("20MB 이하의 JPG·PNG·WebP 사진을 선택해 주세요."));
+    const bitmap = await createImageBitmap(file).catch(() => {
+      throw new Error(t("사진 파일을 읽을 수 없습니다."));
+    });
+    try {
+      const canvas = document.createElement("canvas");
+      let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height)),
+        quality = 0.85,
+        blob;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", quality),
+        );
+        if (blob && blob.size <= 350 * 1024) break;
+        if (quality > 0.5) quality -= 0.15;
+        else scale *= 0.8;
+      }
+      if (!blob || blob.size > 350 * 1024)
+        throw new Error(
+          t("사진 크기를 줄이지 못했습니다. 다른 사진을 선택해 주세요."),
+        );
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      return { data, url: URL.createObjectURL(blob) };
+    } finally {
+      bitmap.close();
+    }
+  }
+  root.addEventListener("change", async (event) => {
+    const input = event.target;
+    if (!input.matches("[data-campaign-photos]")) return;
+    const editor = input.closest(".photo-editor"),
+      state = photoState(editor),
+      error = editor.querySelector(".photo-error"),
+      files = Array.from(input.files);
+    error.hidden = true;
+    editor.dataset.processing = "true";
+    input.disabled = true;
+    const prepared = [];
+    try {
+      if (state.length + files.length > 4)
+        throw new Error(t("캠페인 사진은 최대 4장까지 등록할 수 있습니다."));
+      for (const file of files) prepared.push(await preparePhoto(file));
+      state.push(...prepared);
+      editor.querySelector(".photo-previews").innerHTML = state
+        .map(photoCard)
+        .join("");
+    } catch (e) {
+      prepared.forEach((photo) => URL.revokeObjectURL(photo.url));
+      error.textContent = e.message;
+      error.hidden = false;
+    } finally {
+      editor.dataset.processing = "false";
+      input.disabled = false;
+      input.value = "";
+    }
+  });
+  root.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-photo]");
+    if (!button) return;
+    const editor = button.closest(".photo-editor");
+    if (editor.dataset.processing === "true") return;
+    const state = photoState(editor),
+      removed = state.splice(Number(button.dataset.removePhoto), 1)[0];
+    if (removed?.data) URL.revokeObjectURL(removed.url);
+    editor.querySelector(".photo-previews").innerHTML = state
+      .map(photoCard)
+      .join("");
+  });
   function englishEditor(c = {}) {
     return `<details><summary>English campaign content (optional)</summary><p class="note left">Leave blank for automatic English translation. Enter English text to override the translation.</p>${input("title_en", "Campaign title (English)", "text", 'maxlength="400"', c.title_en || "")}${input("product_en", "Product name (English)", "text", 'maxlength="400"', c.product_en || "")}${textarea("description_en", "Product description (English)", 'maxlength="8000" rows="4"', c.description_en || "")}${textarea("guidelines_en", "Content guidelines (English)", 'maxlength="12000" rows="5"', c.guidelines_en || "")}</details>`;
   }
@@ -398,7 +494,7 @@
         <div class="form-grid">
           ${input("recruit_start_date", t("모집 시작일"), "date", "required", today())}${input("recruit_date", t("모집 마감일"), "date", "required")}${input("draft_date", t("초안 제출 마감일"), "date", "required")}${input("final_date", t("최종 업로드 마감일"), "date", "required")}
         </div>
-        ${englishEditor()}${submit(t("캠페인 등록"))}
+        ${photoEditor()}${englishEditor()}${submit(t("캠페인 등록"))}
       </form>`;
   }
   document.addEventListener("change", (event) => {
@@ -428,6 +524,7 @@
           ${kpi(t("모집 인원"), c.capacity)}${kpi(t("지원"), applications.length)}${kpi(t("보상"), c.pay_type === "paid" ? money(c.compensation) + t("원") : t("제품 제공"))}${kpi(t("모집 마감"), esc(c.recruit_date))}
         </section>
         <section class="panel">
+          ${c.images?.length ? `<div class="campaign-gallery">${c.images.map((image, i) => `<a href="${esc(image.url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(image.url)}" alt="${esc(t("캠페인 사진"))} ${i + 1}" loading="lazy"></a>`).join("")}</div>` : ""}
           <h2>제품 소개</h2>
           <p class="preline">${linkedText(c.description)}</p>
           ${c.product_url ? `<p>${link(c.product_url, t("제품·브랜드 사이트 보기"))}</p>` : ""}
@@ -534,7 +631,7 @@
                 모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시
                 진행 중인 지원자에게 알림이 전달됩니다.
               </p>
-              ${englishEditor(c)}${submit(t("캠페인 수정 저장"))}
+              ${photoEditor(c.images || [])}${englishEditor(c)}${submit(t("캠페인 수정 저장"))}
             </form>
           </details>
         </section>`;
@@ -1109,7 +1206,14 @@
       return;
     button.disabled = true;
     try {
+      const editor = form.querySelector(".photo-editor");
+      if (editor?.dataset.processing === "true")
+        throw new Error(t("사진 준비 중입니다. 잠시 후 저장해 주세요."));
       const data = Object.fromEntries(new FormData(form));
+      if (editor)
+        data.images = photoState(editor).map((image) =>
+          image.id ? { id: image.id } : { data: image.data },
+        );
       form
         .querySelectorAll("[type=number]")
         .forEach((n) => (data[n.name] = Number(n.value)));

@@ -1123,3 +1123,32 @@ summary {
     right: 12px;
   }
 }
+.campaign-gallery,
+.photo-previews {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+.campaign-gallery img,
+.photo-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: #f5f7f2;
+  border-radius: 12px;
+}
+.photo-preview button {
+  width: 100%;
+  margin-top: 8px;
+}
+.photo-editor {
+  margin: 24px 0;
+}
+@media (max-width: 650px) {
+  .campaign-gallery,
+  .photo-previews {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

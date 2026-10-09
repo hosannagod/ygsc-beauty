@@ -99,9 +99,36 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand
       .locator("[name=guidelines_en]")
       .fill("Show the product and follow these filming guidelines.");
+    const photoBuffer = require("node:fs").readFileSync(
+      "tests/fixtures/campaign-photo.jpg",
+    );
+    await brand
+      .locator("[data-campaign-photos]")
+      .setInputFiles(
+        Array.from({ length: 4 }, (_, i) => ({
+          name: `product-${i}.jpg`,
+          mimeType: "image/jpeg",
+          buffer: photoBuffer,
+        })),
+      );
+    await brand.waitForFunction(
+      () => document.querySelectorAll(".photo-preview").length === 4,
+    );
     await brand.getByRole("button", { name: "캠페인 등록" }).click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const campaignId = brand.url().split("/").pop();
+    await brand.waitForFunction(
+      () => document.querySelectorAll(".campaign-gallery img").length === 4,
+    );
+    assert.ok(
+      await brand
+        .locator(".campaign-gallery img")
+        .first()
+        .evaluate(async (img) => {
+          await img.decode();
+          return img.naturalWidth > 0;
+        }),
+    );
     await brand
       .getByRole("link", { name: "제품·브랜드 사이트 보기" })
       .waitFor();
@@ -115,6 +142,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .last()
       .waitFor();
     await brand.getByText("캠페인 편집", { exact: true }).click();
+    await brand.locator('.photo-editor [data-remove-photo="0"]').click();
     await brand
       .locator('form[data-task="campaign-details"] [name=product_url]')
       .fill("https://example.com/updated");
@@ -147,6 +175,9 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.getByRole("button", { name: "프로필 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer.waitForFunction(
+      () => document.querySelectorAll(".campaign-gallery img").length === 3,
+    );
     await influencer
       .getByText(
         "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
@@ -486,6 +517,10 @@ const { spawn, spawnSync } = require("node:child_process"),
         )
         .get().n,
       1,
+    );
+    assert.equal(
+      restored.prepare("SELECT COUNT(*) AS n FROM campaign_images").get().n,
+      3,
     );
     assert.equal(restored.pragma("integrity_check", { simple: true }), "ok");
     restored.close();
