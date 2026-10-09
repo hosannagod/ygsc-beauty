@@ -103,11 +103,16 @@ const { spawn, spawnSync } = require("node:child_process"),
       .getByText(/모집 마감/)
       .last()
       .waitFor();
-    await brand.getByText("제품 링크·모집 일정 수정", { exact: true }).click();
+    await brand.getByText("캠페인 편집", { exact: true }).click();
     await brand
       .locator('form[data-task="campaign-details"] [name=product_url]')
       .fill("https://example.com/updated");
-    await brand.getByRole("button", { name: "링크·모집 일정 저장" }).click();
+    await brand
+      .locator('form[data-task="campaign-details"] [name=description]')
+      .fill(
+        "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
+      );
+    await brand.getByRole("button", { name: "캠페인 수정 저장" }).click();
     await brand.locator('a[href="https://example.com/updated"]').waitFor();
     assert.equal(
       await brand
@@ -125,6 +130,12 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.getByRole("button", { name: "프로필 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer
+      .getByText(
+        "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
+        { exact: true },
+      )
+      .waitFor();
     await influencer.locator("[name=secondary_use_consent]").check();
     await influencer.locator("[name=original_delivery_consent]").check();
     assert.ok(

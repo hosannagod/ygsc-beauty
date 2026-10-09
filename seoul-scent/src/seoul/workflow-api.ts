@@ -173,36 +173,127 @@ export function registerWorkflow(
         const campaign = campaignFor(db, id(c), u, true);
         if (campaign.status === "completed")
           fail("종료된 캠페인은 수정할 수 없습니다.", 409);
-        const url = productLink(b.product_url ?? campaign.product_url);
+        const applicants = db
+          .prepare(
+            "SELECT influencer_id,status FROM applications WHERE campaign_id=?",
+          )
+          .all(campaign.id) as { influencer_id: number; status: string }[];
+        const locked =
+          applicants.length > 0 || campaign.status !== "recruiting";
+        const title = text(b.title ?? campaign.title, "캠페인명", 2, 100),
+          product = text(b.product ?? campaign.product, "제품", 2, 200),
+          description = text(
+            b.description ?? campaign.description,
+            "제품 소개",
+            10,
+            4000,
+          ),
+          guidelines = text(
+            b.guidelines ?? campaign.guidelines,
+            "가이드라인",
+            10,
+            6000,
+          ),
+          capacity = integer(
+            b.capacity ?? campaign.capacity,
+            "모집 인원",
+            1,
+            500,
+          );
+        const selected = applicants.filter(
+          (a) => !["applied", "rejected"].includes(a.status),
+        ).length;
+        if (capacity < selected)
+          fail(
+            "모집 인원은 이미 선정된 인원보다 작게 설정할 수 없습니다.",
+            409,
+          );
+        const url = productLink(b.product_url ?? campaign.product_url),
+          payType = b.pay_type ?? campaign.pay_type,
+          compensation = integer(
+            b.compensation ?? campaign.compensation,
+            "보상 금액",
+            0,
+            100_000_000,
+          );
+        if (
+          !["paid", "gifted"].includes(payType) ||
+          (payType === "paid" && compensation === 0)
+        )
+          fail("보상 유형과 유가 캠페인의 활동비를 확인해 주세요.");
+        if (
+          locked &&
+          (payType !== campaign.pay_type ||
+            compensation !== campaign.compensation)
+        )
+          fail(
+            "지원자가 있거나 모집이 마감된 캠페인의 보상 조건은 변경할 수 없습니다.",
+            409,
+          );
         const startDate = b.recruit_start_date ?? campaign.recruit_start_date,
-          endDate = b.recruit_date ?? campaign.recruit_date;
+          endDate = b.recruit_date ?? campaign.recruit_date,
+          draftDate = b.draft_date ?? campaign.draft_date,
+          finalDate = b.final_date ?? campaign.final_date;
         const changed =
           startDate !== campaign.recruit_start_date ||
-          endDate !== campaign.recruit_date;
+          endDate !== campaign.recruit_date ||
+          draftDate !== campaign.draft_date ||
+          finalDate !== campaign.final_date;
         let start = campaign.recruit_start,
-          end = campaign.recruit_due;
+          end = campaign.recruit_due,
+          draft = campaign.draft_due,
+          final = campaign.final_due;
         if (changed) {
-          const count = (
-            db
-              .prepare(
-                "SELECT COUNT(*) AS n FROM applications WHERE campaign_id=?",
-              )
-              .get(campaign.id) as any
-          ).n;
-          if (campaign.status !== "recruiting" || count > 0)
+          if (locked)
             fail(
-              "지원자가 있거나 모집이 마감된 캠페인은 모집 일정을 변경할 수 없습니다.",
+              "지원자가 있거나 모집이 마감된 캠페인은 일정을 변경할 수 없습니다.",
               409,
             );
-          ({ start, end } = recruitmentDates(
-            startDate,
-            endDate,
-            campaign.draft_due,
-          ));
+          draft = deadline(draftDate);
+          final = deadline(finalDate);
+          ({ start, end } = recruitmentDates(startDate, endDate, draft));
+          if (final <= draft)
+            fail("초안 마감 < 최종 마감 순서로 설정해 주세요.");
         }
         db.prepare(
-          "UPDATE campaigns SET product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=? WHERE id=?",
-        ).run(url, startDate, start, endDate, end, campaign.id);
+          "UPDATE campaigns SET title=?,product=?,description=?,guidelines=?,capacity=?,pay_type=?,compensation=?,product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=?,draft_date=?,draft_due=?,final_date=?,final_due=? WHERE id=?",
+        ).run(
+          title,
+          product,
+          description,
+          guidelines,
+          capacity,
+          payType,
+          payType === "gifted" ? 0 : compensation,
+          url,
+          startDate,
+          start,
+          endDate,
+          end,
+          draftDate,
+          draft,
+          finalDate,
+          final,
+          campaign.id,
+        );
+        if (
+          title !== campaign.title ||
+          product !== campaign.product ||
+          description !== campaign.description ||
+          guidelines !== campaign.guidelines ||
+          url !== campaign.product_url ||
+          capacity !== campaign.capacity
+        ) {
+          for (const a of applicants.filter(
+            (a) => !["rejected", "completed", "no_show"].includes(a.status),
+          ))
+            notify(
+              db,
+              a.influencer_id,
+              `${title}: 캠페인 정보가 수정되었습니다. 제품 소개와 가이드라인을 확인해 주세요.`,
+              `/campaigns/${campaign.id}`,
+            );
+        }
       })();
       return c.json({ success: true });
     }),

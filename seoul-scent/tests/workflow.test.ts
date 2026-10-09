@@ -924,3 +924,92 @@ test("separate consents and address registration only after selection", async ()
     f.db.close();
   }
 });
+
+test("campaign editing validates all fields, retains participant conditions and notifies applicants", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create();
+    const path = `/campaigns/${id}/details`;
+    assert.equal(
+      (
+        await f.req("brand", path, "PUT", {
+          title: "수정된 캠페인",
+          product: "신제품 향수",
+          description: "신제품에 관한 자세한 설명입니다.",
+          guidelines: "촬영 시 패키지와 제품을 함께 보여 주세요.",
+          capacity: 3,
+          pay_type: "paid",
+          compensation: 100000,
+          draft_date: future(6),
+          final_date: future(12),
+        })
+      ).status,
+      200,
+    );
+    let row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.title, "수정된 캠페인");
+    assert.equal(row.draft_due, deadline(future(6)));
+    assert.equal(row.compensation, 100000);
+    assert.equal(
+      (await f.req("brand", path, "PUT", { description: "짧음" })).status,
+      400,
+    );
+    assert.equal(
+      (await f.req("brand", path, "PUT", { draft_date: future(13) })).status,
+      400,
+    );
+    const a = await f.apply(id);
+    assert.equal(
+      (await f.req("brand", path, "PUT", { compensation: 1 })).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("brand", path, "PUT", { final_date: future(13) })).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("otherbrand", path, "PUT", { title: "다른 브랜드 수정" }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await f.req("influencer", path, "PUT", { title: "인플루언서 수정" }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.req("brand", path, "PUT", {
+          title: "참여자 있는 캠페인 수정",
+          guidelines: "변경된 콘텐츠 가이드라인을 확인해 주세요.",
+        })
+      ).status,
+      200,
+    );
+    assert.ok(
+      f.db
+        .prepare(
+          "SELECT id FROM notifications WHERE user_id=? AND message LIKE '%캠페인 정보가 수정%' ",
+        )
+        .get(f.ids.influencer),
+    );
+    await f.action(a, "select");
+    const other = await f.apply(id, "other");
+    await f.action(other, "select");
+    assert.equal(
+      (await f.req("brand", path, "PUT", { capacity: 1 })).status,
+      409,
+    );
+    row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.capacity, 3);
+    assert.equal(row.compensation, 100000);
+    assert.equal(row.final_date, future(12));
+    f.db.prepare("UPDATE campaigns SET status='completed' WHERE id=?").run(id);
+    assert.equal(
+      (await f.req("brand", path, "PUT", { title: "종료 후 수정" })).status,
+      409,
+    );
+  } finally {
+    f.db.close();
+  }
+});
