@@ -142,37 +142,63 @@ export function createApp(
       !body ||
       typeof body.email !== "string" ||
       typeof body.password !== "string" ||
-      typeof body.name !== "string"
+      !["brand", "influencer"].includes(body.role)
     )
       return c.json({ error: "입력 내용을 확인해 주세요." }, 400);
     const email = body.email.trim().toLowerCase(),
-      name = body.name.trim();
+      name =
+        typeof (body.role === "brand" ? body.brand_name : body.name) ===
+        "string"
+          ? (body.role === "brand" ? body.brand_name : body.name).trim()
+          : "";
+    const contactName =
+      body.role === "brand" && typeof body.contact_name === "string"
+        ? body.contact_name.trim()
+        : "";
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
       email.length > 254 ||
+      typeof name !== "string" ||
       name.length < 2 ||
       name.length > 60 ||
       body.password.length < 12 ||
       body.password.length > 128 ||
-      !["brand", "influencer"].includes(body.role)
+      !/^[+0-9 ()-]{8,30}$/.test(phone) ||
+      (body.role === "brand" &&
+        (contactName.length < 2 || contactName.length > 60))
     )
       return c.json(
         {
           error:
-            "이메일, 이름(2~60자), 비밀번호(12~128자), 가입 유형을 확인해 주세요.",
+            "이메일, 이름·브랜드명·담당자명(2~60자), 연락처, 비밀번호(12~128자)를 확인해 주세요.",
         },
         400,
       );
     if (db.prepare("SELECT id FROM users WHERE email=?").get(email))
       return c.json({ error: "이미 사용 중인 이메일입니다." }, 409);
-    const result = db
-      .prepare(
-        "INSERT INTO users (email,name,role,password_hash) VALUES (?,?,?,?)",
-      )
-      .run(email, name, body.role, hashPassword(body.password));
-    const user = db
-      .prepare(`SELECT ${selectUser} FROM users WHERE id=?`)
-      .get(result.lastInsertRowid) as User;
+    const user = db.transaction(() => {
+      const result = db
+        .prepare(
+          "INSERT INTO users (email,name,role,password_hash,brand_name,contact_name,phone) VALUES (?,?,?,?,?,?,?)",
+        )
+        .run(
+          email,
+          name,
+          body.role,
+          hashPassword(body.password),
+          body.role === "brand" ? name : "",
+          contactName,
+          phone,
+        );
+      if (body.role === "influencer")
+        db.prepare(
+          "UPDATE influencer_profiles SET phone=? WHERE user_id=?",
+        ).run(phone, result.lastInsertRowid);
+      return db
+        .prepare(`SELECT ${selectUser} FROM users WHERE id=?`)
+        .get(result.lastInsertRowid) as User;
+    })();
     session(c, user);
     return c.json({ user, redirect: `/dashboard/${user.role}` }, 201);
   });

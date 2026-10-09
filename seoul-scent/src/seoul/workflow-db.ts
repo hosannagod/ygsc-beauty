@@ -82,4 +82,34 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       UPDATE campaigns SET recruit_start=CAST(strftime('%s',recruit_start_date || ' 00:00:00','-9 hours') AS INTEGER)*1000 WHERE recruit_start=0;
       INSERT OR IGNORE INTO schema_version VALUES(3);`);
   })();
+  db.transaction(() => {
+    const users = db.prepare("PRAGMA table_info(users)").all() as {
+      name: string;
+    }[];
+    for (const name of ["brand_name", "contact_name", "phone"])
+      if (!users.some((c) => c.name === name))
+        db.exec(
+          `ALTER TABLE users ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`,
+        );
+    db.exec(
+      "UPDATE users SET brand_name=name WHERE role='brand' AND brand_name=''",
+    );
+    const applications = db
+      .prepare("PRAGMA table_info(applications)")
+      .all() as { name: string }[];
+    const added: [string, string][] = [
+      ["recipient_name", "TEXT NOT NULL DEFAULT ''"],
+      ["postal_code", "TEXT NOT NULL DEFAULT ''"],
+      ["address_detail", "TEXT NOT NULL DEFAULT ''"],
+      ["shipping_address_at", "INTEGER NOT NULL DEFAULT 0"],
+      ["secondary_use_consent", "INTEGER NOT NULL DEFAULT 0"],
+      ["original_delivery_consent", "INTEGER NOT NULL DEFAULT 0"],
+    ];
+    for (const [name, definition] of added)
+      if (!applications.some((c) => c.name === name))
+        db.exec(`ALTER TABLE applications ADD COLUMN ${name} ${definition}`);
+    db.exec(
+      "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1 WHERE consent_version='secondary-use-v1' AND consent_at>0; INSERT OR IGNORE INTO schema_version VALUES(4)",
+    );
+  })();
 }

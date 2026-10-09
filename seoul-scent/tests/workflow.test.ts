@@ -79,13 +79,34 @@ async function fixture() {
   };
   const apply = async (id: number, key = "influencer") => {
     const r = await req(key, `/campaigns/${id}/apply`, "POST", {
-      consent: true,
+      secondary_use_consent: true,
+      original_delivery_consent: true,
     });
     assert.equal(r.status, 201, await r.clone().text());
     return ((await r.json()) as any).id;
   };
-  const action = (id: number, name: string, data = {}, key = "brand") =>
-    req(key, `/applications/${id}/action`, "POST", { action: name, ...data });
+  const action = async (id: number, name: string, data = {}, key = "brand") => {
+    const response = await req(key, `/applications/${id}/action`, "POST", {
+      action: name,
+      ...data,
+    });
+    if (name === "select" && response.status === 200) {
+      const row = db
+        .prepare("SELECT influencer_id FROM applications WHERE id=?")
+        .get(id) as any;
+      const owner = Object.keys(ids).find((k) => ids[k] === row.influencer_id)!;
+      const address = await req(owner, `/applications/${id}/action`, "POST", {
+        action: "address",
+        recipient_name: "테스트 수령인",
+        phone: "01012345678",
+        postal_code: "06234",
+        address: "서울시 강남구 테스트로 123",
+        address_detail: "101호",
+      });
+      assert.equal(address.status, 200);
+    }
+    return response;
+  };
   return { db, app, req, create, apply, action, ids };
 }
 test("full lifecycle with revision history, consent, notifications, completion exactly once", async () => {
@@ -96,7 +117,8 @@ test("full lifecycle with revision history, consent, notifications, completion e
     assert.equal(
       (
         await f.req("influencer", `/campaigns/${c}/apply`, "POST", {
-          consent: true,
+          secondary_use_consent: true,
+          original_delivery_consent: true,
         })
       ).status,
       409,
@@ -241,7 +263,8 @@ test("ownership, role escalation, recruitment deadline, required consent and cap
     assert.equal(
       (
         await f.req("influencer", `/campaigns/${c}/apply`, "POST", {
-          consent: false,
+          secondary_use_consent: false,
+          original_delivery_consent: false,
         })
       ).status,
       400,
@@ -275,7 +298,8 @@ test("ownership, role escalation, recruitment deadline, required consent and cap
     assert.equal(
       (
         await f.req("influencer", `/campaigns/${third}/apply`, "POST", {
-          consent: true,
+          secondary_use_consent: true,
+          original_delivery_consent: true,
         })
       ).status,
       409,
@@ -328,7 +352,8 @@ test("no-show is idempotent, blocks new applications, demotes, blacklists on sec
     assert.equal(
       (
         await f.req("influencer", `/campaigns/${next}/apply`, "POST", {
-          consent: true,
+          secondary_use_consent: true,
+          original_delivery_consent: true,
         })
       ).status,
       403,
@@ -658,7 +683,8 @@ test("product links and recruitment start dates validate and block early applica
     assert.equal(
       (
         await f.req("influencer", `/campaigns/${id}/apply`, "POST", {
-          consent: true,
+          secondary_use_consent: true,
+          original_delivery_consent: true,
         })
       ).status,
       409,
@@ -756,6 +782,22 @@ test("existing campaigns migrate once without losing applications or schedule da
     f.db
       .prepare("UPDATE campaigns SET created_at=? WHERE id=?")
       .run("2026-01-01 16:00:00", id);
+    f.db
+      .prepare(
+        "UPDATE applications SET address=?,consent_version='secondary-use-v1' WHERE id=?",
+      )
+      .run("서울시 기존 주소 123", application);
+    for (const column of ["brand_name", "contact_name", "phone"])
+      f.db.exec(`ALTER TABLE users DROP COLUMN ${column}`);
+    for (const column of [
+      "recipient_name",
+      "postal_code",
+      "address_detail",
+      "shipping_address_at",
+      "secondary_use_consent",
+      "original_delivery_consent",
+    ])
+      f.db.exec(`ALTER TABLE applications DROP COLUMN ${column}`);
     const { initializeWorkflow } = await import("../src/seoul/workflow-db.js");
     initializeWorkflow(f.db);
     let row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
@@ -771,7 +813,113 @@ test("existing campaigns migrate once without losing applications or schedule da
     assert.ok(
       f.db.prepare("SELECT id FROM applications WHERE id=?").get(application),
     );
+    const migrated = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(application) as any;
+    assert.equal(migrated.address, "서울시 기존 주소 123");
+    assert.equal(migrated.secondary_use_consent, 1);
+    assert.equal(migrated.original_delivery_consent, 1);
+    const brand = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(f.ids.brand) as any;
+    assert.equal(brand.brand_name, "brand");
+    assert.equal(brand.contact_name, "");
     assert.equal(row.recruit_date, campaign.recruit_date);
+  } finally {
+    f.db.close();
+  }
+});
+
+test("separate consents and address registration only after selection", async () => {
+  const f = await fixture();
+  try {
+    const c = await f.create();
+    for (const missing of [
+      "secondary_use_consent",
+      "original_delivery_consent",
+    ]) {
+      assert.equal(
+        (
+          await f.req("influencer", `/campaigns/${c}/apply`, "POST", {
+            secondary_use_consent: true,
+            original_delivery_consent: true,
+            [missing]: false,
+          })
+        ).status,
+        400,
+      );
+    }
+    f.db
+      .prepare("UPDATE influencer_profiles SET social_url='' WHERE user_id=?")
+      .run(f.ids.influencer);
+    const a = await f.apply(c);
+    const row = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(a) as any;
+    assert.equal(row.address, ""); // Do not share a legacy profile address at application time.
+    assert.equal(row.secondary_use_consent, 1);
+    assert.equal(row.original_delivery_consent, 1);
+    assert.ok(row.consent_at > 0);
+    const address = {
+      action: "address",
+      recipient_name: "김수령",
+      phone: "01012345678",
+      postal_code: "01234",
+      address: "서울시 테스트로 123",
+      address_detail: "101호",
+    };
+    assert.equal(
+      (await f.req("influencer", `/applications/${a}/action`, "POST", address))
+        .status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/applications/${a}/action`, "POST", {
+          action: "select",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(a, "ship", {
+          carrier: "CJ대한통운",
+          tracking_number: "123456789",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("other", `/applications/${a}/action`, "POST", address))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await f.req("influencer", `/applications/${a}/action`, "POST", address))
+        .status,
+      200,
+    );
+    const saved = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(a) as any;
+    assert.equal(saved.postal_code, "01234");
+    assert.equal(saved.address_detail, "101호");
+    assert.ok(saved.shipping_address_at > 0);
+    assert.equal(
+      (
+        await f.action(a, "ship", {
+          carrier: "CJ대한통운",
+          tracking_number: "123456789",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.req("influencer", `/applications/${a}/action`, "POST", address))
+        .status,
+      409,
+    );
   } finally {
     f.db.close();
   }

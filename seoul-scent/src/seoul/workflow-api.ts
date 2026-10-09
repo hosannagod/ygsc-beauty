@@ -78,7 +78,10 @@ export function registerWorkflow(
       const u = role(c, "influencer"),
         b = await body(c);
       const phone = text(b.phone, "연락처", 8, 30),
-        address = text(b.address, "배송지", 5, 300),
+        address =
+          b.address === undefined
+            ? undefined
+            : text(b.address, "배송지", 0, 300),
         social = text(b.social_url, "SNS 프로필 URL", 1, 500);
       let url;
       try {
@@ -90,8 +93,8 @@ export function registerWorkflow(
         fail("HTTPS 프로필 링크를 입력해 주세요.");
       const followers = integer(b.followers, "팔로워 수", 0, 100_000_000);
       db.prepare(
-        "UPDATE influencer_profiles SET phone=?,address=?,social_url=?,followers=? WHERE user_id=?",
-      ).run(phone, address, social, followers, u.id);
+        "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=? WHERE user_id=?",
+      ).run(phone, address ?? null, social, followers, u.id);
       return c.json({ success: true });
     }),
   );
@@ -243,10 +246,12 @@ export function registerWorkflow(
           fail("모집이 마감된 캠페인입니다.", 409);
         if (campaign.recruit_start > Date.now())
           fail("아직 모집 시작 전입니다.", 409);
-        if (b.consent !== true)
+        if (
+          b.secondary_use_consent !== true ||
+          b.original_delivery_consent !== true
+        )
           fail("2차 활용 및 고화질 원본 제공 동의가 필요합니다.");
-        if (!p.phone || !p.address || !p.social_url)
-          fail("먼저 내 프로필의 연락처·배송지·SNS 정보를 입력해 주세요.");
+        if (!p.phone) fail("먼저 내 프로필에 연락처를 입력해 주세요.");
         if (
           db
             .prepare(
@@ -257,9 +262,18 @@ export function registerWorkflow(
           fail("이미 지원한 캠페인입니다.", 409);
         const r = db
           .prepare(
-            "INSERT INTO applications(campaign_id,influencer_id,consent_at,phone,address) VALUES(?,?,?,?,?)",
+            "INSERT INTO applications(campaign_id,influencer_id,consent_at,phone,address,consent_version,secondary_use_consent,original_delivery_consent) VALUES(?,?,?,?,?,?,?,?)",
           )
-          .run(campaign.id, u.id, Date.now(), p.phone, p.address);
+          .run(
+            campaign.id,
+            u.id,
+            Date.now(),
+            p.phone,
+            "",
+            "secondary-and-original-v2",
+            1,
+            1,
+          );
         event(
           db,
           { id: r.lastInsertRowid },
@@ -383,7 +397,8 @@ export function registerWorkflow(
             if (p.blacklisted || p.blocked_until > Date.now())
               fail("지원자가 현재 제재 중입니다.", 409);
             status = "selected";
-            note = "캠페인 참여자로 선정되었습니다.";
+            note =
+              "캠페인 참여자로 선정되었습니다. 참여 내역에서 배송지를 등록해 주세요.";
             break;
           }
           case "reject":
@@ -395,9 +410,30 @@ export function registerWorkflow(
                 ? text(b.note, "반려 사유", 0, 1000)
                 : "지원이 반려되었습니다.";
             break;
+          case "address": {
+            if (!influencer) fail("접근 권한이 없습니다.", 403);
+            requireState(["selected"]);
+            const recipient = text(b.recipient_name, "수령인", 2, 60),
+              phone = text(b.phone, "연락처", 8, 30),
+              postal = text(b.postal_code, "우편번호", 3, 12),
+              address = text(b.address, "주소", 5, 200),
+              detail = text(b.address_detail ?? "", "상세주소", 0, 150);
+            if (
+              !/^[+0-9 ()-]{8,30}$/.test(phone) ||
+              !/^[A-Za-z0-9 -]{3,12}$/.test(postal)
+            )
+              fail("연락처·우편번호 형식을 확인해 주세요.");
+            db.prepare(
+              "UPDATE applications SET recipient_name=?,phone=?,postal_code=?,address=?,address_detail=?,shipping_address_at=? WHERE id=?",
+            ).run(recipient, phone, postal, address, detail, Date.now(), a.id);
+            note = "배송지가 등록되었습니다.";
+            break;
+          }
           case "ship": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
             requireState(["selected", "shipping"]);
+            if (!a.address || !a.phone)
+              fail("선정자가 배송지를 먼저 등록해야 합니다.", 409);
             const carrier = text(b.carrier, "택배사", 2, 40),
               tracking = text(b.tracking_number, "송장번호", 5, 40);
             if (!/^[A-Za-z0-9-]+$/.test(tracking))
@@ -727,7 +763,7 @@ export function registerWorkflow(
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping') ORDER BY a.id",
+          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number,a.recipient_name,a.postal_code,a.address_detail FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping') AND a.address!='' ORDER BY a.id",
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -739,10 +775,14 @@ export function registerWorkflow(
         { header: "address", key: "address", width: 50 },
         { header: "carrier", key: "carrier", width: 20 },
         { header: "tracking_number", key: "tracking_number", width: 25 },
+        { header: "recipient_name", key: "recipient_name", width: 20 },
+        { header: "postal_code", key: "postal_code", width: 15 },
+        { header: "address_detail", key: "address_detail", width: 30 },
       ];
       sheet.addRows(rows);
       sheet.getRow(1).font = { bold: true };
       sheet.getColumn("phone").numFmt = "@";
+      sheet.getColumn("postal_code").numFmt = "@";
       sheet.getColumn("tracking_number").numFmt = "@";
       const buffer = await book.xlsx.writeBuffer();
       return new Response(buffer as any, {
@@ -843,6 +883,8 @@ export function registerWorkflow(
           !["selected", "shipping"].includes(a.status)
         )
           fail(`${i}행: 해당 캠페인의 선정/배송 단계가 아닙니다.`);
+        if (!a.address || !a.phone)
+          fail(`${i}행: 선정자의 배송지가 아직 등록되지 않았습니다.`);
         const carrier = text(value("carrier"), "택배사", 2, 40),
           tracking = text(value("tracking_number"), "송장번호", 5, 40);
         if (!/^[A-Za-z0-9-]+$/.test(tracking))

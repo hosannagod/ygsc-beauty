@@ -78,6 +78,9 @@ test("registration validation, duplicate, password hashing, admin escalation rej
     const data = {
       email: "New@Test.com",
       name: "새 사용자",
+      brand_name: "새 사용자",
+      contact_name: "테스트 담당자",
+      phone: "01012345678",
       password,
       role: "brand",
     };
@@ -165,6 +168,7 @@ test("production cookie is secure; names are escaped in dashboard", async () => 
     const response = await post(app, "/api/register", {
       email: "safe@test.com",
       name: "<script>alert(1)</script>",
+      phone: "01012345678",
       password,
       role: "influencer",
     });
@@ -190,6 +194,9 @@ test("HTTPS reverse proxy origin is accepted; cross-site production writes remai
       email: "proxy@test.com",
       password,
       name: "프록시 계정",
+      brand_name: "프록시 계정",
+      contact_name: "테스트 담당자",
+      phone: "01012345678",
       role: "brand",
     };
     const request = (origin: string) =>
@@ -200,6 +207,53 @@ test("HTTPS reverse proxy origin is accepted; cross-site production writes remai
       });
     assert.equal((await request("https://evil.example")).status, 403);
     assert.equal((await request("https://seoul.example.com")).status, 201);
+  } finally {
+    db.close();
+  }
+});
+
+test("role-specific signup stores contact fields and initializes influencer phone", async () => {
+  const { app, db } = setup();
+  try {
+    const brand = {
+      role: "brand",
+      brand_name: "서울 브랜드",
+      contact_name: "김담당",
+      phone: "010-1234-5678",
+      email: "brand-new@test.com",
+      password,
+    };
+    assert.equal(
+      (await post(app, "/api/register", { ...brand, contact_name: "" })).status,
+      400,
+    );
+    assert.equal(
+      (await post(app, "/api/register", { ...brand, phone: "" })).status,
+      400,
+    );
+    assert.equal((await post(app, "/api/register", brand)).status, 201);
+    const row = db
+      .prepare("SELECT * FROM users WHERE email=?")
+      .get(brand.email) as any;
+    assert.equal(row.name, brand.brand_name);
+    assert.equal(row.brand_name, brand.brand_name);
+    assert.equal(row.contact_name, brand.contact_name);
+    assert.equal(row.phone, brand.phone);
+    const influencer = {
+      role: "influencer",
+      name: "김크리에이터",
+      phone: "01098765432",
+      email: "creator-new@test.com",
+      password,
+    };
+    assert.equal((await post(app, "/api/register", influencer)).status, 201);
+    const profile = db
+      .prepare(
+        "SELECT p.* FROM influencer_profiles p JOIN users u ON u.id=p.user_id WHERE u.email=?",
+      )
+      .get(influencer.email) as any;
+    assert.equal(profile.phone, influencer.phone);
+    assert.equal(profile.address, "");
   } finally {
     db.close();
   }

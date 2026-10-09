@@ -60,3 +60,24 @@ if (counts)
       counts.textContent =
         "계정 현황을 불러오지 못했습니다. 새로고침해 주세요.";
     });
+
+if (form?.dataset.mode === "register") {
+  const update = () => {
+    const brand = form.querySelector("[name=role]:checked").value === "brand";
+    for (const [id, active] of [
+      ["brand-fields", brand],
+      ["influencer-fields", !brand],
+    ]) {
+      const section = document.getElementById(id);
+      section.hidden = !active;
+      section.querySelectorAll("input").forEach((input) => {
+        input.disabled = !active;
+        input.required = active;
+      });
+    }
+  };
+  form
+    .querySelectorAll("[name=role]")
+    .forEach((input) => input.addEventListener("change", update));
+  update();
+}

@@ -53,7 +53,11 @@ const { spawn, spawnSync } = require("node:child_process"),
       p.on("pageerror", (e) => errors.push(e.message));
       await p.goto(base + "/register");
       await p.locator(`input[value="${role}"]`).check();
-      await p.locator("[name=name]").fill(name);
+      if (role === "brand") {
+        await p.locator("[name=brand_name]").fill(name);
+        await p.locator("[name=contact_name]").fill("브랜드 담당자");
+      } else await p.locator("[name=name]").fill(name);
+      await p.locator("[name=phone]").fill("01012345678");
       await p.locator("[name=email]").fill(role + "@example.test");
       await p.locator("[name=password]").fill(password);
       await p.getByRole("button", { name: "계정 만들기" }).click();
@@ -104,9 +108,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .locator('form[data-task="campaign-details"] [name=product_url]')
       .fill("https://example.com/updated");
     await brand.getByRole("button", { name: "링크·모집 일정 저장" }).click();
-    await brand
-      .getByRole("link", { name: "제품·브랜드 사이트 보기" })
-      .waitFor();
+    await brand.locator('a[href="https://example.com/updated"]').waitFor();
     assert.equal(
       await brand
         .getByRole("link", { name: "제품·브랜드 사이트 보기" })
@@ -115,9 +117,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     );
     await influencer.getByRole("link", { name: "내 프로필" }).click();
     await influencer.locator("[name=phone]").fill("01012345678");
-    await influencer
-      .locator("[name=address]")
-      .fill("서울시 강남구 테스트로 123");
+
     await influencer
       .locator("[name=social_url]")
       .fill("https://www.instagram.com/seoulcreator");
@@ -125,7 +125,36 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.getByRole("button", { name: "프로필 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await influencer.goto(base + "/campaigns/" + campaignId);
-    await influencer.locator("[name=consent]").check();
+    await influencer.locator("[name=secondary_use_consent]").check();
+    await influencer.locator("[name=original_delivery_consent]").check();
+    assert.ok(
+      await influencer
+        .locator(".check input")
+        .first()
+        .evaluate((el) => el.getBoundingClientRect().width < 30),
+    );
+    assert.ok(
+      await influencer
+        .locator(".check span")
+        .first()
+        .evaluate((el) => el.getBoundingClientRect().width > 180),
+    );
+    await influencer.setViewportSize({ width: 390, height: 844 });
+    assert.ok(
+      await influencer
+        .locator(".check span")
+        .first()
+        .evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return box.width > 180 && box.height < 180;
+        }),
+    );
+    assert.ok(
+      await influencer.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    );
+    await influencer.setViewportSize({ width: 1280, height: 720 });
     await influencer
       .getByRole("button", { name: "지원하기", exact: false })
       .click();
@@ -134,6 +163,16 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.goto(base + "/applications/" + appId);
     await brand.getByRole("button", { name: "참여자로 선정" }).click();
     await brand.locator("#confirm-accept").click();
+    await influencer.goto(base + "/applications/" + appId);
+    await influencer.locator("[name=recipient_name]").fill("서울 크리에이터");
+    await influencer.locator("[name=postal_code]").fill("06234");
+    await influencer
+      .locator("[name=address]")
+      .fill("서울시 강남구 테스트로 123");
+    await influencer.locator("[name=address_detail]").fill("101호");
+    await influencer.getByRole("button", { name: "배송지 저장" }).click();
+    await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
+    await brand.reload();
     await brand.locator("[name=carrier]").waitFor();
     await brand.goto(base + "/campaigns/" + campaignId);
     const downloaded = await Promise.all([

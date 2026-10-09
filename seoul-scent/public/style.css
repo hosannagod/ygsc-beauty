@@ -114,7 +114,7 @@ form > label {
   font-weight: 600;
   margin: 22px 0;
 }
-input:not([type="radio"]) {
+input:not([type="radio"]):not([type="checkbox"]) {
   display: block;
   width: 100%;
   border: 1px solid #dce2d9;
@@ -1070,4 +1070,28 @@ summary {
   .campaign-card {
     padding: 22px;
   }
+}
+
+[hidden] {
+  display: none !important;
+}
+.check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  margin: 3px 0 0;
+}
+.check span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+#auth-form #brand-fields label,
+#auth-form #influencer-fields label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 22px 0;
 }

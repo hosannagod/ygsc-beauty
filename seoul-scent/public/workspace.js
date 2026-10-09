@@ -126,7 +126,7 @@
   const campaignCard = (c) =>
     `<article class="campaign-card"><div class="card-top">${badge(campaignStatus(c))}<span class="muted">${esc(c.brand_name)}</span></div><a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a><p class="product">${esc(c.product)}</p><p class="muted clamp">${esc(c.description)}</p><div class="campaign-meta"><span>${c.pay_type === "paid" ? `${money(c.compensation)}원` : "제품 제공"}</span><span>모집 ${c.capacity}명</span></div><div class="card-bottom"><span>모집 ${esc(c.recruit_start_date)} ~ ${esc(c.recruit_date)}</span><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a></div>${role !== "influencer" ? `<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}</article>`;
   const applicationCard = (a) =>
-    `<article class="campaign-card"><div class="card-top">${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}</div><h3>${esc(a.title)}</h3><p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p><p class="small muted">초안 ${esc(a.draft_date)} · 최종 ${esc(a.final_date)}</p>${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a class="primary link-button" href="/applications/${a.id}">${{ shipping: "초안 제출하기", revision_requested: "수정 반영하기", draft_approved: "최종 URL 제출하기" }[a.status] || "진행 상황 보기"} →</a></article>`;
+    `<article class="campaign-card"><div class="card-top">${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}</div><h3>${esc(a.title)}</h3><p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p><p class="small muted">초안 ${esc(a.draft_date)} · 최종 ${esc(a.final_date)}</p>${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a class="primary link-button" href="/applications/${a.id}">${{ selected: "배송지 등록·확인", shipping: "초안 제출하기", revision_requested: "수정 반영하기", draft_approved: "최종 URL 제출하기" }[a.status] || "진행 상황 보기"} →</a></article>`;
   const kpi = (label, value) =>
     `<article class="kpi"><span>${label}</span><strong>${value}</strong></article>`;
   async function dashboard() {
@@ -149,7 +149,7 @@
         kpi("누적 완료", profile.completed_count) +
         kpi("현재 티어", `T${profile.tier + 1}`) +
         kpi("노쇼 이력", profile.no_show_count);
-      main = `${profile.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>' : profile.blocked_until > Date.now() ? `<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.address ? '<div class="notice">지원 전에 배송지와 SNS 정보를 입력해 주세요. <a href="/profile">프로필 완성하기 →</a></div>' : ""}<div class="section-heading"><h2>내 캠페인</h2><a href="/applications">전체 보기 →</a></div>${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty("아직 참여 중인 캠페인이 없어요", "관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요.")}<div class="section-heading"><h2>모집 중인 캠페인</h2><a href="/campaigns">전체 보기 →</a></div><section class="campaign-grid">${campaigns
+      main = `${profile.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>' : profile.blocked_until > Date.now() ? `<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.social_url ? '<div class="notice">SNS 정보를 등록하면 브랜드가 선정할 때 참고할 수 있습니다. <a href="/profile">프로필 완성하기 →</a></div>' : ""}<div class="section-heading"><h2>내 캠페인</h2><a href="/applications">전체 보기 →</a></div>${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty("아직 참여 중인 캠페인이 없어요", "관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요.")}<div class="section-heading"><h2>모집 중인 캠페인</h2><a href="/campaigns">전체 보기 →</a></div><section class="campaign-grid">${campaigns
         .filter((c) => campaignStatus(c) === "recruiting")
         .slice(0, 4)
         .map(campaignCard)
@@ -245,7 +245,7 @@
             ? `<div class="notice">${esc(c.recruit_start_date)}부터 지원할 수 있습니다.</div>`
             : profile.blacklisted || profile.blocked_until > Date.now()
               ? '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>'
-              : `<form class="panel" data-task="apply" data-id="${id}"><h2>이 캠페인에 지원하기</h2><p class="muted">프로필의 배송지와 연락처가 브랜드에 전달됩니다. 지원 시점의 정보가 저장됩니다.</p><label class="check"><input type="checkbox" name="consent" required> 해당 캠페인의 2차 저작물 활용 및 고화질 원본 제공에 동의합니다.</label>${submit("지원하기")}</form>`;
+              : `<form class="panel" data-task="apply" data-id="${id}"><h2>이 캠페인에 지원하기</h2><p class="muted">지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤 해당 캠페인에 등록합니다.</p><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에 동의합니다.</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을 공유 링크로 제공하는 데 동의합니다.</span></label>${submit("지원하기")}</form>`;
     } else {
       if (c.status !== "completed") {
         const locked = applications.length > 0 || c.status !== "recruiting";
@@ -257,7 +257,7 @@
         review = applications.filter((a) =>
           ["draft_submitted", "final_submitted"].includes(a.status),
         ).length;
-      root.innerHTML += `<div class="section-heading"><h2>참여자 관리</h2><span class="muted">선정 ${selected}/${c.capacity} · 검수 대기 ${review}</span></div><div class="tabs" role="group" aria-label="참여자 단계"><button data-tab="all" class="active">전체</button><button data-tab="applicants">지원자</button><button data-tab="shipping">배송</button><button data-tab="review">검수</button><button data-tab="completed">완료</button><button data-tab="no_show">노쇼</button></div><div id="applicants-table" class="panel table-wrap"></div><section class="panel"><h3>배송 엑셀</h3><p class="muted">선정·배송 중인 참여자의 배송지를 내려받고 carrier, tracking_number 열을 입력해 업로드하세요. 송장번호 셀은 텍스트 형식을 유지해 주세요.</p><div class="button-row"><a class="secondary" href="/api/work/campaigns/${id}/shipments.xlsx">배송지 XLSX 다운로드</a><label class="secondary upload-label">송장 XLSX 업로드<input id="shipping-file" type="file" accept=".xlsx" data-id="${id}"></label></div><p class="form-error" id="import-error" role="alert" hidden></p></section><section class="panel"><h3>캠페인 운영</h3><p><a class="text-link" href="/api/work/campaigns/${id}/results.xlsx">캠페인 결과 XLSX 다운로드 →</a></p>${c.status === "recruiting" ? `<button class="secondary" data-campaign-action="close" data-id="${id}">모집 마감하기</button>` : c.status === "closed" ? `<button class="secondary" data-campaign-action="complete" data-id="${id}">캠페인 종료하기</button><p class="note left">진행 중인 활동과 미처리 지원자가 없어야 종료할 수 있습니다.</p>` : '<p class="muted">종료된 캠페인입니다.</p>'}</section>`;
+      root.innerHTML += `<div class="section-heading"><h2>참여자 관리</h2><span class="muted">선정 ${selected}/${c.capacity} · 검수 대기 ${review}</span></div><div class="tabs" role="group" aria-label="참여자 단계"><button data-tab="all" class="active">전체</button><button data-tab="applicants">지원자</button><button data-tab="shipping">배송</button><button data-tab="review">검수</button><button data-tab="completed">완료</button><button data-tab="no_show">노쇼</button></div><div id="applicants-table" class="panel table-wrap"></div><section class="panel"><h3>배송 엑셀</h3><p class="muted">배송지가 등록된 선정·배송 중 참여자의 정보를 내려받고 carrier, tracking_number 열을 입력해 업로드하세요. 송장번호 셀은 텍스트 형식을 유지해 주세요.</p><div class="button-row"><a class="secondary" href="/api/work/campaigns/${id}/shipments.xlsx">배송지 XLSX 다운로드</a><label class="secondary upload-label">송장 XLSX 업로드<input id="shipping-file" type="file" accept=".xlsx" data-id="${id}"></label></div><p class="form-error" id="import-error" role="alert" hidden></p></section><section class="panel"><h3>캠페인 운영</h3><p><a class="text-link" href="/api/work/campaigns/${id}/results.xlsx">캠페인 결과 XLSX 다운로드 →</a></p>${c.status === "recruiting" ? `<button class="secondary" data-campaign-action="close" data-id="${id}">모집 마감하기</button>` : c.status === "closed" ? `<button class="secondary" data-campaign-action="complete" data-id="${id}">캠페인 종료하기</button><p class="note left">진행 중인 활동과 미처리 지원자가 없어야 종료할 수 있습니다.</p>` : '<p class="muted">종료된 캠페인입니다.</p>'}</section>`;
       function table(tab) {
         let rows = applications.filter(
           (a) =>
@@ -314,6 +314,48 @@
     const influencer = role === "influencer";
     let actions = "";
     if (influencer) {
+      if (a.status === "selected")
+        actions = actionForm(
+          a,
+          "address",
+          input(
+            "recipient_name",
+            "수령인",
+            "text",
+            'required minlength="2" maxlength="60"',
+            a.recipient_name || a.influencer_name,
+          ) +
+            input(
+              "phone",
+              "연락처",
+              "tel",
+              'required minlength="8" maxlength="30"',
+              a.phone,
+            ) +
+            input(
+              "postal_code",
+              "우편번호",
+              "text",
+              'required minlength="3" maxlength="12"',
+              a.postal_code,
+            ) +
+            input(
+              "address",
+              "주소",
+              "text",
+              'required minlength="5" maxlength="200"',
+              a.address,
+            ) +
+            input(
+              "address_detail",
+              "상세주소 (선택)",
+              "text",
+              'maxlength="150"',
+              a.address_detail,
+            ),
+          "배송지 저장",
+        );
+
       if (["shipping", "revision_requested"].includes(a.status))
         actions = actionForm(
           a,
@@ -346,25 +388,27 @@
       if (a.status === "applied")
         actions = `<div class="review-actions">${actionForm(a, "select", "", "참여자로 선정", "이 인플루언서를 참여자로 선정할까요?")}${actionForm(a, "reject", textarea("note", "반려 사유 (선택)", 'maxlength="1000"'), "지원 반려", "이 지원을 반려할까요?")}</div>`;
       if (["selected", "shipping"].includes(a.status))
-        actions = actionForm(
-          a,
-          "ship",
-          input(
-            "carrier",
-            "택배사",
-            "text",
-            'required minlength="2" maxlength="40"',
-            a.carrier,
-          ) +
-            input(
-              "tracking_number",
-              "송장번호",
-              "text",
-              'required minlength="5" maxlength="40"',
-              a.tracking_number,
-            ),
-          "배송정보 등록",
-        );
+        actions = !a.address
+          ? '<p class="notice">선정자가 배송지를 등록하면 배송정보를 입력할 수 있습니다.</p>'
+          : actionForm(
+              a,
+              "ship",
+              input(
+                "carrier",
+                "택배사",
+                "text",
+                'required minlength="2" maxlength="40"',
+                a.carrier,
+              ) +
+                input(
+                  "tracking_number",
+                  "송장번호",
+                  "text",
+                  'required minlength="5" maxlength="40"',
+                  a.tracking_number,
+                ),
+              "배송정보 등록",
+            );
       if (a.status === "draft_submitted")
         actions = `<div class="review-actions">${actionForm(a, "approve", "", "초안 승인", "초안을 승인하고 SNS 업로드를 요청할까요?")}${actionForm(a, "revision", textarea("feedback", "수정 요청 사유", 'required minlength="5" maxlength="3000" rows="4"') + input("revision_date", "수정 초안 제출 마감일", "date", "required"), "수정 요청")}</div>`;
       if (a.status === "final_submitted")
@@ -399,16 +443,16 @@
         `${esc(a.influencer_name)} · ${esc(a.influencer_email)}`,
         badge(a.status),
       ) +
-      `<div class="deadline-strip"><span>초안 마감 <strong>${effectiveDraft}</strong></span><span>최종 마감 <strong>${esc(a.final_date)}</strong></span></div>${a.status === "no_show" ? '<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 티어 페널티는 내 프로필에서 확인할 수 있습니다.</div>' : ""}<div class="detail-grid"><div><section class="panel"><h2>제출 콘텐츠</h2>${a.social_url ? `<p>${link(a.social_url, "인플루언서 SNS 프로필")} · ${money(a.followers)} 팔로워 · T${a.tier + 1}</p>` : ""}${a.draft_url ? `<p>초안 · ${link(a.draft_url, "Google Drive에서 보기")}</p>` : '<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>'}${a.final_url ? `<p>최종 · ${link(a.final_url, "SNS 게시물 보기")}</p>` : ""}${a.best ? '<span class="best">★ Best 활동</span>' : ""}${a.status === "completed" ? `<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}</section><section class="panel"><h3>배송 정보</h3><dl class="info-list"><dt>택배사</dt><dd>${esc(a.carrier) || "등록 전"}</dd><dt>송장번호</dt><dd>${esc(a.tracking_number) || "등록 전"}</dd><dt>배송지</dt><dd>${esc(a.address)}</dd><dt>연락처</dt><dd>${esc(a.phone)}</dd></dl><p class="note left">송장번호로 해당 택배사의 배송조회 페이지에서 확인해 주세요. 실시간 배송 API는 아직 연결되지 않았습니다.</p></section><section class="panel"><h3>동의 기록</h3><p class="small muted">2차 저작물 활용 및 고화질 원본 제공 동의<br>${datetime(a.consent_at)} · ${esc(a.consent_version)}</p></section></div><div><section class="panel"><h2>현재 단계의 작업</h2>${a.feedback ? `<div class="feedback-box"><strong>브랜드 수정 요청</strong><p class="preline">${esc(a.feedback)}</p></div>` : ""}${actions || '<p class="muted">현재 단계에서는 진행 상황을 확인해 주세요. 상태가 변경되면 알림으로 안내합니다.</p>'}</section><section class="panel"><h2>협업 타임라인</h2><ol class="timeline">${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(e.note)}</p>${e.link ? link(e.link, "당시 제출 링크") : ""}<small>${esc(e.actor_name || "시스템")} · ${datetime(e.created_at)}</small></li>`).join("")}</ol></section></div></div>`;
+      `<div class="deadline-strip"><span>초안 마감 <strong>${effectiveDraft}</strong></span><span>최종 마감 <strong>${esc(a.final_date)}</strong></span></div>${a.status === "no_show" ? '<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 티어 페널티는 내 프로필에서 확인할 수 있습니다.</div>' : ""}<div class="detail-grid"><div><section class="panel"><h2>제출 콘텐츠</h2>${a.social_url ? `<p>${link(a.social_url, "인플루언서 SNS 프로필")} · ${money(a.followers)} 팔로워 · T${a.tier + 1}</p>` : ""}${a.draft_url ? `<p>초안 · ${link(a.draft_url, "Google Drive에서 보기")}</p>` : '<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>'}${a.final_url ? `<p>최종 · ${link(a.final_url, "SNS 게시물 보기")}</p>` : ""}${a.best ? '<span class="best">★ Best 활동</span>' : ""}${a.status === "completed" ? `<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}</section><section class="panel"><h3>배송 정보</h3><dl class="info-list"><dt>수령인</dt><dd>${esc(a.recipient_name) || esc(a.influencer_name)}</dd><dt>택배사</dt><dd>${esc(a.carrier) || "등록 전"}</dd><dt>송장번호</dt><dd>${esc(a.tracking_number) || "등록 전"}</dd><dt>배송지</dt><dd>${a.address ? `${esc(a.postal_code)} ${esc(a.address)} ${esc(a.address_detail)}` : "선정 후 등록 대기"}</dd><dt>연락처</dt><dd>${esc(a.phone)}</dd></dl><p class="note left">송장번호로 해당 택배사의 배송조회 페이지에서 확인해 주세요. 실시간 배송 API는 아직 연결되지 않았습니다.</p></section><section class="panel"><h3>동의 기록</h3><p class="small muted">2차 활용: ${a.secondary_use_consent ? "동의 완료" : "미동의"}<br>고화질 원본 제공: ${a.original_delivery_consent ? "동의 완료" : "미동의"}<br>${datetime(a.consent_at)} · ${esc(a.consent_version)}</p></section></div><div><section class="panel"><h2>현재 단계의 작업</h2>${a.feedback ? `<div class="feedback-box"><strong>브랜드 수정 요청</strong><p class="preline">${esc(a.feedback)}</p></div>` : ""}${actions || '<p class="muted">현재 단계에서는 진행 상황을 확인해 주세요. 상태가 변경되면 알림으로 안내합니다.</p>'}</section><section class="panel"><h2>협업 타임라인</h2><ol class="timeline">${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(e.note)}</p>${e.link ? link(e.link, "당시 제출 링크") : ""}<small>${esc(e.actor_name || "시스템")} · ${datetime(e.created_at)}</small></li>`).join("")}</ol></section></div></div>`;
   }
   async function profile() {
     const { profile: p } = await api("/profile");
     root.innerHTML =
       heading(
         "내 프로필",
-        "지원 시 브랜드에 전달될 정보를 정확하게 입력해 주세요.",
+        "브랜드에 전달할 연락처와 SNS 정보를 입력해 주세요.",
       ) +
-      `<section class="kpi-grid">${kpi("현재 티어", `T${p.tier + 1}`)}${kpi("완료 캠페인", p.completed_count)}${kpi("누적 조회수", money(p.total_views))}${kpi("노쇼", p.no_show_count)}</section>${p.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>' : p.blocked_until > Date.now() ? `<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}<form class="panel editor" data-task="profile">${input("phone", "연락처", "tel", 'required minlength="8" maxlength="30"', p.phone)}${textarea("address", "배송지 (우편번호·상세주소 포함)", 'required minlength="5" maxlength="300" rows="3"', p.address)}${input("social_url", "대표 SNS 프로필 링크", "url", 'required maxlength="500"', p.social_url)}${input("followers", "현재 팔로워 수", "number", 'required min="0" max="100000000"', p.followers)}<p class="note left">이미 지원한 캠페인의 배송지는 자동 변경되지 않습니다. 변경이 필요하면 브랜드에 확인해 주세요.</p>${submit("프로필 저장")}</form>`;
+      `<section class="kpi-grid">${kpi("현재 티어", `T${p.tier + 1}`)}${kpi("완료 캠페인", p.completed_count)}${kpi("누적 조회수", money(p.total_views))}${kpi("노쇼", p.no_show_count)}</section>${p.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>' : p.blocked_until > Date.now() ? `<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}<form class="panel editor" data-task="profile">${input("phone", "연락처", "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", "대표 SNS 프로필 링크", "url", 'required maxlength="500"', p.social_url)}${input("followers", "현재 팔로워 수", "number", 'required min="0" max="100000000"', p.followers)}<p class="note left">배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지 해당 캠페인의 배송지를 수정할 수 있습니다.</p>${submit("프로필 저장")}</form>`;
   }
   async function notifications() {
     const { notifications } = await api("/notifications");
