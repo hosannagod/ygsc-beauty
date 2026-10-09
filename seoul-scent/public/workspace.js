@@ -865,7 +865,7 @@
                 <dt>택배사</dt>
                 <dd>${esc(a.carrier) || t("등록 전")}</dd>
                 <dt>송장번호</dt>
-                <dd>${esc(a.tracking_number) || t("등록 전")}</dd>
+                <dd>${esc(a.tracking_number) || t("등록 전")}${a.tracking_url ? `<p>${link(a.tracking_url, t("배송 조회"))}</p>` : ""}</dd>
                 <dt>배송지</dt>
                 <dd>
                   ${a.address ? `${esc(a.postal_code)} ${esc(a.address)} ${esc(a.address_detail)}` : t("선정 후 등록 대기")}
@@ -873,10 +873,7 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
-              <p class="note left">
-                송장번호로 해당 택배사의 배송조회 페이지에서 확인해 주세요.
-                실시간 배송 API는 아직 연결되지 않았습니다.
-              </p>
+              <p class="note left">${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}</p>
             </section>
             <section class="panel">
               <h3>동의 기록</h3>

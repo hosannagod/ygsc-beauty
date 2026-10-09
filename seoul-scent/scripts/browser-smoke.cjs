@@ -221,6 +221,15 @@ const { spawn, spawnSync } = require("node:child_process"),
       .waitFor();
     await influencer.reload();
     await influencer
+      .getByRole("link", { name: "배송 조회", exact: false })
+      .waitFor();
+    assert.equal(
+      await influencer
+        .getByRole("link", { name: "배송 조회", exact: false })
+        .getAttribute("href"),
+      "https://www.cjlogistics.com/ko/tool/parcel/tracking?gnbInvcNo=00123456789",
+    );
+    await influencer
       .locator("[name=url]")
       .fill("https://www.dropbox.com/s/example/video.mp4?dl=0#preview");
     await influencer.locator("[name=public_confirmed]").check();

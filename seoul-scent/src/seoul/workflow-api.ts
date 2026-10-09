@@ -1,3 +1,4 @@
+import { shippingTrackingUrl } from "./shipping-tracking.js";
 import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
@@ -528,7 +529,10 @@ export function registerWorkflow(
       const u = current(c),
         a = applicationFor(db, id(c), u);
       return c.json({
-        application: a,
+        application: {
+          ...a,
+          tracking_url: shippingTrackingUrl(a.carrier, a.tracking_number),
+        },
         events: db
           .prepare(
             "SELECT e.*,u.name AS actor_name FROM application_events e LEFT JOIN users u ON u.id=e.actor_id WHERE application_id=? ORDER BY e.id",

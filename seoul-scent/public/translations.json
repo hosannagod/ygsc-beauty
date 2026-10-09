@@ -362,5 +362,9 @@
   "캠페인 정보가 수정되었습니다. 제품 소개와 가이드라인을 확인해 주세요.": "Campaign information was updated. Please review the description and guidelines.",
   "새로운 지원자가 있습니다.": "You have a new applicant.",
   "배송정보가 등록되었습니다.": "Shipment information has been added.",
-  "지원이 반려되었습니다.": "Your application was rejected."
+  "지원이 반려되었습니다.": "Your application was rejected.",
+  "배송 조회": "Track shipment",
+  "배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.": "Tracking opens the carrier website in a new tab. Tracking details may not be available immediately after dispatch.",
+  "이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.": "Automatic tracking links are unavailable for this carrier. Use the tracking number on the carrier website.",
+  "택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.": "A tracking link appears once the carrier and tracking number are registered."
 }
