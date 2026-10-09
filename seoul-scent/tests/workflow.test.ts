@@ -641,3 +641,138 @@ test("XLSX expansion guard rejects non-archives and oversized central-directory 
   bad.writeUInt32LE(100 * 1024 * 1024, central + 24);
   assert.throws(() => validateWorkbookArchive(bad));
 });
+
+test("product links and recruitment start dates validate and block early applications", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create({
+      product_url: "https://example.com/product",
+      recruit_start_date: future(1),
+    });
+    const { campaign: c } = (await (
+      await f.req("influencer", `/campaigns/${id}`)
+    ).json()) as any;
+    assert.equal(c.product_url, "https://example.com/product");
+    assert.equal(c.recruit_start_date, future(1));
+    assert.equal(c.recruit_start, deadline(future(1)) - 86400_000);
+    assert.equal(
+      (
+        await f.req("influencer", `/campaigns/${id}/apply`, "POST", {
+          consent: true,
+        })
+      ).status,
+      409,
+    );
+    f.db
+      .prepare("UPDATE campaigns SET recruit_start=? WHERE id=?")
+      .run(Date.now() - 1, id);
+    await f.apply(id);
+    for (const url of [
+      "javascript:alert(1)",
+      "data:text/html,test",
+      "https://username:password@example.com/",
+    ])
+      assert.equal(
+        (
+          await f.req("brand", "/campaigns", "POST", {
+            ...campaign,
+            product_url: url,
+          })
+        ).status,
+        400,
+      );
+    assert.equal(
+      (
+        await f.req("brand", "/campaigns", "POST", {
+          ...campaign,
+          recruit_start_date: future(3),
+        })
+      ).status,
+      400,
+    );
+    const same = await f.create({ recruit_start_date: campaign.recruit_date });
+    assert.ok(same);
+  } finally {
+    f.db.close();
+  }
+});
+
+test("campaign link editing enforces ownership and preserves dates after applications", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create({ product_url: "https://example.com/original" });
+    assert.equal(
+      (
+        await f.req("otherbrand", `/campaigns/${id}/details`, "PUT", {
+          product_url: "https://example.com/other",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          recruit_start_date: future(-1),
+          recruit_date: future(3),
+        })
+      ).status,
+      200,
+    );
+    let row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.product_url, "https://example.com/original");
+    await f.apply(id);
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          product_url: "https://example.com/updated",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          recruit_date: future(4),
+        })
+      ).status,
+      409,
+    );
+    row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.recruit_date, future(3));
+    assert.equal(row.product_url, "https://example.com/updated");
+  } finally {
+    f.db.close();
+  }
+});
+
+test("existing campaigns migrate once without losing applications or schedule data", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create(),
+      application = await f.apply(id);
+    f.db.exec(
+      "ALTER TABLE campaigns DROP COLUMN product_url; ALTER TABLE campaigns DROP COLUMN recruit_start_date; ALTER TABLE campaigns DROP COLUMN recruit_start;",
+    );
+    f.db
+      .prepare("UPDATE campaigns SET created_at=? WHERE id=?")
+      .run("2026-01-01 16:00:00", id);
+    const { initializeWorkflow } = await import("../src/seoul/workflow-db.js");
+    initializeWorkflow(f.db);
+    let row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.recruit_start_date, "2026-01-02");
+    assert.equal(row.recruit_start, Date.parse("2026-01-01T15:00:00Z"));
+    assert.equal(row.product_url, "");
+    f.db
+      .prepare("UPDATE campaigns SET product_url=? WHERE id=?")
+      .run("https://example.com/preserved", id);
+    initializeWorkflow(f.db);
+    row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.product_url, "https://example.com/preserved");
+    assert.ok(
+      f.db.prepare("SELECT id FROM applications WHERE id=?").get(application),
+    );
+    assert.equal(row.recruit_date, campaign.recruit_date);
+  } finally {
+    f.db.close();
+  }
+});

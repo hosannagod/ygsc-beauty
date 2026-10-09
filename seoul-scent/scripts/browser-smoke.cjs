@@ -69,6 +69,9 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.locator("[name=title]").fill("서울 향수 릴스 캠페인");
     await brand.locator("[name=product]").fill("Seoul Scent 향수");
     await brand
+      .locator("[name=product_url]")
+      .fill("https://example.com/product");
+    await brand
       .locator("[name=description]")
       .fill("서울의 향기를 담은 신제품 향수입니다.");
     await brand
@@ -84,6 +87,32 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.getByRole("button", { name: "캠페인 등록" }).click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const campaignId = brand.url().split("/").pop();
+    await brand
+      .getByRole("link", { name: "제품·브랜드 사이트 보기" })
+      .waitFor();
+    await brand
+      .locator(".deadline-strip")
+      .getByText(/모집 시작/)
+      .waitFor();
+    await brand
+      .locator(".deadline-strip")
+      .getByText(/모집 마감/)
+      .last()
+      .waitFor();
+    await brand.getByText("제품 링크·모집 일정 수정", { exact: true }).click();
+    await brand
+      .locator('form[data-task="campaign-details"] [name=product_url]')
+      .fill("https://example.com/updated");
+    await brand.getByRole("button", { name: "링크·모집 일정 저장" }).click();
+    await brand
+      .getByRole("link", { name: "제품·브랜드 사이트 보기" })
+      .waitFor();
+    assert.equal(
+      await brand
+        .getByRole("link", { name: "제품·브랜드 사이트 보기" })
+        .getAttribute("href"),
+      "https://example.com/updated",
+    );
     await influencer.getByRole("link", { name: "내 프로필" }).click();
     await influencer.locator("[name=phone]").fill("01012345678");
     await influencer
@@ -207,6 +236,39 @@ const { spawn, spawnSync } = require("node:child_process"),
       ),
     );
     await influencer.screenshot({ path: tmp + "/mobile.png", fullPage: true });
+    const scheduledResponse = await brand.request.post(
+      base + "/api/work/campaigns",
+      {
+        data: {
+          title: "모집 예정 테스트",
+          product: "테스트 향수",
+          description: "제품 소개와 자세한 정보 https://example.com/info",
+          guidelines: "영상 제작 가이드라인을 확인해 주세요.",
+          capacity: 1,
+          pay_type: "gifted",
+          compensation: 0,
+          recruit_start_date: future(1),
+          recruit_date: future(2),
+          draft_date: future(5),
+          final_date: future(10),
+        },
+      },
+    );
+    assert.equal(scheduledResponse.status(), 201);
+    const scheduled = await scheduledResponse.json();
+    await influencer.goto(base + "/campaigns/" + scheduled.id);
+    await influencer.getByText("모집 예정", { exact: true }).waitFor();
+    assert.equal(
+      await influencer
+        .getByRole("button", { name: "지원하기", exact: false })
+        .count(),
+      0,
+    );
+    await influencer
+      .getByRole("link", { name: "https://example.com/info", exact: false })
+      .waitFor();
+    await brand.goto(base + "/campaigns/" + scheduled.id);
+    await brand.getByRole("button", { name: "모집 마감하기" }).waitFor();
     const admin = await browser.newPage();
     admin.on("pageerror", (e) => errors.push(e.message));
     await admin.goto(base + "/login");

@@ -26,6 +26,7 @@
     completed: "완료",
     no_show: "노쇼 · 페널티",
     recruiting: "모집 중",
+    scheduled: "모집 예정",
     closed: "모집 마감",
   };
   const date = (n) =>
@@ -92,8 +93,38 @@
       };
     });
   }
+  const campaignStatus = (c) =>
+    c.status === "recruiting" && c.recruit_start > Date.now()
+      ? "scheduled"
+      : c.status;
+  const today = () =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  function linkedText(value) {
+    const raw = String(value ?? "");
+    let output = "",
+      offset = 0;
+    for (const match of raw.matchAll(/https?:\/\/[^\s<>"']+/g)) {
+      output += esc(raw.slice(offset, match.index));
+      const address = match[0].replace(/[).,!?:;]+$/, "");
+      try {
+        const url = new URL(address);
+        output +=
+          url.username || url.password ? esc(address) : link(url.href, address);
+      } catch {
+        output += esc(address);
+      }
+      output += esc(match[0].slice(address.length));
+      offset = match.index + match[0].length;
+    }
+    return output + esc(raw.slice(offset));
+  }
   const campaignCard = (c) =>
-    `<article class="campaign-card"><div class="card-top">${badge(c.status)}<span class="muted">${esc(c.brand_name)}</span></div><a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a><p class="product">${esc(c.product)}</p><p class="muted clamp">${esc(c.description)}</p><div class="campaign-meta"><span>${c.pay_type === "paid" ? `${money(c.compensation)}원` : "제품 제공"}</span><span>모집 ${c.capacity}명</span></div><div class="card-bottom"><span>모집 마감 ${esc(c.recruit_date)}</span><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a></div>${role !== "influencer" ? `<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}</article>`;
+    `<article class="campaign-card"><div class="card-top">${badge(campaignStatus(c))}<span class="muted">${esc(c.brand_name)}</span></div><a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a><p class="product">${esc(c.product)}</p><p class="muted clamp">${esc(c.description)}</p><div class="campaign-meta"><span>${c.pay_type === "paid" ? `${money(c.compensation)}원` : "제품 제공"}</span><span>모집 ${c.capacity}명</span></div><div class="card-bottom"><span>모집 ${esc(c.recruit_start_date)} ~ ${esc(c.recruit_date)}</span><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a></div>${role !== "influencer" ? `<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}</article>`;
   const applicationCard = (a) =>
     `<article class="campaign-card"><div class="card-top">${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}</div><h3>${esc(a.title)}</h3><p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p><p class="small muted">초안 ${esc(a.draft_date)} · 최종 ${esc(a.final_date)}</p>${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a class="primary link-button" href="/applications/${a.id}">${{ shipping: "초안 제출하기", revision_requested: "수정 반영하기", draft_approved: "최종 URL 제출하기" }[a.status] || "진행 상황 보기"} →</a></article>`;
   const kpi = (label, value) =>
@@ -119,7 +150,7 @@
         kpi("현재 티어", `T${profile.tier + 1}`) +
         kpi("노쇼 이력", profile.no_show_count);
       main = `${profile.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>' : profile.blocked_until > Date.now() ? `<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.address ? '<div class="notice">지원 전에 배송지와 SNS 정보를 입력해 주세요. <a href="/profile">프로필 완성하기 →</a></div>' : ""}<div class="section-heading"><h2>내 캠페인</h2><a href="/applications">전체 보기 →</a></div>${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty("아직 참여 중인 캠페인이 없어요", "관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요.")}<div class="section-heading"><h2>모집 중인 캠페인</h2><a href="/campaigns">전체 보기 →</a></div><section class="campaign-grid">${campaigns
-        .filter((c) => c.status === "recruiting")
+        .filter((c) => campaignStatus(c) === "recruiting")
         .slice(0, 4)
         .map(campaignCard)
         .join("")}</section>`;
@@ -128,7 +159,7 @@
         kpi("전체 캠페인", campaigns.length) +
         kpi(
           "모집 중",
-          campaigns.filter((c) => c.status === "recruiting").length,
+          campaigns.filter((c) => campaignStatus(c) === "recruiting").length,
         ) +
         kpi(
           "지원자",
@@ -165,7 +196,7 @@
           ? '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>'
           : "",
       ) +
-      `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`;
+      `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`;
     const render = () => {
       const search = document
           .querySelector("#campaign-search")
@@ -173,7 +204,7 @@
         status = document.querySelector("#campaign-status").value;
       const filtered = campaigns.filter(
         (c) =>
-          (!status || c.status === status) &&
+          (!status || campaignStatus(c) === status) &&
           (c.title + " " + c.brand_name).toLowerCase().includes(search),
       );
       document.querySelector("#campaign-results").innerHTML = filtered.length
@@ -193,7 +224,7 @@
         "새 캠페인 만들기",
         "모집부터 최종 업로드까지의 기준을 설정해 주세요.",
       ) +
-      `<form class="panel editor" data-task="campaign"><h2>제품과 협업 정보</h2>${input("title", "캠페인명", "text", 'required minlength="2" maxlength="100"')}${input("product", "제품명", "text", 'required minlength="2" maxlength="200"')}${textarea("description", "제품 소개", 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", "콘텐츠 가이드라인", 'required minlength="10" maxlength="6000" rows="5"')}<div class="form-grid">${input("capacity", "모집 인원", "number", 'required min="1" max="500"', "10")}<label>보상 유형<select name="pay_type"><option value="gifted">무가 · 제품 제공</option><option value="paid">유가 · 제품 + 활동비</option></select></label>${input("compensation", "활동비 (원 · 무가일 때 0)", "number", 'required min="0" max="100000000"', "0")}</div><h2>일정</h2><p class="note left">모든 마감은 해당 날짜 종료 시점(한국 시간 자정) 기준입니다.</p><div class="form-grid">${input("recruit_date", "모집 마감일", "date", "required")}${input("draft_date", "초안 제출 마감일", "date", "required")}${input("final_date", "최종 업로드 마감일", "date", "required")}</div>${submit("캠페인 등록")}</form>`;
+      `<form class="panel editor" data-task="campaign"><h2>제품과 협업 정보</h2>${input("title", "캠페인명", "text", 'required minlength="2" maxlength="100"')}${input("product", "제품명", "text", 'required minlength="2" maxlength="200"')}${input("product_url", "제품·브랜드 링크 (선택)", "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", "제품 소개", 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", "콘텐츠 가이드라인", 'required minlength="10" maxlength="6000" rows="5"')}<div class="form-grid">${input("capacity", "모집 인원", "number", 'required min="1" max="500"', "10")}<label>보상 유형<select name="pay_type"><option value="gifted">무가 · 제품 제공</option><option value="paid">유가 · 제품 + 활동비</option></select></label>${input("compensation", "활동비 (원 · 무가일 때 0)", "number", 'required min="0" max="100000000"', "0")}</div><h2>일정</h2><p class="note left">모든 마감은 해당 날짜 종료 시점(한국 시간 자정) 기준입니다.</p><div class="form-grid">${input("recruit_start_date", "모집 시작일", "date", "required", today())}${input("recruit_date", "모집 마감일", "date", "required")}${input("draft_date", "초안 제출 마감일", "date", "required")}${input("final_date", "최종 업로드 마감일", "date", "required")}</div>${submit("캠페인 등록")}</form>`;
   }
   async function campaignDetail(id) {
     const { campaign: c, applications } = await api(`/campaigns/${id}`);
@@ -201,19 +232,25 @@
       heading(
         esc(c.title),
         `${esc(c.brand_name)} · ${esc(c.product)}`,
-        badge(c.status),
+        badge(campaignStatus(c)),
       ) +
-      `<section class="kpi-grid">${kpi("모집 인원", c.capacity)}${kpi("지원", applications.length)}${kpi("보상", c.pay_type === "paid" ? money(c.compensation) + "원" : "제품 제공")}${kpi("모집 마감", esc(c.recruit_date))}</section><section class="panel"><h2>제품 소개</h2><p class="preline">${esc(c.description)}</p><h3>콘텐츠 가이드라인</h3><p class="preline">${esc(c.guidelines)}</p><div class="deadline-strip"><span>초안 <strong>${esc(c.draft_date)}</strong></span><span>최종 <strong>${esc(c.final_date)}</strong></span><span>한국 시간 · 당일 자정 마감</span></div></section>`;
+      `<section class="kpi-grid">${kpi("모집 인원", c.capacity)}${kpi("지원", applications.length)}${kpi("보상", c.pay_type === "paid" ? money(c.compensation) + "원" : "제품 제공")}${kpi("모집 마감", esc(c.recruit_date))}</section><section class="panel"><h2>제품 소개</h2><p class="preline">${linkedText(c.description)}</p>${c.product_url ? `<p>${link(c.product_url, "제품·브랜드 사이트 보기")}</p>` : ""}<h3>콘텐츠 가이드라인</h3><p class="preline">${linkedText(c.guidelines)}</p><div class="deadline-strip"><span>모집 시작 <strong>${esc(c.recruit_start_date)}</strong></span><span>모집 마감 <strong>${esc(c.recruit_date)}</strong></span><span>초안 <strong>${esc(c.draft_date)}</strong></span><span>최종 <strong>${esc(c.final_date)}</strong></span><span>한국 시간 · 당일 자정 마감</span></div></section>`;
     if (role === "influencer") {
       const { profile } = await api("/profile");
       root.innerHTML += applications.length
         ? `<section class="panel"><h2>내 지원 상태</h2>${badge(applications[0].status)} <a class="text-link" href="/applications/${applications[0].id}">참여 내역 보기 →</a></section>`
         : c.status !== "recruiting"
           ? '<div class="notice">모집이 마감되었습니다.</div>'
-          : profile.blacklisted || profile.blocked_until > Date.now()
-            ? '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>'
-            : `<form class="panel" data-task="apply" data-id="${id}"><h2>이 캠페인에 지원하기</h2><p class="muted">프로필의 배송지와 연락처가 브랜드에 전달됩니다. 지원 시점의 정보가 저장됩니다.</p><label class="check"><input type="checkbox" name="consent" required> 해당 캠페인의 2차 저작물 활용 및 고화질 원본 제공에 동의합니다.</label>${submit("지원하기")}</form>`;
+          : campaignStatus(c) === "scheduled"
+            ? `<div class="notice">${esc(c.recruit_start_date)}부터 지원할 수 있습니다.</div>`
+            : profile.blacklisted || profile.blocked_until > Date.now()
+              ? '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>'
+              : `<form class="panel" data-task="apply" data-id="${id}"><h2>이 캠페인에 지원하기</h2><p class="muted">프로필의 배송지와 연락처가 브랜드에 전달됩니다. 지원 시점의 정보가 저장됩니다.</p><label class="check"><input type="checkbox" name="consent" required> 해당 캠페인의 2차 저작물 활용 및 고화질 원본 제공에 동의합니다.</label>${submit("지원하기")}</form>`;
     } else {
+      if (c.status !== "completed") {
+        const locked = applications.length > 0 || c.status !== "recruiting";
+        root.innerHTML += `<section class="panel"><details><summary>제품 링크·모집 일정 수정</summary><form data-task="campaign-details" data-id="${id}">${input("product_url", "제품·브랜드 링크 (선택)", "url", 'maxlength="2000"', c.product_url)}<div class="form-grid">${input("recruit_start_date", "모집 시작일", "date", locked ? "required readonly" : "required", c.recruit_start_date)}${input("recruit_date", "모집 마감일", "date", locked ? "required readonly" : "required", c.recruit_date)}</div>${locked ? '<p class="note left">지원자가 있거나 모집이 마감된 경우 모집 일정은 변경할 수 없습니다. 제품 링크는 수정할 수 있습니다.</p>' : ""}${submit("링크·모집 일정 저장")}</form></details></section>`;
+      }
       const selected = applications.filter(
           (a) => !["applied", "rejected"].includes(a.status),
         ).length,
@@ -525,6 +562,9 @@
           location.assign("/campaigns/" + r.id);
           return;
         }
+        case "campaign-details":
+          await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);
+          break;
         case "apply": {
           const r = await api(
             `/campaigns/${form.dataset.id}/apply`,

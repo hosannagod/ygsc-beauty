@@ -46,6 +46,48 @@ export function deadline(value: unknown) {
     fail("유효하지 않은 날짜입니다.");
   return date.getTime() + 15 * 3600_000; // next day 00:00 Asia/Seoul
 }
+export function productLink(value: unknown) {
+  const raw =
+    value === undefined ? "" : text(value, "제품·브랜드 링크", 0, 2000);
+  if (!raw) return "";
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return fail("제품·브랜드 링크는 올바른 웹 주소를 입력해 주세요.");
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    fail(
+      "제품·브랜드 링크는 인증 정보가 없는 HTTP 또는 HTTPS 주소를 입력해 주세요.",
+    );
+  return url.href;
+}
+export function recruitmentDates(
+  startDate: unknown,
+  endDate: unknown,
+  draftDue: number,
+  now = Date.now(),
+) {
+  const start = deadline(startDate) - 86400_000,
+    end = deadline(endDate);
+  if (start >= end || end <= now || end >= draftDue)
+    fail(
+      "모집 시작일 ≤ 모집 마감일 < 초안 마감일 순서로 입력해 주세요. 모집 마감일은 아직 지나지 않아야 합니다.",
+    );
+  return { start, end };
+}
+export function seoulToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
 export function externalLink(value: unknown, draft: boolean) {
   const raw = text(value, "제출 링크", 1, 2000);
   let url: URL;

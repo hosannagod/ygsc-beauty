@@ -66,4 +66,20 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     db.exec(
       "ALTER TABLE applications ADD COLUMN revision_due INTEGER NOT NULL DEFAULT 0",
     );
+  db.transaction(() => {
+    const campaignColumns = db
+      .prepare("PRAGMA table_info(campaigns)")
+      .all() as { name: string }[];
+    for (const [name, definition] of [
+      ["product_url", "TEXT NOT NULL DEFAULT ''"],
+      ["recruit_start_date", "TEXT NOT NULL DEFAULT ''"],
+      ["recruit_start", "INTEGER NOT NULL DEFAULT 0"],
+    ]) {
+      if (!campaignColumns.some((column) => column.name === name))
+        db.exec(`ALTER TABLE campaigns ADD COLUMN ${name} ${definition}`);
+    }
+    db.exec(`UPDATE campaigns SET recruit_start_date=MIN(date(created_at,'+9 hours'),recruit_date) WHERE recruit_start_date='';
+      UPDATE campaigns SET recruit_start=CAST(strftime('%s',recruit_start_date || ' 00:00:00','-9 hours') AS INTEGER)*1000 WHERE recruit_start=0;
+      INSERT OR IGNORE INTO schema_version VALUES(3);`);
+  })();
 }

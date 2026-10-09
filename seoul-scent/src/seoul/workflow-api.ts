@@ -9,6 +9,9 @@ import {
   text,
   integer,
   deadline,
+  productLink,
+  recruitmentDates,
+  seoulToday,
   externalLink,
   campaignFor,
   applicationFor,
@@ -122,6 +125,8 @@ export function registerWorkflow(
         fail("유가/무가 유형을 확인해 주세요.");
       if (b.pay_type === "paid" && compensation === 0)
         fail("유가 캠페인의 보상 금액을 입력해 주세요.");
+      const productUrl = productLink(b.product_url);
+      const startDate = b.recruit_start_date ?? seoulToday();
       const recruit = deadline(b.recruit_date),
         draft = deadline(b.draft_date),
         final = deadline(b.final_date);
@@ -129,9 +134,10 @@ export function registerWorkflow(
         fail(
           "모집 마감 < 초안 마감 < 최종 마감 순서로 미래 날짜를 설정해 주세요.",
         );
+      const { start } = recruitmentDates(startDate, b.recruit_date, draft);
       const result = db
         .prepare(
-          `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           u.id,
@@ -148,8 +154,54 @@ export function registerWorkflow(
           recruit,
           draft,
           final,
+          productUrl,
+          startDate,
+          start,
         );
       return c.json({ id: Number(result.lastInsertRowid) }, 201);
+    }),
+  );
+  app.put(
+    "/api/work/campaigns/:id/details",
+    wrap(async (c) => {
+      const u = current(c),
+        b = await body(c);
+      db.transaction(() => {
+        const campaign = campaignFor(db, id(c), u, true);
+        if (campaign.status === "completed")
+          fail("종료된 캠페인은 수정할 수 없습니다.", 409);
+        const url = productLink(b.product_url ?? campaign.product_url);
+        const startDate = b.recruit_start_date ?? campaign.recruit_start_date,
+          endDate = b.recruit_date ?? campaign.recruit_date;
+        const changed =
+          startDate !== campaign.recruit_start_date ||
+          endDate !== campaign.recruit_date;
+        let start = campaign.recruit_start,
+          end = campaign.recruit_due;
+        if (changed) {
+          const count = (
+            db
+              .prepare(
+                "SELECT COUNT(*) AS n FROM applications WHERE campaign_id=?",
+              )
+              .get(campaign.id) as any
+          ).n;
+          if (campaign.status !== "recruiting" || count > 0)
+            fail(
+              "지원자가 있거나 모집이 마감된 캠페인은 모집 일정을 변경할 수 없습니다.",
+              409,
+            );
+          ({ start, end } = recruitmentDates(
+            startDate,
+            endDate,
+            campaign.draft_due,
+          ));
+        }
+        db.prepare(
+          "UPDATE campaigns SET product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=? WHERE id=?",
+        ).run(url, startDate, start, endDate, end, campaign.id);
+      })();
+      return c.json({ success: true });
     }),
   );
   app.get(
@@ -189,6 +241,8 @@ export function registerWorkflow(
           campaign.recruit_due <= Date.now()
         )
           fail("모집이 마감된 캠페인입니다.", 409);
+        if (campaign.recruit_start > Date.now())
+          fail("아직 모집 시작 전입니다.", 409);
         if (b.consent !== true)
           fail("2차 활용 및 고화질 원본 제공 동의가 필요합니다.");
         if (!p.phone || !p.address || !p.social_url)
