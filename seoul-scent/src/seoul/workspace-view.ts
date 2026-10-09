@@ -43,7 +43,7 @@ export function workspacePage(user: User, lang: Language = "ko") {
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Seoul Scent · 협업 워크스페이스</title>
         <link rel="stylesheet" href="/assets/style.css" />
-        <script src="/assets/i18n.js" defer></script>
+        <script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script>
         <script src="/assets/app.js" defer></script>
         <script src="/assets/workspace.js" defer></script>
       </head>

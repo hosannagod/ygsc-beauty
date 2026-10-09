@@ -34,7 +34,7 @@ export function page(
     brand: t("브랜드의 이야기를 함께 전할 인플루언서를 만나세요."),
     influencer: t("나에게 맞는 브랜드를 만나고 새로운 콘텐츠를 만들어 보세요."),
   };
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seoul Scent · ${auth ? t("계정") : t("대시보드")}</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/i18n.js" defer></script><script src="/assets/app.js" defer></script></head><body><div class="language-control"><label for="language-select">Language</label><select id="language-select"><option value="ko" ${lang === "ko" ? "selected" : ""}>한국어</option><option value="en" ${lang === "en" ? "selected" : ""}>English</option></select></div>
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seoul Scent · ${auth ? t("계정") : t("대시보드")}</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script><script src="/assets/app.js" defer></script></head><body><div class="language-control"><label for="language-select">Language</label><select id="language-select"><option value="ko" ${lang === "ko" ? "selected" : ""}>한국어</option><option value="en" ${lang === "en" ? "selected" : ""}>English</option></select></div>
   ${
     auth
       ? html`<main class="auth-layout">
