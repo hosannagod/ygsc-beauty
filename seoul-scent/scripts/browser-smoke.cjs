@@ -205,7 +205,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.reload();
     await influencer
       .locator("[name=url]")
-      .fill("https://drive.google.com/file/d/draft/view");
+      .fill("https://www.dropbox.com/s/example/video.mp4?dl=0#preview");
     await influencer.locator("[name=public_confirmed]").check();
     await influencer.getByRole("button", { name: "초안 링크 제출" }).click();
     await influencer
@@ -338,6 +338,91 @@ const { spawn, spawnSync } = require("node:child_process"),
     await admin.getByRole("button", { name: "운영 정책 저장" }).click();
     await admin.locator("#confirm-accept").click();
     await admin.locator("#toast").getByText("저장되었습니다.").waitFor();
+    // English UI and preference persistence; creator text remains unchanged.
+    await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer.locator("#language-select").selectOption("en");
+    await influencer.waitForFunction(
+      () => document.documentElement.lang === "en",
+    );
+    await influencer
+      .getByRole("heading", { name: "Product description", exact: true })
+      .waitFor();
+    await influencer
+      .getByText(
+        "수정된 제품 소개입니다. 촬영 전에 제품의 상세 정보를 확인해 주세요.",
+        { exact: true },
+      )
+      .waitFor();
+    await influencer.reload();
+    await influencer
+      .getByRole("link", { name: "My profile", exact: false })
+      .waitFor();
+    await influencer.setViewportSize({ width: 390, height: 844 });
+    assert.ok(
+      await influencer.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    );
+    await influencer.locator("#language-select").selectOption("ko");
+    await influencer.waitForFunction(
+      () => document.documentElement.lang === "ko",
+    );
+    await influencer.setViewportSize({ width: 1280, height: 720 });
+    // Create a campaign without draft review in the actual form.
+    await brand.goto(base + "/campaigns/new");
+    await brand.locator("[name=title]").fill("초안 검수 없는 캠페인");
+    await brand.locator("[name=product]").fill("테스트 제품");
+    await brand
+      .locator("[name=description]")
+      .fill("초안 검수가 필요 없는 제품의 소개입니다.");
+    await brand
+      .locator("[name=guidelines]")
+      .fill("제품을 사용한 후 최종 SNS 콘텐츠를 게시해 주세요.");
+    await brand.locator("[name=review_required]").uncheck();
+    assert.equal(await brand.locator("[name=draft_date]").isVisible(), false);
+    await brand.locator("[name=recruit_date]").fill(future(2));
+    await brand.locator("[name=final_date]").fill(future(10));
+    await brand
+      .getByRole("button", { name: "캠페인 등록", exact: false })
+      .click();
+    await brand.waitForURL(/\/campaigns\/\d+$/);
+    const directCampaign = brand.url().split("/").pop();
+    await influencer.goto(base + "/campaigns/" + directCampaign);
+    await influencer.locator("[name=secondary_use_consent]").check();
+    await influencer.locator("[name=original_delivery_consent]").check();
+    await influencer
+      .getByRole("button", { name: "지원하기", exact: false })
+      .click();
+    await influencer.waitForURL(/\/applications\/\d+$/);
+    const directApp = influencer.url().split("/").pop();
+    await brand.goto(base + "/applications/" + directApp);
+    await brand.getByRole("button", { name: "참여자로 선정" }).click();
+    await brand.locator("#confirm-accept").click();
+    await brand.getByText("선정됨", { exact: true }).first().waitFor();
+    await influencer.reload();
+    await influencer.locator("[name=recipient_name]").fill("테스트 수령인");
+    await influencer.locator("[name=postal_code]").fill("01234");
+    await influencer.locator("[name=address]").fill("서울시 테스트로 123");
+    await influencer.getByRole("button", { name: "배송지 저장" }).click();
+    await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
+    await brand.reload();
+    await brand.locator("[name=carrier]").fill("CJ대한통운");
+    await brand.locator("[name=tracking_number]").fill("123456789");
+    await brand.getByRole("button", { name: "배송정보 등록" }).click();
+    await brand.getByText("배송 중", { exact: true }).first().waitFor();
+    await influencer.reload();
+    await influencer.locator('form[data-action="final"]').waitFor();
+    assert.equal(
+      await influencer.locator('form[data-action="draft"]').count(),
+      0,
+    );
+    await influencer.locator("#language-select").selectOption("en");
+    await influencer.waitForFunction(
+      () => document.documentElement.lang === "en",
+    );
+    await influencer
+      .getByRole("button", { name: "Submit final URL", exact: false })
+      .waitFor();
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },

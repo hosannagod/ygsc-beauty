@@ -128,19 +128,29 @@ export function registerWorkflow(
         fail("유가/무가 유형을 확인해 주세요.");
       if (b.pay_type === "paid" && compensation === 0)
         fail("유가 캠페인의 보상 금액을 입력해 주세요.");
+      if (
+        b.review_required !== undefined &&
+        typeof b.review_required !== "boolean"
+      )
+        fail("초안 검수 설정을 확인해 주세요.");
+      const review = b.review_required !== false;
       const productUrl = productLink(b.product_url);
       const startDate = b.recruit_start_date ?? seoulToday();
       const recruit = deadline(b.recruit_date),
-        draft = deadline(b.draft_date),
+        draft = review ? deadline(b.draft_date) : deadline(b.final_date),
         final = deadline(b.final_date);
-      if (recruit <= Date.now() || draft <= recruit || final <= draft)
+      if (
+        recruit <= Date.now() ||
+        draft <= recruit ||
+        (review && final <= draft)
+      )
         fail(
           "모집 마감 < 초안 마감 < 최종 마감 순서로 미래 날짜를 설정해 주세요.",
         );
       const { start } = recruitmentDates(startDate, b.recruit_date, draft);
       const result = db
         .prepare(
-          `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           u.id,
@@ -152,7 +162,7 @@ export function registerWorkflow(
           b.pay_type,
           b.pay_type === "gifted" ? 0 : compensation,
           b.recruit_date,
-          b.draft_date,
+          review ? b.draft_date : b.final_date,
           b.final_date,
           recruit,
           draft,
@@ -160,6 +170,7 @@ export function registerWorkflow(
           productUrl,
           startDate,
           start,
+          review ? 1 : 0,
         );
       return c.json({ id: Number(result.lastInsertRowid) }, 201);
     }),
@@ -230,15 +241,32 @@ export function registerWorkflow(
             "지원자가 있거나 모집이 마감된 캠페인의 보상 조건은 변경할 수 없습니다.",
             409,
           );
+        if (
+          b.review_required !== undefined &&
+          typeof b.review_required !== "boolean"
+        )
+          fail("초안 검수 설정을 확인해 주세요.");
+        const review =
+          b.review_required === undefined
+            ? !!campaign.review_required
+            : b.review_required;
+        if (locked && review !== !!campaign.review_required)
+          fail(
+            "지원자가 있거나 모집이 마감된 캠페인의 검수 방식은 변경할 수 없습니다.",
+            409,
+          );
         const startDate = b.recruit_start_date ?? campaign.recruit_start_date,
           endDate = b.recruit_date ?? campaign.recruit_date,
-          draftDate = b.draft_date ?? campaign.draft_date,
+          draftDate = review
+            ? (b.draft_date ?? campaign.draft_date)
+            : (b.final_date ?? campaign.final_date),
           finalDate = b.final_date ?? campaign.final_date;
         const changed =
           startDate !== campaign.recruit_start_date ||
           endDate !== campaign.recruit_date ||
           draftDate !== campaign.draft_date ||
-          finalDate !== campaign.final_date;
+          finalDate !== campaign.final_date ||
+          review !== !!campaign.review_required;
         let start = campaign.recruit_start,
           end = campaign.recruit_due,
           draft = campaign.draft_due,
@@ -256,7 +284,7 @@ export function registerWorkflow(
             fail("초안 마감 < 최종 마감 순서로 설정해 주세요.");
         }
         db.prepare(
-          "UPDATE campaigns SET title=?,product=?,description=?,guidelines=?,capacity=?,pay_type=?,compensation=?,product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=?,draft_date=?,draft_due=?,final_date=?,final_due=? WHERE id=?",
+          "UPDATE campaigns SET title=?,product=?,description=?,guidelines=?,capacity=?,pay_type=?,compensation=?,product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=?,draft_date=?,draft_due=?,final_date=?,final_due=?,review_required=? WHERE id=?",
         ).run(
           title,
           product,
@@ -274,6 +302,7 @@ export function registerWorkflow(
           draft,
           finalDate,
           final,
+          review ? 1 : 0,
           campaign.id,
         );
         if (
@@ -427,7 +456,7 @@ export function registerWorkflow(
       return c.json({
         applications: db
           .prepare(
-            `SELECT a.*,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE a.influencer_id=? ORDER BY a.id DESC`,
+            `SELECT a.*,c.review_required,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE a.influencer_id=? ORDER BY a.id DESC`,
           )
           .all(u.id),
       });
@@ -469,7 +498,7 @@ export function registerWorkflow(
           case "select": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
             requireState(["applied"]);
-            if (Date.now() >= a.draft_due)
+            if (Date.now() >= (a.review_required ? a.draft_due : a.final_due))
               fail("초안 마감이 지난 캠페인에서는 선정할 수 없습니다.", 409);
             const count = (
               db
@@ -539,6 +568,8 @@ export function registerWorkflow(
           case "draft": {
             if (!influencer) fail("접근 권한이 없습니다.", 403);
             requireState(["shipping", "revision_requested"]);
+            if (!a.review_required)
+              fail("이 캠페인은 초안 검수를 진행하지 않습니다.", 409);
             if (b.public_confirmed !== true)
               fail(
                 "링크가 있는 모든 사용자에게 보기 권한을 허용했는지 확인해 주세요.",
@@ -612,7 +643,7 @@ export function registerWorkflow(
           }
           case "final":
             if (!influencer) fail("접근 권한이 없습니다.", 403);
-            requireState(["draft_approved"]);
+            requireState(a.review_required ? ["draft_approved"] : ["shipping"]);
             if (Date.now() >= a.final_due)
               fail("최종 제출 마감이 지났습니다.", 409);
             link = externalLink(b.url, false);
@@ -834,7 +865,7 @@ export function registerWorkflow(
       return c.json({
         alerts: db
           .prepare(
-            `SELECT a.id,a.status,c.title,c.draft_date,c.final_date,c.draft_due,c.final_due,u.name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id WHERE a.status='no_show' OR (a.status IN ('selected','shipping','revision_requested','draft_approved') AND CASE WHEN a.status='draft_approved' THEN c.final_due WHEN a.status='revision_requested' AND a.revision_due>0 THEN a.revision_due ELSE c.draft_due END<?) ORDER BY a.updated_at DESC LIMIT 100`,
+            `SELECT a.id,a.status,c.title,c.review_required,c.draft_date,c.final_date,c.draft_due,c.final_due,u.name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id WHERE a.status='no_show' OR (a.status IN ('selected','shipping','revision_requested','draft_approved') AND CASE WHEN a.status='draft_approved' OR c.review_required=0 THEN c.final_due WHEN a.status='revision_requested' AND a.revision_due>0 THEN a.revision_due ELSE c.draft_due END<?) ORDER BY a.updated_at DESC LIMIT 100`,
           )
           .all(Date.now() + 86400_000),
       });

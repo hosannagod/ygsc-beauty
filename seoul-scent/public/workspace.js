@@ -1,4 +1,5 @@
 (() => {
+  const { t, html } = window.ScentI18n;
   const root = document.querySelector("#workspace");
   if (!root) return;
   const role = document.body.dataset.role;
@@ -15,34 +16,43 @@
         })[c],
     );
   const labels = {
-    applied: "지원 완료",
-    rejected: "반려",
-    selected: "선정됨",
-    shipping: "배송 중",
-    draft_submitted: "초안 검수 대기",
-    revision_requested: "수정 요청 중",
-    draft_approved: "초안 승인 · 업로드 대기",
-    final_submitted: "최종 제출 완료",
-    completed: "완료",
-    no_show: "노쇼 · 페널티",
-    recruiting: "모집 중",
-    scheduled: "모집 예정",
-    closed: "모집 마감",
+    applied: t("지원 완료"),
+    rejected: t("반려"),
+    selected: t("선정됨"),
+    shipping: t("배송 중"),
+    draft_submitted: t("초안 검수 대기"),
+    revision_requested: t("수정 요청 중"),
+    draft_approved: t("초안 승인 · 업로드 대기"),
+    final_submitted: t("최종 제출 완료"),
+    completed: t("완료"),
+    no_show: t("노쇼 · 페널티"),
+    recruiting: t("모집 중"),
+    scheduled: t("모집 예정"),
+    closed: t("모집 마감"),
   };
   const date = (n) =>
-    new Intl.DateTimeFormat("ko-KR", {
-      timeZone: "Asia/Seoul",
-      dateStyle: "medium",
-    }).format(new Date(n));
+    new Intl.DateTimeFormat(
+      window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
+      {
+        timeZone: "Asia/Seoul",
+        dateStyle: "medium",
+      },
+    ).format(new Date(n));
   const datetime = (n) =>
-    new Intl.DateTimeFormat("ko-KR", {
-      timeZone: "Asia/Seoul",
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(n));
+    new Intl.DateTimeFormat(
+      window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
+      {
+        timeZone: "Asia/Seoul",
+        dateStyle: "medium",
+        timeStyle: "short",
+      },
+    ).format(new Date(n));
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
-  const money = (n) => Number(n).toLocaleString("ko-KR");
+  const money = (n) =>
+    Number(n).toLocaleString(
+      window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
+    );
   const link = (url, label) =>
     `<a class="text-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
   const input = (name, label, type = "text", attrs = "", value = "") =>
@@ -65,7 +75,7 @@
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 401) location.assign("/login");
-      throw new Error(data.error || "요청을 처리하지 못했습니다.");
+      throw new Error(t(data.error) || t("요청을 처리하지 못했습니다."));
     }
     return data;
   }
@@ -124,9 +134,43 @@
     return output + esc(raw.slice(offset));
   }
   const campaignCard = (c) =>
-    `<article class="campaign-card"><div class="card-top">${badge(campaignStatus(c))}<span class="muted">${esc(c.brand_name)}</span></div><a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a><p class="product">${esc(c.product)}</p><p class="muted clamp">${esc(c.description)}</p><div class="campaign-meta"><span>${c.pay_type === "paid" ? `${money(c.compensation)}원` : "제품 제공"}</span><span>모집 ${c.capacity}명</span></div><div class="card-bottom"><span>모집 ${esc(c.recruit_start_date)} ~ ${esc(c.recruit_date)}</span><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a></div>${role !== "influencer" ? `<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}</article>`;
+    html`<article class="campaign-card">
+      <div class="card-top">
+        ${badge(campaignStatus(c))}<span class="muted"
+          >${esc(c.brand_name)}</span
+        >
+      </div>
+      <a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a>
+      <p class="product">${esc(c.product)}</p>
+      <p class="muted clamp">${esc(c.description)}</p>
+      <div class="campaign-meta">
+        <span
+          >${c.pay_type === "paid" ? html`${money(c.compensation)}원` : t("제품 제공")}</span
+        ><span>모집 ${c.capacity}명</span>
+      </div>
+      <div class="card-bottom">
+        <span>모집 ${esc(c.recruit_start_date)} ~ ${esc(c.recruit_date)}</span
+        ><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a>
+      </div>
+      ${role !== "influencer" ? html`<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}
+    </article>`;
   const applicationCard = (a) =>
-    `<article class="campaign-card"><div class="card-top">${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}</div><h3>${esc(a.title)}</h3><p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p><p class="small muted">초안 ${esc(a.draft_date)} · 최종 ${esc(a.final_date)}</p>${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a class="primary link-button" href="/applications/${a.id}">${{ selected: "배송지 등록·확인", shipping: "초안 제출하기", revision_requested: "수정 반영하기", draft_approved: "최종 URL 제출하기" }[a.status] || "진행 상황 보기"} →</a></article>`;
+    html`<article class="campaign-card">
+      <div class="card-top">
+        ${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}
+      </div>
+      <h3>${esc(a.title)}</h3>
+      <p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p>
+      <p class="small muted">
+        ${a.review_required ? html`초안 ${esc(a.draft_date)} · ` : t("초안 검수 없음 · ")}최종 ${esc(a.final_date)}
+      </p>
+      ${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a
+        class="primary link-button"
+        href="/applications/${a.id}"
+        >${{ selected: t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), revision_requested: t("수정 반영하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기")}
+        →</a
+      >
+    </article>`;
   const kpi = (label, value) =>
     `<article class="kpi"><span>${label}</span><strong>${value}</strong></article>`;
   async function dashboard() {
@@ -141,46 +185,87 @@
       ]);
       stats =
         kpi(
-          "참여 중",
+          t("참여 중"),
           applications.filter(
             (a) => !["completed", "rejected", "no_show"].includes(a.status),
           ).length,
         ) +
-        kpi("누적 완료", profile.completed_count) +
-        kpi("현재 티어", `T${profile.tier + 1}`) +
-        kpi("노쇼 이력", profile.no_show_count);
-      main = `${profile.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>' : profile.blocked_until > Date.now() ? `<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.social_url ? '<div class="notice">SNS 정보를 등록하면 브랜드가 선정할 때 참고할 수 있습니다. <a href="/profile">프로필 완성하기 →</a></div>' : ""}<div class="section-heading"><h2>내 캠페인</h2><a href="/applications">전체 보기 →</a></div>${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty("아직 참여 중인 캠페인이 없어요", "관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요.")}<div class="section-heading"><h2>모집 중인 캠페인</h2><a href="/campaigns">전체 보기 →</a></div><section class="campaign-grid">${campaigns
-        .filter((c) => campaignStatus(c) === "recruiting")
-        .slice(0, 4)
-        .map(campaignCard)
-        .join("")}</section>`;
+        kpi(t("누적 완료"), profile.completed_count) +
+        kpi(t("현재 티어"), `T${profile.tier + 1}`) +
+        kpi(t("노쇼 이력"), profile.no_show_count);
+      main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.social_url ? t('<div class="notice">SNS 정보를 등록하면 브랜드가 선정할 때 참고할 수 있습니다. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
+        <div class="section-heading">
+          <h2>내 캠페인</h2>
+          <a href="/applications">전체 보기 →</a>
+        </div>
+        ${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty(t("아직 참여 중인 캠페인이 없어요"), t("관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요."))}
+        <div class="section-heading">
+          <h2>모집 중인 캠페인</h2>
+          <a href="/campaigns">전체 보기 →</a>
+        </div>
+        <section class="campaign-grid">
+          ${campaigns
+            .filter((c) => campaignStatus(c) === "recruiting")
+            .slice(0, 4)
+            .map(campaignCard)
+            .join("")}
+        </section>`;
     } else {
       stats =
-        kpi("전체 캠페인", campaigns.length) +
+        kpi(t("전체 캠페인"), campaigns.length) +
         kpi(
-          "모집 중",
+          t("모집 중"),
           campaigns.filter((c) => campaignStatus(c) === "recruiting").length,
         ) +
         kpi(
-          "지원자",
+          t("지원자"),
           campaigns.reduce((n, c) => n + c.applicant_count, 0),
         ) +
         kpi(
-          "완료 활동",
+          t("완료 활동"),
           campaigns.reduce((n, c) => n + c.completed_count, 0),
         );
-      main = `<div class="section-heading"><h2>${role === "admin" ? "전체 캠페인" : "내 캠페인"}</h2><a href="/campaigns">전체 보기 →</a></div>${campaigns.length ? `<section class="campaign-grid">${campaigns.slice(0, 4).map(campaignCard).join("")}</section>` : empty("첫 캠페인을 준비해 보세요", "제품과 가이드라인을 등록하면 인플루언서 모집을 시작할 수 있습니다.")}`;
+      main = html`<div class="section-heading">
+          <h2>${role === "admin" ? t("전체 캠페인") : t("내 캠페인")}</h2>
+          <a href="/campaigns">전체 보기 →</a>
+        </div>
+        ${campaigns.length ? `<section class="campaign-grid">${campaigns.slice(0, 4).map(campaignCard).join("")}</section>` : empty(t("첫 캠페인을 준비해 보세요"), t("제품과 가이드라인을 등록하면 인플루언서 모집을 시작할 수 있습니다."))}`;
       if (role === "admin") {
         const { alerts } = await api("/admin/alerts");
-        main += `<div class="section-heading"><h2>마감 임박 · 노쇼</h2></div>${alerts.length ? `<section class="panel">${alerts.map((a) => `<div class="alert-row"><div>${badge(a.status)} <strong>${esc(a.name)}</strong><p>${esc(a.title)}</p></div><a class="text-link" href="/applications/${a.id}">내역 보기 →</a></div>`).join("")}</section>` : empty("확인할 알림이 없습니다", "현재 마감 임박 또는 노쇼 참여자가 없습니다.")}`;
+        main += html`<div class="section-heading">
+            <h2>마감 임박 · 노쇼</h2>
+          </div>
+          ${
+            alerts.length
+              ? `<section class="panel">${alerts
+                  .map(
+                    (a) =>
+                      html`<div class="alert-row">
+                        <div>
+                          ${badge(a.status)} <strong>${esc(a.name)}</strong>
+                          <p>${esc(a.title)}</p>
+                        </div>
+                        <a class="text-link" href="/applications/${a.id}"
+                          >내역 보기 →</a
+                        >
+                      </div>`,
+                  )
+                  .join("")}</section>`
+              : empty(
+                  t("확인할 알림이 없습니다"),
+                  t("현재 마감 임박 또는 노쇼 참여자가 없습니다."),
+                )
+          }`;
       }
     }
     root.innerHTML =
       heading(
-        `${esc(me.user.name)}님, 안녕하세요`,
-        "오늘의 협업 현황을 확인하세요.",
+        html`${esc(me.user.name)}님, 안녕하세요`,
+        t("오늘의 협업 현황을 확인하세요."),
         role === "brand"
-          ? '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>'
+          ? t(
+              '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>',
+            )
           : "",
       ) +
       `<section class="kpi-grid">${stats}</section>` +
@@ -190,13 +275,17 @@
     const { campaigns } = await api("/campaigns");
     root.innerHTML =
       heading(
-        role === "influencer" ? "나에게 맞는 캠페인" : "캠페인 관리",
-        "브랜드와 크리에이터의 새로운 협업을 시작하세요.",
+        role === "influencer" ? t("나에게 맞는 캠페인") : t("캠페인 관리"),
+        t("브랜드와 크리에이터의 새로운 협업을 시작하세요."),
         role === "brand"
-          ? '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>'
+          ? t(
+              '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>',
+            )
           : "",
       ) +
-      `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`;
+      t(
+        `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`,
+      );
     const render = () => {
       const search = document
           .querySelector("#campaign-search")
@@ -210,8 +299,8 @@
       document.querySelector("#campaign-results").innerHTML = filtered.length
         ? filtered.map(campaignCard).join("")
         : empty(
-            "캠페인이 없습니다",
-            "검색 조건을 바꾸거나 새로운 캠페인을 등록해 주세요.",
+            t("캠페인이 없습니다"),
+            t("검색 조건을 바꾸거나 새로운 캠페인을 등록해 주세요."),
           );
     };
     document.querySelector("#campaign-search").oninput = render;
@@ -221,10 +310,49 @@
   function campaignForm() {
     root.innerHTML =
       heading(
-        "새 캠페인 만들기",
-        "모집부터 최종 업로드까지의 기준을 설정해 주세요.",
+        t("새 캠페인 만들기"),
+        t("모집부터 최종 업로드까지의 기준을 설정해 주세요."),
       ) +
-      `<form class="panel editor" data-task="campaign"><h2>제품과 협업 정보</h2>${input("title", "캠페인명", "text", 'required minlength="2" maxlength="100"')}${input("product", "제품명", "text", 'required minlength="2" maxlength="200"')}${input("product_url", "제품·브랜드 링크 (선택)", "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", "제품 소개", 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", "콘텐츠 가이드라인", 'required minlength="10" maxlength="6000" rows="5"')}<div class="form-grid">${input("capacity", "모집 인원", "number", 'required min="1" max="500"', "10")}<label>보상 유형<select name="pay_type"><option value="gifted">무가 · 제품 제공</option><option value="paid">유가 · 제품 + 활동비</option></select></label>${input("compensation", "활동비 (원 · 무가일 때 0)", "number", 'required min="0" max="100000000"', "0")}</div><h2>일정</h2><p class="note left">모든 마감은 해당 날짜 종료 시점(한국 시간 자정) 기준입니다.</p><div class="form-grid">${input("recruit_start_date", "모집 시작일", "date", "required", today())}${input("recruit_date", "모집 마감일", "date", "required")}${input("draft_date", "초안 제출 마감일", "date", "required")}${input("final_date", "최종 업로드 마감일", "date", "required")}</div>${submit("캠페인 등록")}</form>`;
+      html`<form class="panel editor" data-task="campaign">
+        <h2>제품과 협업 정보</h2>
+        ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"')}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"')}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"')}
+        <div class="form-grid">
+          ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', "10")}<label
+            >보상 유형<select name="pay_type">
+              <option value="gifted">무가 · 제품 제공</option>
+              <option value="paid">유가 · 제품 + 활동비</option>
+            </select></label
+          >${input("compensation", t("활동비 (원 · 무가일 때 0)"), "number", 'required min="0" max="100000000"', "0")}
+        </div>
+        <label class="check"
+          ><input type="checkbox" name="review_required" checked /><span
+            >초안 검수 필요 (해제하면 최종 SNS 링크만 제출)</span
+          ></label
+        >
+        <h2>일정</h2>
+        <p class="note left">
+          모든 마감은 해당 날짜 종료 시점(한국 시간 자정) 기준입니다.
+        </p>
+        <div class="form-grid">
+          ${input("recruit_start_date", t("모집 시작일"), "date", "required", today())}${input("recruit_date", t("모집 마감일"), "date", "required")}${input("draft_date", t("초안 제출 마감일"), "date", "required")}${input("final_date", t("최종 업로드 마감일"), "date", "required")}
+        </div>
+        ${submit(t("캠페인 등록"))}
+      </form>`;
+  }
+  document.addEventListener("change", (event) => {
+    if (event.target.name === "review_required") syncReviewFields();
+  });
+  function syncReviewFields() {
+    document
+      .querySelectorAll('input[name="review_required"]')
+      .forEach((toggle) => {
+        const draft = toggle.form.querySelector('[name="draft_date"]');
+        if (draft) {
+          draft.disabled = !toggle.checked;
+          draft.required = toggle.checked;
+          draft.closest("label").hidden = !toggle.checked;
+        }
+      });
   }
   async function campaignDetail(id) {
     const { campaign: c, applications } = await api(`/campaigns/${id}`);
@@ -234,22 +362,117 @@
         `${esc(c.brand_name)} · ${esc(c.product)}`,
         badge(campaignStatus(c)),
       ) +
-      `<section class="kpi-grid">${kpi("모집 인원", c.capacity)}${kpi("지원", applications.length)}${kpi("보상", c.pay_type === "paid" ? money(c.compensation) + "원" : "제품 제공")}${kpi("모집 마감", esc(c.recruit_date))}</section><section class="panel"><h2>제품 소개</h2><p class="preline">${linkedText(c.description)}</p>${c.product_url ? `<p>${link(c.product_url, "제품·브랜드 사이트 보기")}</p>` : ""}<h3>콘텐츠 가이드라인</h3><p class="preline">${linkedText(c.guidelines)}</p><div class="deadline-strip"><span>모집 시작 <strong>${esc(c.recruit_start_date)}</strong></span><span>모집 마감 <strong>${esc(c.recruit_date)}</strong></span><span>초안 <strong>${esc(c.draft_date)}</strong></span><span>최종 <strong>${esc(c.final_date)}</strong></span><span>한국 시간 · 당일 자정 마감</span></div></section>`;
+      html`<section class="kpi-grid">
+          ${kpi(t("모집 인원"), c.capacity)}${kpi(t("지원"), applications.length)}${kpi(t("보상"), c.pay_type === "paid" ? money(c.compensation) + t("원") : t("제품 제공"))}${kpi(t("모집 마감"), esc(c.recruit_date))}
+        </section>
+        <section class="panel">
+          <h2>제품 소개</h2>
+          <p class="preline">${linkedText(c.description)}</p>
+          ${c.product_url ? `<p>${link(c.product_url, t("제품·브랜드 사이트 보기"))}</p>` : ""}
+          <h3>콘텐츠 가이드라인</h3>
+          <p class="preline">${linkedText(c.guidelines)}</p>
+          <div class="deadline-strip">
+            <span>모집 시작 <strong>${esc(c.recruit_start_date)}</strong></span
+            ><span>모집 마감 <strong>${esc(c.recruit_date)}</strong></span
+            >${c.review_required ? html`<span>초안 <strong>${esc(c.draft_date)}</strong></span>` : t("<span>초안 검수 없음</span>")}<span>최종 <strong>${esc(c.final_date)}</strong></span
+            ><span>한국 시간 · 당일 자정 마감</span>
+          </div>
+        </section>`;
     if (role === "influencer") {
       const { profile } = await api("/profile");
       root.innerHTML += applications.length
-        ? `<section class="panel"><h2>내 지원 상태</h2>${badge(applications[0].status)} <a class="text-link" href="/applications/${applications[0].id}">참여 내역 보기 →</a></section>`
+        ? html`<section class="panel">
+            <h2>내 지원 상태</h2>
+            ${badge(applications[0].status)}
+            <a class="text-link" href="/applications/${applications[0].id}"
+              >참여 내역 보기 →</a
+            >
+          </section>`
         : c.status !== "recruiting"
-          ? '<div class="notice">모집이 마감되었습니다.</div>'
+          ? t('<div class="notice">모집이 마감되었습니다.</div>')
           : campaignStatus(c) === "scheduled"
-            ? `<div class="notice">${esc(c.recruit_start_date)}부터 지원할 수 있습니다.</div>`
+            ? html`<div class="notice">
+                ${esc(c.recruit_start_date)}부터 지원할 수 있습니다.
+              </div>`
             : profile.blacklisted || profile.blocked_until > Date.now()
-              ? '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>'
-              : `<form class="panel" data-task="apply" data-id="${id}"><h2>이 캠페인에 지원하기</h2><p class="muted">지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤 해당 캠페인에 등록합니다.</p><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에 동의합니다.</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을 공유 링크로 제공하는 데 동의합니다.</span></label>${submit("지원하기")}</form>`;
+              ? t(
+                  '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>',
+                )
+              : html`<form class="panel" data-task="apply" data-id="${id}">
+                  <h2>이 캠페인에 지원하기</h2>
+                  <p class="muted">
+                    지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤
+                    해당 캠페인에 등록합니다.
+                  </p>
+                  <label class="check"
+                    ><input
+                      type="checkbox"
+                      name="secondary_use_consent"
+                      required
+                    /><span
+                      >[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에
+                      동의합니다.</span
+                    ></label
+                  ><label class="check"
+                    ><input
+                      type="checkbox"
+                      name="original_delivery_consent"
+                      required
+                    /><span
+                      >[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을 공유
+                      링크로 제공하는 데 동의합니다.</span
+                    ></label
+                  >${submit(t("지원하기"))}
+                </form>`;
     } else {
       if (c.status !== "completed") {
         const locked = applications.length > 0 || c.status !== "recruiting";
-        root.innerHTML += `<section class="panel"><details><summary>캠페인 편집</summary><form class="editor" data-task="campaign-details" data-id="${id}">${input("title", "캠페인명", "text", 'required minlength="2" maxlength="100"', c.title)}${input("product", "제품명", "text", 'required minlength="2" maxlength="200"', c.product)}${input("product_url", "제품·브랜드 링크 (선택)", "url", 'maxlength="2000"', c.product_url)}${textarea("description", "제품 소개", 'required minlength="10" maxlength="4000" rows="4"', c.description)}${textarea("guidelines", "콘텐츠 가이드라인", 'required minlength="10" maxlength="6000" rows="5"', c.guidelines)}<div class="form-grid">${input("capacity", "모집 인원", "number", 'required min="1" max="500"', c.capacity)}<label>보상 유형<select name="pay_type" ${locked ? "disabled" : ""}><option value="gifted" ${c.pay_type === "gifted" ? "selected" : ""}>무가 · 제품 제공</option><option value="paid" ${c.pay_type === "paid" ? "selected" : ""}>유가 · 제품 + 활동비</option></select></label>${input("compensation", "활동비 (원 · 무가일 때 0)", "number", 'required min="0" max="100000000"' + (locked ? " readonly" : ""), c.compensation)}</div><h3>일정</h3><div class="form-grid">${input("recruit_start_date", "모집 시작일", "date", locked ? "required readonly" : "required", c.recruit_start_date)}${input("recruit_date", "모집 마감일", "date", locked ? "required readonly" : "required", c.recruit_date)}${input("draft_date", "초안 제출 마감일", "date", locked ? "required readonly" : "required", c.draft_date)}${input("final_date", "최종 업로드 마감일", "date", locked ? "required readonly" : "required", c.final_date)}</div>${locked ? '<p class="note left">지원자가 있거나 모집이 마감되면 일정과 보상 조건은 유지됩니다. 캠페인명·제품·소개·링크·가이드라인·모집 인원은 수정할 수 있습니다.</p>' : ""}<p class="note left">모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시 진행 중인 지원자에게 알림이 전달됩니다.</p>${submit("캠페인 수정 저장")}</form></details></section>`;
+        root.innerHTML += html`<section class="panel">
+          <details>
+            <summary>캠페인 편집</summary>
+            <form class="editor" data-task="campaign-details" data-id="${id}">
+              ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', c.title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', c.product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', c.description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"', c.guidelines)}
+              <div class="form-grid">
+                ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', c.capacity)}<label
+                  >보상 유형<select name="pay_type" ${locked ? "disabled" : ""}>
+                    <option
+                      value="gifted"
+                      ${c.pay_type === "gifted" ? "selected" : ""}
+                    >
+                      무가 · 제품 제공
+                    </option>
+                    <option
+                      value="paid"
+                      ${c.pay_type === "paid" ? "selected" : ""}
+                    >
+                      유가 · 제품 + 활동비
+                    </option>
+                  </select></label
+                >${input("compensation", t("활동비 (원 · 무가일 때 0)"), "number", 'required min="0" max="100000000"' + (locked ? " readonly" : ""), c.compensation)}
+              </div>
+              <label class="check"
+                ><input
+                  type="checkbox"
+                  name="review_required"
+                  ${c.review_required ? "checked" : ""}
+                  ${locked ? "disabled" : ""}
+                /><span
+                  >초안 검수 필요 (해제하면 최종 SNS 링크만 제출)</span
+                ></label
+              >
+              <h3>일정</h3>
+              <div class="form-grid">
+                ${input("recruit_start_date", t("모집 시작일"), "date", locked ? "required readonly" : "required", c.recruit_start_date)}${input("recruit_date", t("모집 마감일"), "date", locked ? "required readonly" : "required", c.recruit_date)}${input("draft_date", t("초안 제출 마감일"), "date", locked ? "required readonly" : "required", c.draft_date)}${input("final_date", t("최종 업로드 마감일"), "date", locked ? "required readonly" : "required", c.final_date)}
+              </div>
+              ${locked ? t('<p class="note left">지원자가 있거나 모집이 마감되면 일정과 보상 조건은 유지됩니다. 캠페인명·제품·소개·링크·가이드라인·모집 인원은 수정할 수 있습니다.</p>') : ""}
+              <p class="note left">
+                모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시
+                진행 중인 지원자에게 알림이 전달됩니다.
+              </p>
+              ${submit(t("캠페인 수정 저장"))}
+            </form>
+          </details>
+        </section>`;
       }
       const selected = applications.filter(
           (a) => !["applied", "rejected"].includes(a.status),
@@ -257,7 +480,72 @@
         review = applications.filter((a) =>
           ["draft_submitted", "final_submitted"].includes(a.status),
         ).length;
-      root.innerHTML += `<div class="section-heading"><h2>참여자 관리</h2><span class="muted">선정 ${selected}/${c.capacity} · 검수 대기 ${review}</span></div><div class="tabs" role="group" aria-label="참여자 단계"><button data-tab="all" class="active">전체</button><button data-tab="applicants">지원자</button><button data-tab="shipping">배송</button><button data-tab="review">검수</button><button data-tab="completed">완료</button><button data-tab="no_show">노쇼</button></div><div id="applicants-table" class="panel table-wrap"></div><section class="panel"><h3>배송 엑셀</h3><p class="muted">배송지가 등록된 선정·배송 중 참여자의 정보를 내려받고 carrier, tracking_number 열을 입력해 업로드하세요. 송장번호 셀은 텍스트 형식을 유지해 주세요.</p><div class="button-row"><a class="secondary" href="/api/work/campaigns/${id}/shipments.xlsx">배송지 XLSX 다운로드</a><label class="secondary upload-label">송장 XLSX 업로드<input id="shipping-file" type="file" accept=".xlsx" data-id="${id}"></label></div><p class="form-error" id="import-error" role="alert" hidden></p></section><section class="panel"><h3>캠페인 운영</h3><p><a class="text-link" href="/api/work/campaigns/${id}/results.xlsx">캠페인 결과 XLSX 다운로드 →</a></p>${c.status === "recruiting" ? `<button class="secondary" data-campaign-action="close" data-id="${id}">모집 마감하기</button>` : c.status === "closed" ? `<button class="secondary" data-campaign-action="complete" data-id="${id}">캠페인 종료하기</button><p class="note left">진행 중인 활동과 미처리 지원자가 없어야 종료할 수 있습니다.</p>` : '<p class="muted">종료된 캠페인입니다.</p>'}</section>`;
+      root.innerHTML += html`<div class="section-heading">
+          <h2>참여자 관리</h2>
+          <span class="muted"
+            >선정 ${selected}/${c.capacity} · 검수 대기 ${review}</span
+          >
+        </div>
+        <div class="tabs" role="group" aria-label="참여자 단계">
+          <button data-tab="all" class="active">전체</button
+          ><button data-tab="applicants">지원자</button
+          ><button data-tab="shipping">배송</button
+          ><button data-tab="review">검수</button
+          ><button data-tab="completed">완료</button
+          ><button data-tab="no_show">노쇼</button>
+        </div>
+        <div id="applicants-table" class="panel table-wrap"></div>
+        <section class="panel">
+          <h3>배송 엑셀</h3>
+          <p class="muted">
+            배송지가 등록된 선정·배송 중 참여자의 정보를 내려받고 carrier,
+            tracking_number 열을 입력해 업로드하세요. 송장번호 셀은 텍스트
+            형식을 유지해 주세요.
+          </p>
+          <div class="button-row">
+            <a class="secondary" href="/api/work/campaigns/${id}/shipments.xlsx"
+              >배송지 XLSX 다운로드</a
+            ><label class="secondary upload-label"
+              >송장 XLSX 업로드<input
+                id="shipping-file"
+                type="file"
+                accept=".xlsx"
+                data-id="${id}"
+            /></label>
+          </div>
+          <p class="form-error" id="import-error" role="alert" hidden></p>
+        </section>
+        <section class="panel">
+          <h3>캠페인 운영</h3>
+          <p>
+            <a class="text-link" href="/api/work/campaigns/${id}/results.xlsx"
+              >캠페인 결과 XLSX 다운로드 →</a
+            >
+          </p>
+          ${
+            c.status === "recruiting"
+              ? html`<button
+                  class="secondary"
+                  data-campaign-action="close"
+                  data-id="${id}"
+                >
+                  모집 마감하기
+                </button>`
+              : c.status === "closed"
+                ? html`<button
+                      class="secondary"
+                      data-campaign-action="complete"
+                      data-id="${id}"
+                    >
+                      캠페인 종료하기
+                    </button>
+                    <p class="note left">
+                      진행 중인 활동과 미처리 지원자가 없어야 종료할 수
+                      있습니다.
+                    </p>`
+                : t('<p class="muted">종료된 캠페인입니다.</p>')
+          }
+        </section>`;
       function table(tab) {
         let rows = applications.filter(
           (a) =>
@@ -277,10 +565,39 @@
             (tab === "no_show" && a.status === "no_show"),
         );
         document.querySelector("#applicants-table").innerHTML = rows.length
-          ? `<table><thead><tr><th>인플루언서</th><th>팔로워 · 티어</th><th>상태</th><th>활동</th></tr></thead><tbody>${rows.map((a) => `<tr><td><strong>${esc(a.influencer_name)}</strong><small>${esc(a.influencer_email)}</small></td><td>${money(a.followers)} · T${a.tier + 1}</td><td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td><td><a class="text-link" href="/applications/${a.id}">검토·관리 →</a></td></tr>`).join("")}</tbody></table>`
+          ? html`<table>
+              <thead>
+                <tr>
+                  <th>인플루언서</th>
+                  <th>팔로워 · 티어</th>
+                  <th>상태</th>
+                  <th>활동</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows
+                  .map(
+                    (a) =>
+                      html`<tr>
+                        <td>
+                          <strong>${esc(a.influencer_name)}</strong
+                          ><small>${esc(a.influencer_email)}</small>
+                        </td>
+                        <td>${money(a.followers)} · T${a.tier + 1}</td>
+                        <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
+                        <td>
+                          <a class="text-link" href="/applications/${a.id}"
+                            >검토·관리 →</a
+                          >
+                        </td>
+                      </tr>`,
+                  )
+                  .join("")}
+              </tbody>
+            </table>`
           : empty(
-              "해당 단계의 참여자가 없습니다",
-              "다른 탭에서 진행 현황을 확인해 주세요.",
+              t("해당 단계의 참여자가 없습니다"),
+              t("다른 탭에서 진행 현황을 확인해 주세요."),
             );
       }
       document.querySelectorAll("[data-tab]").forEach(
@@ -298,12 +615,15 @@
   async function myApplications() {
     const { applications } = await api("/applications");
     root.innerHTML =
-      heading("내 캠페인", "현재 단계의 작업과 브랜드 피드백을 확인하세요.") +
+      heading(
+        t("내 캠페인"),
+        t("현재 단계의 작업과 브랜드 피드백을 확인하세요."),
+      ) +
       (applications.length
         ? `<section class="campaign-grid">${applications.map(applicationCard).join("")}</section>`
         : empty(
-            "참여 중인 캠페인이 없습니다",
-            "캠페인 찾기에서 첫 협업을 시작해 주세요.",
+            t("참여 중인 캠페인이 없습니다"),
+            t("캠페인 찾기에서 첫 협업을 시작해 주세요."),
           ));
   }
   function actionForm(a, action, fields, label, confirm = "") {
@@ -320,118 +640,135 @@
           "address",
           input(
             "recipient_name",
-            "수령인",
+            t("수령인"),
             "text",
             'required minlength="2" maxlength="60"',
             a.recipient_name || a.influencer_name,
           ) +
             input(
               "phone",
-              "연락처",
+              t("연락처"),
               "tel",
               'required minlength="8" maxlength="30"',
               a.phone,
             ) +
             input(
               "postal_code",
-              "우편번호",
+              t("우편번호"),
               "text",
               'required minlength="3" maxlength="12"',
               a.postal_code,
             ) +
             input(
               "address",
-              "주소",
+              t("주소"),
               "text",
               'required minlength="5" maxlength="200"',
               a.address,
             ) +
             input(
               "address_detail",
-              "상세주소 (선택)",
+              t("상세주소 (선택)"),
               "text",
               'maxlength="150"',
               a.address_detail,
             ),
-          "배송지 저장",
+          t("배송지 저장"),
         );
 
-      if (["shipping", "revision_requested"].includes(a.status))
+      if (
+        a.review_required &&
+        ["shipping", "revision_requested"].includes(a.status)
+      )
         actions = actionForm(
           a,
           "draft",
           input(
             "url",
-            "Google Drive 원본 파일 링크",
+            t("검수용 초안 링크"),
             "url",
-            'required placeholder="https://drive.google.com/file/d/…/view"',
+            'required placeholder="https://example.com/video"',
           ) +
-            '<p class="note left">원본을 Drive에 올린 뒤 ‘링크가 있는 모든 사용자 · 뷰어’로 공유해 주세요. 시스템이 공개 권한을 자동 판별하지 않으므로 브랜드가 링크를 열어 확인합니다.</p><label class="check"><input type="checkbox" name="public_confirmed" required> 링크 공개 보기 권한을 확인했습니다.</label>',
+            t(
+              '<p class="note left">Drive, Dropbox, YouTube 등 웹 링크를 입력할 수 있습니다. 브랜드가 열어볼 수 있도록 보기 권한을 허용해 주세요.</p><label class="check"><input type="checkbox" name="public_confirmed" required> 링크 공개 보기 권한을 확인했습니다.</label>',
+            ),
           a.status === "revision_requested"
-            ? "수정 초안 제출"
-            : "초안 링크 제출",
+            ? t("수정 초안 제출")
+            : t("초안 링크 제출"),
         );
-      if (a.status === "draft_approved")
+      if (
+        a.status === "draft_approved" ||
+        (!a.review_required && a.status === "shipping")
+      )
         actions = actionForm(
           a,
           "final",
           input(
             "url",
-            "최종 SNS 게시물 URL",
+            t("최종 SNS 게시물 URL"),
             "url",
             'required placeholder="https://www.instagram.com/reel/…"',
           ),
-          "최종 URL 제출",
-          "승인된 콘텐츠의 SNS 게시물 URL을 최종 제출할까요?",
+          t("최종 URL 제출"),
+          t("콘텐츠의 SNS 게시물 URL을 최종 제출할까요?"),
         );
     } else {
       if (a.status === "applied")
-        actions = `<div class="review-actions">${actionForm(a, "select", "", "참여자로 선정", "이 인플루언서를 참여자로 선정할까요?")}${actionForm(a, "reject", textarea("note", "반려 사유 (선택)", 'maxlength="1000"'), "지원 반려", "이 지원을 반려할까요?")}</div>`;
+        actions = `<div class="review-actions">${actionForm(a, "select", "", t("참여자로 선정"), t("이 인플루언서를 참여자로 선정할까요?"))}${actionForm(a, "reject", textarea("note", t("반려 사유 (선택)"), 'maxlength="1000"'), t("지원 반려"), t("이 지원을 반려할까요?"))}</div>`;
       if (["selected", "shipping"].includes(a.status))
         actions = !a.address
-          ? '<p class="notice">선정자가 배송지를 등록하면 배송정보를 입력할 수 있습니다.</p>'
+          ? t(
+              '<p class="notice">선정자가 배송지를 등록하면 배송정보를 입력할 수 있습니다.</p>',
+            )
           : actionForm(
               a,
               "ship",
               input(
                 "carrier",
-                "택배사",
+                t("택배사"),
                 "text",
                 'required minlength="2" maxlength="40"',
                 a.carrier,
               ) +
                 input(
                   "tracking_number",
-                  "송장번호",
+                  t("송장번호"),
                   "text",
                   'required minlength="5" maxlength="40"',
                   a.tracking_number,
                 ),
-              "배송정보 등록",
+              t("배송정보 등록"),
             );
       if (a.status === "draft_submitted")
-        actions = `<div class="review-actions">${actionForm(a, "approve", "", "초안 승인", "초안을 승인하고 SNS 업로드를 요청할까요?")}${actionForm(a, "revision", textarea("feedback", "수정 요청 사유", 'required minlength="5" maxlength="3000" rows="4"') + input("revision_date", "수정 초안 제출 마감일", "date", "required"), "수정 요청")}</div>`;
+        actions = `<div class="review-actions">${actionForm(a, "approve", "", t("초안 승인"), t("초안을 승인하고 SNS 업로드를 요청할까요?"))}${actionForm(a, "revision", textarea("feedback", t("수정 요청 사유"), 'required minlength="5" maxlength="3000" rows="4"') + input("revision_date", t("수정 초안 제출 마감일"), "date", "required"), t("수정 요청"))}</div>`;
       if (a.status === "final_submitted")
         actions = actionForm(
           a,
           "complete",
           input(
             "views",
-            "직접 확인한 게시물 조회수",
+            t("직접 확인한 게시물 조회수"),
             "number",
             'required min="0" max="1000000000"',
             "0",
           ) +
-            '<label class="check"><input type="checkbox" name="best"> 우수 활동자 · Best 태그 부여</label>',
-          "활동 완료 처리",
-          "이 활동을 완료하고 참여 횟수·티어에 반영할까요? 완료 처리는 한 번만 가능합니다.",
+            t(
+              '<label class="check"><input type="checkbox" name="best"> 우수 활동자 · Best 태그 부여</label>',
+            ),
+          t("활동 완료 처리"),
+          t(
+            "이 활동을 완료하고 참여 횟수·티어에 반영할까요? 완료 처리는 한 번만 가능합니다.",
+          ),
         );
       if (
         ["draft_submitted", "draft_approved", "final_submitted"].includes(
           a.status,
         )
       )
-        actions += `<details><summary>최종 마감일 연장</summary>${actionForm(a, "extend", input("final_date", "새 최종 마감일 (캠페인 전체 적용)", "date", "required"), "마감 연장", "이 캠페인 전체 참여자의 최종 마감일을 연장할까요? 이미 발생한 제재는 취소되지 않습니다.")}</details>`;
+        actions += html`<details>
+          <summary>최종 마감일 연장</summary>
+          ${actionForm(a, "extend", input("final_date", t("새 최종 마감일 (캠페인 전체 적용)"), "date", "required"), t("마감 연장"), t("이 캠페인 전체 참여자의 최종 마감일을 연장할까요? 이미 발생한 제재는 취소되지 않습니다."))}
+        </details>`;
     }
     const effectiveDraft =
       a.status === "revision_requested" && a.revision_due
@@ -443,45 +780,137 @@
         `${esc(a.influencer_name)} · ${esc(a.influencer_email)}`,
         badge(a.status),
       ) +
-      `<div class="deadline-strip"><span>초안 마감 <strong>${effectiveDraft}</strong></span><span>최종 마감 <strong>${esc(a.final_date)}</strong></span></div>${a.status === "no_show" ? '<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 티어 페널티는 내 프로필에서 확인할 수 있습니다.</div>' : ""}<div class="detail-grid"><div><section class="panel"><h2>제출 콘텐츠</h2>${a.social_url ? `<p>${link(a.social_url, "인플루언서 SNS 프로필")} · ${money(a.followers)} 팔로워 · T${a.tier + 1}</p>` : ""}${a.draft_url ? `<p>초안 · ${link(a.draft_url, "Google Drive에서 보기")}</p>` : '<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>'}${a.final_url ? `<p>최종 · ${link(a.final_url, "SNS 게시물 보기")}</p>` : ""}${a.best ? '<span class="best">★ Best 활동</span>' : ""}${a.status === "completed" ? `<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}</section><section class="panel"><h3>배송 정보</h3><dl class="info-list"><dt>수령인</dt><dd>${esc(a.recipient_name) || esc(a.influencer_name)}</dd><dt>택배사</dt><dd>${esc(a.carrier) || "등록 전"}</dd><dt>송장번호</dt><dd>${esc(a.tracking_number) || "등록 전"}</dd><dt>배송지</dt><dd>${a.address ? `${esc(a.postal_code)} ${esc(a.address)} ${esc(a.address_detail)}` : "선정 후 등록 대기"}</dd><dt>연락처</dt><dd>${esc(a.phone)}</dd></dl><p class="note left">송장번호로 해당 택배사의 배송조회 페이지에서 확인해 주세요. 실시간 배송 API는 아직 연결되지 않았습니다.</p></section><section class="panel"><h3>동의 기록</h3><p class="small muted">2차 활용: ${a.secondary_use_consent ? "동의 완료" : "미동의"}<br>고화질 원본 제공: ${a.original_delivery_consent ? "동의 완료" : "미동의"}<br>${datetime(a.consent_at)} · ${esc(a.consent_version)}</p></section></div><div><section class="panel"><h2>현재 단계의 작업</h2>${influencer ? '<p class="notice">선정 후 배송지 등록 → 배송 시작 후 검수용 Google Drive 링크 제출 → 초안 승인 후 최종 SNS 게시물 링크 제출 순서로 진행합니다. 각 단계가 되면 아래에 제출 버튼이 표시됩니다.</p>' : ""}${a.feedback ? `<div class="feedback-box"><strong>브랜드 수정 요청</strong><p class="preline">${esc(a.feedback)}</p></div>` : ""}${actions || '<p class="muted">현재 단계에서는 진행 상황을 확인해 주세요. 상태가 변경되면 알림으로 안내합니다.</p>'}</section><section class="panel"><h2>협업 타임라인</h2><ol class="timeline">${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(e.note)}</p>${e.link ? link(e.link, "당시 제출 링크") : ""}<small>${esc(e.actor_name || "시스템")} · ${datetime(e.created_at)}</small></li>`).join("")}</ol></section></div></div>`;
+      html`<div class="deadline-strip">
+          ${a.review_required ? html`<span>초안 마감 <strong>${effectiveDraft}</strong></span>` : t("<span>초안 검수 없음</span>")}<span
+            >최종 마감 <strong>${esc(a.final_date)}</strong></span
+          >
+        </div>
+        ${a.status === "no_show" ? t('<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 티어 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
+        <div class="detail-grid">
+          <div>
+            <section class="panel">
+              <h2>제출 콘텐츠</h2>
+              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · T${a.tier + 1}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+            </section>
+            <section class="panel">
+              <h3>배송 정보</h3>
+              <dl class="info-list">
+                <dt>수령인</dt>
+                <dd>${esc(a.recipient_name) || esc(a.influencer_name)}</dd>
+                <dt>택배사</dt>
+                <dd>${esc(a.carrier) || t("등록 전")}</dd>
+                <dt>송장번호</dt>
+                <dd>${esc(a.tracking_number) || t("등록 전")}</dd>
+                <dt>배송지</dt>
+                <dd>
+                  ${a.address ? `${esc(a.postal_code)} ${esc(a.address)} ${esc(a.address_detail)}` : t("선정 후 등록 대기")}
+                </dd>
+                <dt>연락처</dt>
+                <dd>${esc(a.phone)}</dd>
+              </dl>
+              <p class="note left">
+                송장번호로 해당 택배사의 배송조회 페이지에서 확인해 주세요.
+                실시간 배송 API는 아직 연결되지 않았습니다.
+              </p>
+            </section>
+            <section class="panel">
+              <h3>동의 기록</h3>
+              <p class="small muted">
+                2차 활용:
+                ${a.secondary_use_consent ? t("동의 완료") : t("미동의")}<br />고화질
+                원본 제공:
+                ${a.original_delivery_consent ? t("동의 완료") : t("미동의")}<br />${datetime(a.consent_at)}
+                · ${esc(a.consent_version)}
+              </p>
+            </section>
+          </div>
+          <div>
+            <section class="panel">
+              <h2>현재 단계의 작업</h2>
+              ${influencer ? (a.review_required ? t('<p class="notice">선정 후 배송지 등록 → 배송 시작 후 검수용 초안 링크 제출 → 초안 승인 후 최종 SNS 게시물 링크 제출 순서로 진행합니다. 각 단계가 되면 아래에 제출 버튼이 표시됩니다.</p>') : t('<p class="notice">이 캠페인은 초안 검수가 없습니다. 선정 후 배송지를 등록하고, 배송 시작 후 콘텐츠를 게시한 뒤 최종 SNS 링크를 제출해 주세요.</p>')) : ""}${
+                a.feedback
+                  ? html`<div class="feedback-box">
+                      <strong>브랜드 수정 요청</strong>
+                      <p class="preline">${esc(a.feedback)}</p>
+                    </div>`
+                  : ""
+              }${actions || t('<p class="muted">현재 단계에서는 진행 상황을 확인해 주세요. 상태가 변경되면 알림으로 안내합니다.</p>')}
+            </section>
+            <section class="panel">
+              <h2>협업 타임라인</h2>
+              <ol class="timeline">
+                ${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(["revision_requested", "rejected"].includes(e.status) ? e.note : window.ScentI18n.message(e.note))}</p>${e.link ? link(e.link, t("당시 제출 링크")) : ""}<small>${esc(e.actor_name || t("시스템"))} · ${datetime(e.created_at)}</small></li>`).join("")}
+              </ol>
+            </section>
+          </div>
+        </div>`;
   }
   async function profile() {
     const { profile: p } = await api("/profile");
     root.innerHTML =
       heading(
-        "내 프로필",
-        "브랜드에 전달할 연락처와 SNS 정보를 입력해 주세요.",
+        t("내 프로필"),
+        t("브랜드에 전달할 연락처와 SNS 정보를 입력해 주세요."),
       ) +
-      `<section class="kpi-grid">${kpi("현재 티어", `T${p.tier + 1}`)}${kpi("완료 캠페인", p.completed_count)}${kpi("누적 조회수", money(p.total_views))}${kpi("노쇼", p.no_show_count)}</section>${p.blacklisted ? '<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>' : p.blocked_until > Date.now() ? `<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}<form class="panel editor" data-task="profile">${input("phone", "연락처", "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", "대표 SNS 프로필 링크", "url", 'required maxlength="500"', p.social_url)}${input("followers", "현재 팔로워 수", "number", 'required min="0" max="100000000"', p.followers)}<p class="note left">배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지 해당 캠페인의 배송지를 수정할 수 있습니다.</p>${submit("프로필 저장")}</form>`;
+      html`<section class="kpi-grid">
+          ${kpi(t("현재 티어"), `T${p.tier + 1}`)}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
+        </section>
+        ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
+        <form class="panel editor" data-task="profile">
+          ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", t("대표 SNS 프로필 링크"), "url", 'required maxlength="500"', p.social_url)}${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', p.followers)}
+          <p class="note left">
+            배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지
+            해당 캠페인의 배송지를 수정할 수 있습니다.
+          </p>
+          ${submit(t("프로필 저장"))}
+        </form>`;
   }
   async function notifications() {
     const { notifications } = await api("/notifications");
     root.innerHTML =
       heading(
-        "알림",
-        "선정·검수·마감 안내를 한곳에서 확인하세요.",
-        '<button class="secondary" data-read-notifications>모두 읽음</button>',
+        t("알림"),
+        t("선정·검수·마감 안내를 한곳에서 확인하세요."),
+        t(
+          '<button class="secondary" data-read-notifications>모두 읽음</button>',
+        ),
       ) +
       (notifications.length
-        ? `<section class="panel">${notifications.map((n) => `<a class="notification-row ${n.read_at ? "" : "unread"}" href="${esc(n.path)}"><span class="notification-dot"></span><div><p>${esc(n.message)}</p><small>${datetime(n.created_at)}</small></div><span>→</span></a>`).join("")}</section>`
+        ? `<section class="panel">${notifications.map((n) => `<a class="notification-row ${n.read_at ? "" : "unread"}" href="${esc(n.path)}"><span class="notification-dot"></span><div><p>${esc(window.ScentI18n.message(n.message))}</p><small>${datetime(n.created_at)}</small></div><span>→</span></a>`).join("")}</section>`
         : empty(
-            "새로운 알림이 없습니다",
-            "캠페인 상태가 바뀌면 이곳에서 확인할 수 있습니다.",
+            t("새로운 알림이 없습니다"),
+            t("캠페인 상태가 바뀌면 이곳에서 확인할 수 있습니다."),
           )) +
-      '<p class="note left">현재 알림은 시스템 내부에서 제공됩니다. 이메일·SMS 발송은 외부 서비스 연결 후 활성화됩니다.</p>';
+      t(
+        '<p class="note left">현재 알림은 시스템 내부에서 제공됩니다. 이메일·SMS 발송은 외부 서비스 연결 후 활성화됩니다.</p>',
+      );
   }
   async function users() {
     const { users } = await api("/admin/users");
     root.innerHTML =
-      heading("계정·티어 관리", "참여 이력과 노쇼 제재를 확인하세요.") +
-      '<div class="toolbar"><input id="user-search" aria-label="계정 검색" placeholder="이름·이메일 검색"></div><div class="panel table-wrap" id="user-results"></div>';
+      heading(t("계정·티어 관리"), t("참여 이력과 노쇼 제재를 확인하세요.")) +
+      t(
+        '<div class="toolbar"><input id="user-search" aria-label="계정 검색" placeholder="이름·이메일 검색"></div><div class="panel table-wrap" id="user-results"></div>',
+      );
     const render = () => {
       const q = document.querySelector("#user-search").value.toLowerCase(),
         rows = users.filter((u) =>
           (u.name + " " + u.email).toLowerCase().includes(q),
         );
-      document.querySelector("#user-results").innerHTML =
-        `<table><thead><tr><th>계정</th><th>역할</th><th>티어 · 완료</th><th>노쇼 · 제한</th><th>이력</th></tr></thead><tbody>${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: "운영사", brand: "브랜드", influencer: "인플루언서" }[u.role]}</td><td>${u.role === "influencer" ? `T${u.tier + 1} · ${u.completed_count}회<br>${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? `${u.no_show_count}회 · ${u.blacklisted ? "영구 제한" : u.blocked_until > Date.now() ? date(u.blocked_until) + "까지" : "없음"}` : "—"}</td><td>${u.role === "influencer" ? `<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? `<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}</tbody></table>`;
+      document.querySelector("#user-results").innerHTML = html`<table>
+        <thead>
+          <tr>
+            <th>계정</th>
+            <th>역할</th>
+            <th>티어 · 완료</th>
+            <th>노쇼 · 제한</th>
+            <th>이력</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`T${u.tier + 1} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+        </tbody>
+      </table>`;
     };
     document.querySelector("#user-search").oninput = render;
     render();
@@ -496,15 +925,43 @@
       api("/admin/audit"),
     ]);
     root.innerHTML =
-      heading("운영 정책", "노쇼와 티어 자동 갱신의 기준을 설정하세요.") +
-      `<form class="panel editor" data-task="settings" data-confirm="운영 정책을 변경하고 전체 인플루언서의 티어를 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."><h2>노쇼 제재</h2><div class="form-grid">${input("penalty_days", "신규 지원 제한 일수", "number", 'required min="1" max="365"', s.penalty_days)}${input("demotion", "노쇼당 티어 강등 단계", "number", 'required min="1" max="2"', s.demotion)}${input("blacklist_after", "영구 제한 누적 노쇼 횟수", "number", 'required min="1" max="10"', s.blacklist_after)}</div><p class="note left">제출 시각은 서버 시간으로 판단합니다. 검수 대기·최종 제출 완료인 참여자는 브랜드 검수 지연만으로 노쇼 처리하지 않습니다. 수정 요청은 별도 재제출 마감일을 사용합니다.</p><h2>티어 기준</h2><p class="muted">완료 횟수와 브랜드가 확인한 누적 조회수를 모두 충족해야 승급합니다. 노쇼 누적에 따른 강등이 함께 반영됩니다.</p>${[2, 3, 4].map((n) => `<h3>T${n}</h3><div class="form-grid">${input(`tier${n}_count`, "최소 완료 횟수", "number", 'required min="1"', s[`tier${n}_count`])}${input(`tier${n}_views`, "최소 누적 조회수", "number", 'required min="0"', s[`tier${n}_views`])}</div>`).join("")}${submit("운영 정책 저장")}</form><section class="panel"><h3>운영 변경 기록</h3>${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${a.action === "settings" ? "정책 변경" : "지원 제한 해제"} · ${datetime(a.created_at)}</p>`).join("") : '<p class="muted">변경 기록이 없습니다.</p>'}</section>`;
+      heading(t("운영 정책"), t("노쇼와 티어 자동 갱신의 기준을 설정하세요.")) +
+      html`<form
+          class="panel editor"
+          data-task="settings"
+          data-confirm="운영 정책을 변경하고 전체 인플루언서의 티어를 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."
+        >
+          <h2>노쇼 제재</h2>
+          <div class="form-grid">
+            ${input("penalty_days", t("신규 지원 제한 일수"), "number", 'required min="1" max="365"', s.penalty_days)}${input("demotion", t("노쇼당 티어 강등 단계"), "number", 'required min="1" max="2"', s.demotion)}${input("blacklist_after", t("영구 제한 누적 노쇼 횟수"), "number", 'required min="1" max="10"', s.blacklist_after)}
+          </div>
+          <p class="note left">
+            제출 시각은 서버 시간으로 판단합니다. 검수 대기·최종 제출 완료인
+            참여자는 브랜드 검수 지연만으로 노쇼 처리하지 않습니다. 수정 요청은
+            별도 재제출 마감일을 사용합니다.
+          </p>
+          <h2>티어 기준</h2>
+          <p class="muted">
+            완료 횟수와 브랜드가 확인한 누적 조회수를 모두 충족해야 승급합니다.
+            노쇼 누적에 따른 강등이 함께 반영됩니다.
+          </p>
+          ${[2, 3, 4].map((n) => `<h3>T${n}</h3><div class="form-grid">${input(`tier${n}_count`, t("최소 완료 횟수"), "number", 'required min="1"', s[`tier${n}_count`])}${input(`tier${n}_views`, t("최소 누적 조회수"), "number", 'required min="0"', s[`tier${n}_views`])}</div>`).join("")}${submit(t("운영 정책 저장"))}
+        </form>
+        <section class="panel">
+          <h3>운영 변경 기록</h3>
+          ${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${a.action === "settings" ? t("정책 변경") : t("지원 제한 해제")} · ${datetime(a.created_at)}</p>`).join("") : t('<p class="muted">변경 기록이 없습니다.</p>')}
+        </section>`;
   }
   async function refreshCount() {
     const { unread } = await api("/notifications");
     document.querySelector("#notification-count").textContent = unread
-      ? `알림 ${unread}`
-      : "알림";
+      ? html`알림 ${unread}`
+      : t("알림");
   }
+  new MutationObserver(syncReviewFields).observe(root, {
+    childList: true,
+    subtree: true,
+  });
   async function render() {
     const path = location.pathname;
     document
@@ -532,14 +989,14 @@
       else if (path === "/admin/settings") await settings();
       else
         root.innerHTML = empty(
-          "페이지를 찾을 수 없습니다",
-          "메뉴에서 다른 화면을 선택해 주세요.",
+          t("페이지를 찾을 수 없습니다"),
+          t("메뉴에서 다른 화면을 선택해 주세요."),
         );
       await refreshCount();
     } catch (e) {
       root.innerHTML =
-        heading("화면을 불러오지 못했습니다", esc(e.message)) +
-        '<a class="text-link" href="/dashboard">대시보드로 돌아가기 →</a>';
+        heading(t("화면을 불러오지 못했습니다"), esc(e.message)) +
+        t('<a class="text-link" href="/dashboard">대시보드로 돌아가기 →</a>');
     }
   }
   root.addEventListener("input", (event) => {
@@ -551,35 +1008,32 @@
       const url = new URL(field.value),
         host = url.hostname.replace(/^www\./, "");
       valid =
-        url.protocol === "https:" &&
+        (action === "draft" ? ["http:", "https:"] : ["https:"]).includes(
+          url.protocol,
+        ) &&
         !url.username &&
         !url.password &&
-        !url.port &&
-        !url.hash &&
-        (action === "draft"
-          ? url.hostname === "drive.google.com" &&
-            (/^\/file\/d\/[^/]+(?:\/view)?\/?$/.test(url.pathname) ||
-              (url.pathname === "/open" && url.searchParams.has("id")))
-          : {
-              "instagram.com": /^\/(p|reel|tv)\/[^/]+/,
-              "youtube.com": /^\/(watch|shorts\/[^/]+)/,
-              "youtu.be": /^\/[^/]+/,
-              "tiktok.com": /^\/@[^/]+\/video\/\d+/,
-              "facebook.com": /^\/.+/,
-              "x.com": /^\/[^/]+\/status\/\d+/,
-            }[host]?.test(url.pathname) &&
+        (action === "draft" ||
+          ({
+            "instagram.com": /^\/(p|reel|tv)\/[^/]+/,
+            "youtube.com": /^\/(watch|shorts\/[^/]+)/,
+            "youtu.be": /^\/[^/]+/,
+            "tiktok.com": /^\/@[^/]+\/video\/\d+/,
+            "facebook.com": /^\/.+/,
+            "x.com": /^\/[^/]+\/status\/\d+/,
+          }[host]?.test(url.pathname) &&
             !(
               host === "youtube.com" &&
               url.pathname === "/watch" &&
               !url.searchParams.get("v")
-            ));
+            )));
     } catch {}
     field.setCustomValidity(
       !field.value || valid
         ? ""
         : action === "draft"
-          ? "Google Drive 파일 공유 링크를 입력해 주세요."
-          : "지원되는 SNS 게시물 링크를 입력해 주세요.",
+          ? t("올바른 HTTP/HTTPS 웹 링크를 입력해 주세요.")
+          : t("지원되는 SNS 게시물 링크를 입력해 주세요."),
     );
   });
   root.addEventListener("submit", async (event) => {
@@ -598,7 +1052,7 @@
         .querySelectorAll("[type=number]")
         .forEach((n) => (data[n.name] = Number(n.value)));
       form
-        .querySelectorAll("[type=checkbox]")
+        .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
         case "campaign": {
@@ -634,7 +1088,7 @@
           });
           break;
       }
-      toast("저장되었습니다.");
+      toast(t("저장되었습니다."));
       await render();
     } catch (e) {
       errorNode.textContent = e.message;
@@ -651,8 +1105,8 @@
         if (
           !(await confirmAction(
             button.dataset.campaignAction === "close"
-              ? "새 지원을 받지 않도록 모집을 마감할까요?"
-              : "모든 활동을 확인하고 캠페인을 종료할까요?",
+              ? t("새 지원을 받지 않도록 모집을 마감할까요?")
+              : t("모든 활동을 확인하고 캠페인을 종료할까요?"),
           ))
         )
           return;
@@ -662,7 +1116,7 @@
           "POST",
           {},
         );
-        toast("처리되었습니다.");
+        toast(t("처리되었습니다."));
         await render();
       }
       if (button.hasAttribute("data-read-notifications")) {
@@ -670,8 +1124,20 @@
         await render();
       }
       if (button.dataset.release) {
-        document.querySelector("#history-results").innerHTML =
-          `<form class="panel editor" data-task="release" data-id="${button.dataset.release}" data-confirm="이 인플루언서의 지원 제한을 해제할까요? 노쇼 이력과 티어 강등 기록은 유지됩니다."><h2>지원 제한 검토</h2>${textarea("note", "해제 사유", 'required minlength="5" maxlength="1000" rows="3"')}<p class="note left">해제 사유와 운영사 계정이 기록됩니다. 다음 노쇼 발생 시 기존 누적 횟수에 따라 다시 제재됩니다.</p>${submit("지원 제한 해제")}</form>`;
+        document.querySelector("#history-results").innerHTML = html`<form
+          class="panel editor"
+          data-task="release"
+          data-id="${button.dataset.release}"
+          data-confirm="이 인플루언서의 지원 제한을 해제할까요? 노쇼 이력과 티어 강등 기록은 유지됩니다."
+        >
+          <h2>지원 제한 검토</h2>
+          ${textarea("note", t("해제 사유"), 'required minlength="5" maxlength="1000" rows="3"')}
+          <p class="note left">
+            해제 사유와 운영사 계정이 기록됩니다. 다음 노쇼 발생 시 기존 누적
+            횟수에 따라 다시 제재됩니다.
+          </p>
+          ${submit(t("지원 제한 해제"))}
+        </form>`;
         document
           .querySelector("#history-results")
           .scrollIntoView({ behavior: "smooth" });
@@ -680,8 +1146,37 @@
         const { applications } = await api(
           `/admin/users/${button.dataset.history}/history`,
         );
-        document.querySelector("#history-results").innerHTML =
-          `<div class="section-heading"><h2>참여 이력</h2></div><section class="panel">${applications.length ? applications.map((a) => `<div class="alert-row"><div>${badge(a.status)} <strong>${esc(a.title)}</strong><p class="muted">${esc(a.brand_name)} · ${a.views} 조회${a.best ? " · Best" : ""}</p></div><a class="text-link" href="/applications/${a.id}">상세 →</a></div>`).join("") : empty("참여 이력이 없습니다", "아직 지원한 캠페인이 없습니다.")}</section>`;
+        document.querySelector("#history-results").innerHTML = html`<div
+            class="section-heading"
+          >
+            <h2>참여 이력</h2>
+          </div>
+          <section class="panel">
+            ${
+              applications.length
+                ? applications
+                    .map(
+                      (a) =>
+                        html`<div class="alert-row">
+                          <div>
+                            ${badge(a.status)} <strong>${esc(a.title)}</strong>
+                            <p class="muted">
+                              ${esc(a.brand_name)} · ${a.views}
+                              조회${a.best ? " · Best" : ""}
+                            </p>
+                          </div>
+                          <a class="text-link" href="/applications/${a.id}"
+                            >상세 →</a
+                          >
+                        </div>`,
+                    )
+                    .join("")
+                : empty(
+                    t("참여 이력이 없습니다"),
+                    t("아직 지원한 캠페인이 없습니다."),
+                  )
+            }
+          </section>`;
         document
           .querySelector("#history-results")
           .scrollIntoView({ behavior: "smooth" });
@@ -700,10 +1195,12 @@
     node.hidden = true;
     try {
       if (file.size > 2 * 1024 * 1024)
-        throw new Error("2MB 이하 XLSX 파일을 선택해 주세요.");
+        throw new Error(t("2MB 이하 XLSX 파일을 선택해 주세요."));
       if (
         !(await confirmAction(
-          "파일의 송장정보를 일괄 등록할까요? 모든 행이 유효할 때만 반영합니다.",
+          t(
+            "파일의 송장정보를 일괄 등록할까요? 모든 행이 유효할 때만 반영합니다.",
+          ),
         ))
       )
         return;
@@ -719,7 +1216,7 @@
         "POST",
         { file: base64 },
       );
-      toast(`${imported}건의 송장이 등록되었습니다.`);
+      toast(html`${imported}건의 송장이 등록되었습니다.`);
       await render();
     } catch (e) {
       node.textContent = e.message;

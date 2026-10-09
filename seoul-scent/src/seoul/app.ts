@@ -1,3 +1,4 @@
+import { language } from "./i18n.js";
 import { workspacePage } from "./workspace-view.js";
 import { registerWorkflow } from "./workflow-api.js";
 import { Hono } from "hono";
@@ -91,10 +92,14 @@ export function createApp(
   });
   app.get("/", (c) => c.redirect(c.get("user") ? "/dashboard" : "/login"));
   app.get("/login", (c) =>
-    c.get("user") ? c.redirect("/dashboard") : c.html(page("login")),
+    c.get("user")
+      ? c.redirect("/dashboard")
+      : c.html(page("login", undefined, language(c.req.header("Cookie")))),
   );
   app.get("/register", (c) =>
-    c.get("user") ? c.redirect("/dashboard") : c.html(page("register")),
+    c.get("user")
+      ? c.redirect("/dashboard")
+      : c.html(page("register", undefined, language(c.req.header("Cookie")))),
   );
   app.get("/dashboard", (c) =>
     c.get("user")
@@ -105,8 +110,11 @@ export function createApp(
     const user = c.get("user");
     if (!user) return c.redirect("/login");
     if (c.req.param("role") !== user.role)
-      return c.html(page("forbidden", user), 403);
-    return c.html(workspacePage(user));
+      return c.html(
+        page("forbidden", user, language(c.req.header("Cookie"))),
+        403,
+      );
+    return c.html(workspacePage(user, language(c.req.header("Cookie"))));
   });
   for (const path of [
     "/campaigns",
@@ -128,8 +136,11 @@ export function createApp(
         (path === "/applications" && user.role !== "influencer") ||
         (path === "/campaigns/new" && user.role !== "brand")
       )
-        return c.html(page("forbidden", user), 403);
-      return c.html(workspacePage(user));
+        return c.html(
+          page("forbidden", user, language(c.req.header("Cookie"))),
+          403,
+        );
+      return c.html(workspacePage(user, language(c.req.header("Cookie"))));
     });
   app.get("/api/me", (c) =>
     c.get("user")

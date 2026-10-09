@@ -1095,3 +1095,31 @@ summary {
   font-weight: 600;
   margin: 22px 0;
 }
+.language-control {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.language-control select,
+.header-actions select {
+  width: auto;
+  min-width: 100px;
+  padding: 8px;
+}
+@media (max-width: 600px) {
+  .header-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .header-actions label[for="language-select"] {
+    display: none;
+  }
+  .language-control {
+    top: 8px;
+    right: 12px;
+  }
+}

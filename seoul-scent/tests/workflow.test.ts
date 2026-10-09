@@ -313,8 +313,6 @@ test("Asia/Seoul midnight and safe external link validation", () => {
   assert.throws(() => deadline("2026-02-30"));
   for (const url of [
     "javascript:alert(1)",
-    "https://drive.google.com.evil.test/file/d/a/view",
-    "https://drive.google.com/drive/folders/abc",
     "https://user:pass@drive.google.com/file/d/a/view",
   ])
     assert.throws(() => externalLink(url, true));
@@ -777,7 +775,7 @@ test("existing campaigns migrate once without losing applications or schedule da
     const id = await f.create(),
       application = await f.apply(id);
     f.db.exec(
-      "ALTER TABLE campaigns DROP COLUMN product_url; ALTER TABLE campaigns DROP COLUMN recruit_start_date; ALTER TABLE campaigns DROP COLUMN recruit_start;",
+      "ALTER TABLE campaigns DROP COLUMN product_url; ALTER TABLE campaigns DROP COLUMN recruit_start_date; ALTER TABLE campaigns DROP COLUMN recruit_start; ALTER TABLE campaigns DROP COLUMN review_required;",
     );
     f.db
       .prepare("UPDATE campaigns SET created_at=? WHERE id=?")
@@ -804,6 +802,7 @@ test("existing campaigns migrate once without losing applications or schedule da
     assert.equal(row.recruit_start_date, "2026-01-02");
     assert.equal(row.recruit_start, Date.parse("2026-01-01T15:00:00Z"));
     assert.equal(row.product_url, "");
+    assert.equal(row.review_required, 1);
     f.db
       .prepare("UPDATE campaigns SET product_url=? WHERE id=?")
       .run("https://example.com/preserved", id);
@@ -1008,6 +1007,136 @@ test("campaign editing validates all fields, retains participant conditions and 
     assert.equal(
       (await f.req("brand", path, "PUT", { title: "종료 후 수정" })).status,
       409,
+    );
+  } finally {
+    f.db.close();
+  }
+});
+
+test("optional review skips drafts and uses final deadline for penalties", async () => {
+  const f = await fixture();
+  try {
+    const c = await f.create({ review_required: false, draft_date: undefined });
+    const a = await f.apply(c);
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${c}/details`, "PUT", {
+          review_required: true,
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.action(
+          a,
+          "final",
+          { url: "https://instagram.com/p/direct" },
+          "influencer",
+        )
+      ).status,
+      409,
+    );
+    await f.action(a, "select");
+    await f.action(a, "ship", {
+      carrier: "CJ대한통운",
+      tracking_number: "123456789",
+    });
+    assert.equal(
+      (
+        await f.action(
+          a,
+          "draft",
+          { url: "https://example.com/review", public_confirmed: true },
+          "influencer",
+        )
+      ).status,
+      409,
+    );
+    f.db
+      .prepare("UPDATE campaigns SET draft_due=? WHERE id=?")
+      .run(Date.now() - 1, c);
+    assert.equal(sweepDeadlines(f.db).penalized, 0);
+    assert.equal(
+      (
+        await f.action(
+          a,
+          "final",
+          { url: "https://instagram.com/p/direct" },
+          "influencer",
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.action(a, "complete", { views: 1, best: false })).status,
+      200,
+    );
+    const c2 = await f.create({ review_required: false }),
+      a2 = await f.apply(c2);
+    await f.action(a2, "select");
+    f.db
+      .prepare("UPDATE campaigns SET final_due=? WHERE id=?")
+      .run(Date.now() - 1, c2);
+    assert.equal(sweepDeadlines(f.db).penalized, 1);
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT status FROM applications WHERE id=?")
+          .get(a2) as any
+      ).status,
+      "no_show",
+    );
+  } finally {
+    f.db.close();
+  }
+});
+test("drafts accept arbitrary web hosts, ports and fragments but reject unsafe schemes", async () => {
+  const f = await fixture();
+  try {
+    const c = await f.create(),
+      a = await f.apply(c);
+    await f.action(a, "select");
+    await f.action(a, "ship", {
+      carrier: "CJ대한통운",
+      tracking_number: "123456789",
+    });
+    for (const url of [
+      "javascript:alert(1)",
+      "data:text/html,test",
+      "file:///tmp/video",
+      "https://user:password@example.com/video",
+    ])
+      assert.equal(
+        (
+          await f.action(
+            a,
+            "draft",
+            { url, public_confirmed: true },
+            "influencer",
+          )
+        ).status,
+        400,
+      );
+    const url = "http://example.com:8080/shared/video#preview";
+    assert.equal(
+      (
+        await f.action(
+          a,
+          "draft",
+          { url, public_confirmed: true },
+          "influencer",
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT draft_url FROM applications WHERE id=?")
+          .get(a) as any
+      ).draft_url,
+      url,
     );
   } finally {
     f.db.close();

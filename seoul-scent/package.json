@@ -5,7 +5,7 @@
     "dev": "tsx watch src/seoul/server.ts",
     "start": "tsx src/seoul/server.ts",
     "start:prod": "NODE_ENV=production node dist/server.js",
-    "build": "esbuild src/seoul/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
+    "build": "node scripts/build-i18n.cjs && esbuild src/seoul/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
     "preview": "node dist/server.js",
     "test": "tsx --test tests/*.test.ts",
     "admin:create": "tsx src/seoul/create-admin.ts",

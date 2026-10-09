@@ -97,21 +97,12 @@ export function externalLink(value: unknown, draft: boolean) {
     return fail("올바른 링크를 입력해 주세요.");
   }
   if (
-    url.protocol !== "https:" ||
+    !(draft ? ["http:", "https:"] : ["https:"]).includes(url.protocol) ||
     url.username ||
-    url.password ||
-    url.port ||
-    url.hash
+    url.password
   )
-    fail("인증 정보가 없는 HTTPS 링크를 입력해 주세요.");
-  if (draft) {
-    if (
-      url.hostname !== "drive.google.com" ||
-      (!/^\/file\/d\/[^/]+(?:\/view)?\/?$/.test(url.pathname) &&
-        !(url.pathname === "/open" && url.searchParams.get("id")))
-    )
-      fail("Google Drive 파일 공유 링크를 입력해 주세요.");
-  } else {
+    fail("인증 정보가 없는 HTTP/HTTPS 웹 링크를 입력해 주세요.");
+  if (!draft) {
     const host = url.hostname.replace(/^www\./, "");
     const paths: Record<string, RegExp> = {
       "instagram.com": /^\/(p|reel|tv)\/[^/]+/,
@@ -161,7 +152,7 @@ export function event(
 export function applicationFor(db: DB, id: number, user: User) {
   const row = db
     .prepare(
-      `SELECT a.*, c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
+      `SELECT a.*, c.review_required,c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
     u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.social_url
     FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id
     JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.id=?`,
@@ -219,14 +210,14 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
       .get() as any;
     const rows = db
       .prepare(
-        `SELECT a.*,c.title,c.brand_id,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
+        `SELECT a.*,c.title,c.brand_id,c.review_required,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
       WHERE c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
       )
       .all() as any[];
     let penalized = 0;
     for (const a of rows) {
       const due =
-        a.status === "draft_approved"
+        a.status === "draft_approved" || !a.review_required
           ? a.final_due
           : a.status === "revision_requested" && a.revision_due
             ? a.revision_due

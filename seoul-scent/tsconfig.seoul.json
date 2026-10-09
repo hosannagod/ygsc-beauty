@@ -7,7 +7,8 @@
     "skipLibCheck": true,
     "types": ["node"],
     "lib": ["ES2022", "DOM"],
-    "noEmit": true
+    "noEmit": true,
+    "resolveJsonModule": true
   },
   "include": ["src/seoul/**/*.ts", "tests/**/*.ts"]
 }

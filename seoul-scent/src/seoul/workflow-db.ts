@@ -112,4 +112,13 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1 WHERE consent_version='secondary-use-v1' AND consent_at>0; INSERT OR IGNORE INTO schema_version VALUES(4)",
     );
   })();
+  if (
+    !(
+      db.prepare("PRAGMA table_info(campaigns)").all() as { name: string }[]
+    ).some((c) => c.name === "review_required")
+  )
+    db.exec(
+      "ALTER TABLE campaigns ADD COLUMN review_required INTEGER NOT NULL DEFAULT 1 CHECK(review_required IN (0,1))",
+    );
+  db.exec("INSERT OR IGNORE INTO schema_version VALUES(5)");
 }
