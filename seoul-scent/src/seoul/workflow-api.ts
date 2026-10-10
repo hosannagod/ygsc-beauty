@@ -1,5 +1,11 @@
+import { tierLabel } from "./tier.js";
 import { queueSelectionEmail, emailStatus } from "./email.js";
 import { profileComplete, socialProfileUrl } from "./profile.js";
+import {
+  certificatePage,
+  issueCertificate,
+  completedActivities,
+} from "./certificate.js";
 import {
   parseCampaignImages,
   saveCampaignImages,
@@ -80,6 +86,34 @@ export function registerWorkflow(
         throw e;
       }
     };
+  app.get(
+    "/api/work/certificate",
+    wrap((c) => {
+      const u = role(c, "influencer");
+      const count = completedActivities(db, u.id).length;
+      return c.json({ eligible: count >= 1, completed_count: count });
+    }),
+  );
+  app.post(
+    "/api/work/certificate",
+    wrap((c) => {
+      const certificate = issueCertificate(db, role(c, "influencer"));
+      return c.json({ url: `/certificates/${certificate.id}` });
+    }),
+  );
+  app.get(
+    "/certificates/:id",
+    wrap((c) => {
+      const u = current(c);
+      const certificate = db
+        .prepare("SELECT * FROM activity_certificates WHERE id=?")
+        .get(c.req.param("id")) as any;
+      if (!certificate) fail("활동증명서를 찾을 수 없습니다.", 404);
+      if (u.role !== "admin" && certificate.user_id !== u.id)
+        fail("접근 권한이 없습니다.", 403);
+      return c.html(certificatePage(certificate));
+    }),
+  );
   // Sweep before each authenticated workflow request as well as the background timer.
   app.use("/api/work/*", async (c, next) => {
     if (c.get("user")) sweepDeadlines(db);
@@ -417,7 +451,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
               )
               .all(campaign.id);
       return c.json({
@@ -870,6 +904,9 @@ export function registerWorkflow(
     wrap(async (c) => {
       const admin = role(c, "admin");
       const b = await body(c);
+      b.tier2_views = 0;
+      b.tier3_views = 0;
+      b.tier4_views = 0;
       const keys = [
         "penalty_days",
         "demotion",
@@ -1059,7 +1096,7 @@ export function registerWorkflow(
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,a.best,a.views,p.tier,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
+          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,a.best,a.views,p.tier,p.completed_count,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -1072,10 +1109,15 @@ export function registerWorkflow(
         { header: "최종 SNS URL", key: "final_url", width: 50 },
         { header: "Best", key: "best", width: 10 },
         { header: "확인 조회수", key: "views", width: 15 },
-        { header: "티어 (0=T1)", key: "tier", width: 15 },
+        { header: "티어", key: "tier", width: 15 },
         { header: "동의 버전", key: "consent_version", width: 25 },
       ];
-      sheet.addRows(rows);
+      sheet.addRows(
+        rows.map((row: any) => ({
+          ...row,
+          tier: tierLabel(row.tier, row.completed_count),
+        })),
+      );
       sheet.getRow(1).font = { bold: true };
       return new Response((await book.xlsx.writeBuffer()) as any, {
         headers: {

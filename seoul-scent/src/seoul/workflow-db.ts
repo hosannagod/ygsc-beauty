@@ -150,4 +150,16 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   CREATE TABLE IF NOT EXISTS email_attempts(id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES email_outbox(id),created_at INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS email_attempts_time ON email_attempts(created_at);`);
   db.exec("INSERT OR IGNORE INTO schema_version VALUES(8)");
+  db.transaction(() => {
+    if (
+      !db.prepare("SELECT version FROM schema_version WHERE version=9").get()
+    ) {
+      db.exec(`UPDATE workflow_settings SET tier2_count=10,tier3_count=50,tier4_count=100,tier2_views=0,tier3_views=0,tier4_views=0;
+        UPDATE influencer_profiles SET tier=MAX(0,(CASE WHEN completed_count>=100 THEN 3 WHEN completed_count>=50 THEN 2 WHEN completed_count>=10 THEN 1 ELSE 0 END)-no_show_count*(SELECT demotion FROM workflow_settings WHERE id=1));
+        INSERT INTO schema_version VALUES(9);`);
+    }
+    db.exec(
+      `CREATE TABLE IF NOT EXISTS activity_certificates(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,completed_count INTEGER NOT NULL,activities TEXT NOT NULL,issued_at INTEGER NOT NULL,UNIQUE(user_id,completed_count))`,
+    );
+  })();
 }

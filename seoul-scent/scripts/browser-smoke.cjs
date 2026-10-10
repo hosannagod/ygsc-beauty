@@ -69,7 +69,12 @@ const { spawn, spawnSync } = require("node:child_process"),
     const brand = await signup("brand", "서울향기 브랜드"),
       influencer = await signup("influencer", "서울 크리에이터");
     const future = (n) =>
-      new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(Date.now() + n * 86400000));
     await brand.getByRole("link", { name: "+ 캠페인 만들기" }).click();
     await brand.locator("[name=title]").fill("서울 향수 릴스 캠페인");
     await brand.locator("[name=product]").fill("Seoul Scent 향수");
@@ -333,6 +338,14 @@ const { spawn, spawnSync } = require("node:child_process"),
       resultBook.worksheets[0].getCell("E2").value,
       "https://www.instagram.com/reel/approved",
     );
+    await influencer.goto(base + "/profile");
+    await influencer.getByRole("button", { name: "활동증명서 발급" }).click();
+    await influencer.waitForURL(/\/certificates\//);
+    await influencer
+      .getByRole("heading", { name: "Certificate of Participation" })
+      .waitFor();
+    const certificatePdf = await influencer.pdf({ format: "A4" });
+    assert.equal(certificatePdf.subarray(0, 4).toString(), "%PDF");
     await influencer.goto(base + "/profile");
     assert.equal(
       await influencer.locator(".kpi").nth(1).locator("strong").textContent(),

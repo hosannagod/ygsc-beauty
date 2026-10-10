@@ -11,7 +11,12 @@ import {
 } from "../src/seoul/workflow.js";
 const password = "Test-password-123!";
 const future = (days: number) =>
-  new Date(Date.now() + days * 86400_000).toISOString().slice(0, 10);
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(Date.now() + days * 86400_000));
 const campaign = {
   title: "서울 향기 협업",
   product: "테스트 향수",
@@ -110,6 +115,96 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("certificates require completed activity and protect ownership with stable escaped snapshots", async () => {
+  const f = await fixture();
+  try {
+    assert.equal(
+      (await f.req("influencer", "/certificate", "POST", {})).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("brand", "/certificate", "POST", {})).status,
+      403,
+    );
+    const c = await f.create({ review_required: false, draft_date: "" });
+    const a = await f.apply(c);
+    assert.equal((await f.action(a, "select")).status, 200);
+    assert.equal(
+      (
+        await f.action(a, "ship", {
+          carrier: "CJ대한통운",
+          tracking_number: "123456789",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.action(
+          a,
+          "final",
+          { url: "https://instagram.com/reel/test" },
+          "influencer",
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await f.req("influencer", "/certificate", "POST", {})).status,
+      409,
+    );
+    assert.equal(
+      (await f.action(a, "complete", { views: 0, best: false })).status,
+      200,
+    );
+    f.db
+      .prepare("UPDATE users SET name=? WHERE id=?")
+      .run("<script>alert(1)</script>", f.ids.influencer);
+    const r = await f.req("influencer", "/certificate", "POST", {});
+    assert.equal(r.status, 200);
+    const { url } = (await r.json()) as any;
+    assert.equal(
+      (
+        (await (
+          await f.req("influencer", "/certificate", "POST", {})
+        ).json()) as any
+      ).url,
+      url,
+    );
+    const login = async (key: string) => {
+      const r = await f.app.request("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: key + "@test.com", password }),
+      });
+      return r.headers.get("set-cookie")!.split(";")[0];
+    };
+    const page = await f.app.request(url, {
+      headers: { Cookie: await login("influencer") },
+    });
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /Certificate of Participation/);
+    assert.match(html, /&lt;script&gt;/);
+    assert.ok(!html.includes("influencer@test.com"));
+    assert.equal((await f.app.request(url)).status, 401);
+    assert.equal(
+      (await f.app.request(url, { headers: { Cookie: await login("other") } }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT COUNT(*) AS n FROM activity_certificates")
+          .get() as any
+      ).n,
+      1,
+    );
+  } finally {
+    f.db.close();
+  }
+});
 test("applying requires a supported SNS profile; saving it enables application and syncs contact", async () => {
   const { db, req, create, apply, ids } = await fixture();
   try {
@@ -668,7 +763,7 @@ test("admin tier settings validate, recalculate and retain penalty history", asy
           .prepare("SELECT tier FROM influencer_profiles WHERE user_id=?")
           .get(f.ids.influencer) as any
       ).tier,
-      2,
+      1,
     );
   } finally {
     f.db.close();

@@ -47,6 +47,10 @@
         timeStyle: "short",
       },
     ).format(new Date(n));
+  const tierName = (tier, count) =>
+    count === 0
+      ? t("미등급")
+      : [t("브론즈"), t("실버"), t("골드"), t("플래티넘")][tier] || t("미등급");
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const money = (n) =>
@@ -254,7 +258,7 @@
           ).length,
         ) +
         kpi(t("누적 완료"), profile.completed_count) +
-        kpi(t("현재 티어"), `T${profile.tier + 1}`) +
+        kpi(t("현재 티어"), tierName(profile.tier, profile.completed_count)) +
         kpi(t("노쇼 이력"), profile.no_show_count);
       main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.complete ? t('<div class="notice">캠페인 지원 전에 SNS 계정과 팔로워 정보를 등록해 주세요. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
         <div class="section-heading">
@@ -766,7 +770,10 @@
                           <strong>${esc(a.influencer_name)}</strong
                           ><small>${esc(a.influencer_email)}</small>
                         </td>
-                        <td>${money(a.followers)} · T${a.tier + 1}</td>
+                        <td>
+                          ${money(a.followers)} ·
+                          ${tierName(a.tier, a.completed_count)}
+                        </td>
                         <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
                         <td>
                           <a class="text-link" href="/applications/${a.id}"
@@ -973,7 +980,7 @@
           <div>
             <section class="panel">
               <h2>제출 콘텐츠</h2>
-              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · T${a.tier + 1}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
             </section>
             <section class="panel">
               <h3>배송 정보</h3>
@@ -1030,7 +1037,10 @@
         </div>`;
   }
   async function profile() {
-    const { profile: p } = await api("/profile");
+    const [{ profile: p }, certificate] = await Promise.all([
+      api("/profile"),
+      api("/certificate"),
+    ]);
     root.innerHTML =
       heading(
         t("내 프로필"),
@@ -1038,9 +1048,16 @@
         `<a class="secondary" href="/account">${t("계정 정보 수정")}</a>`,
       ) +
       html`<section class="kpi-grid">
-          ${kpi(t("현재 티어"), `T${p.tier + 1}`)}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
+          ${kpi(t("현재 티어"), tierName(p.tier, p.completed_count))}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
         </section>
         ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
+        <section class="panel">
+          <h2>${t("활동증명서")}</h2>
+          <p>
+            ${t("브랜드가 완료 처리한 캠페인이 1개 이상이면 발급할 수 있습니다.")}
+          </p>
+          ${certificate.eligible ? `<button class="primary" data-certificate>${t("활동증명서 발급")}</button>` : `<p class="muted">${t("아직 발급 조건을 충족하지 않았습니다.")}</p>`}
+        </section>
         <form class="panel editor" data-task="profile">
           <p class="note left">
             ${t("지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.")}
@@ -1117,7 +1134,7 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`T${u.tier + 1} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count)} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
@@ -1151,10 +1168,10 @@
           </p>
           <h2>티어 기준</h2>
           <p class="muted">
-            완료 횟수와 브랜드가 확인한 누적 조회수를 모두 충족해야 승급합니다.
-            노쇼 누적에 따른 강등이 함께 반영됩니다.
+            완료한 캠페인 수를 기준으로 승급합니다. 브론즈는 1개부터이며, 0개는
+            미등급입니다. 노쇼 누적에 따른 강등이 함께 반영됩니다.
           </p>
-          ${[2, 3, 4].map((n) => `<h3>T${n}</h3><div class="form-grid">${input(`tier${n}_count`, t("최소 완료 횟수"), "number", 'required min="1"', s[`tier${n}_count`])}${input(`tier${n}_views`, t("최소 누적 조회수"), "number", 'required min="0"', s[`tier${n}_views`])}</div>`).join("")}${submit(t("운영 정책 저장"))}
+          ${[2, 3, 4].map((n) => `<h3>${tierName(n - 1)}</h3><div class="form-grid">${input(`tier${n}_count`, t("최소 완료 횟수"), "number", 'required min="1"', s[`tier${n}_count`])}</div>`).join("")}${submit(t("운영 정책 저장"))}
         </form>
         <section class="panel">
           <h3>운영 변경 기록</h3>
@@ -1345,6 +1362,12 @@
       if (button.hasAttribute("data-read-notifications")) {
         await api("/notifications/read", "POST", {});
         await render();
+      }
+      if (button.hasAttribute("data-certificate")) {
+        button.disabled = true;
+        const certificate = await api("/certificate", "POST", {});
+        location.assign(certificate.url);
+        return;
       }
       if (button.dataset.emailRetry) {
         if (!(await confirmAction(t("이 안내 메일을 다시 발송할까요?"))))

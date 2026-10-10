@@ -409,5 +409,17 @@
   "지원되는 SNS의 HTTPS 프로필 링크를 입력해 주세요.": "Enter an HTTPS profile link from a supported social platform.",
   "연락처 형식을 확인해 주세요.": "Check your phone number format.",
   "캠페인 지원 전에 내 프로필에 SNS 계정과 팔로워 정보를 등록해 주세요.": "Add your social media account and follower count to your profile before applying.",
-  "지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.": "Save your social media account and follower count before applying. The brand reviews account ownership during selection."
+  "지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.": "Save your social media account and follower count before applying. The brand reviews account ownership during selection.",
+  "미등급": "Unranked",
+  "브론즈": "Bronze",
+  "실버": "Silver",
+  "골드": "Gold",
+  "플래티넘": "Platinum",
+  "활동증명서": "Certificate of Participation",
+  "활동증명서 발급": "Issue certificate",
+  "브랜드가 완료 처리한 캠페인이 1개 이상이면 발급할 수 있습니다.": "Available after the brand marks at least one campaign as completed.",
+  "아직 발급 조건을 충족하지 않았습니다.": "You have not completed an eligible campaign yet.",
+  "캠페인을 1개 이상 완료한 후 활동증명서를 발급할 수 있습니다.": "Complete at least one campaign to issue a certificate.",
+  "활동증명서를 찾을 수 없습니다.": "Certificate not found.",
+  "완료한 캠페인 수를 기준으로 승급합니다. 브론즈는 1개부터이며, 0개는 미등급입니다.": "Tiers are based on completed campaigns. Bronze starts at one; zero completions is Unranked."
 }
