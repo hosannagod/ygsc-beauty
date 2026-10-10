@@ -110,6 +110,85 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("applying requires a supported SNS profile; saving it enables application and syncs contact", async () => {
+  const { db, req, create, apply, ids } = await fixture();
+  try {
+    const campaignId = await create();
+    db.prepare(
+      "UPDATE influencer_profiles SET social_url='' WHERE user_id=?",
+    ).run(ids.influencer);
+    const consent = {
+      secondary_use_consent: true,
+      original_delivery_consent: true,
+    };
+    assert.equal(
+      (
+        await req(
+          "influencer",
+          `/campaigns/${campaignId}/apply`,
+          "POST",
+          consent,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS n FROM applications").get() as any).n,
+      0,
+    );
+    assert.equal(
+      (
+        await req("influencer", "/profile", "PUT", {
+          phone: "01011112222",
+          social_url: "https://example.com/fake",
+          followers: 100,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await req("influencer", "/profile", "PUT", {
+          phone: "invalid123",
+          social_url: "https://instagram.com/creator",
+          followers: 100,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await req("influencer", "/profile", "PUT", {
+          phone: "01011112222",
+          social_url: "https://instagram.com/creator",
+          followers: 0,
+        })
+      ).status,
+      200,
+    );
+    const profile = (await (await req("influencer", "/profile")).json()) as any;
+    assert.equal(profile.profile.complete, true);
+    assert.equal(
+      (
+        db
+          .prepare("SELECT phone FROM users WHERE id=?")
+          .get(ids.influencer) as any
+      ).phone,
+      "01011112222",
+    );
+    const applicationId = await apply(campaignId);
+    assert.equal(
+      (
+        db
+          .prepare("SELECT phone,address FROM applications WHERE id=?")
+          .get(applicationId) as any
+      ).phone,
+      "01011112222",
+    );
+  } finally {
+    db.close();
+  }
+});
 test("selection queues email atomically; mail history and retry are admin-only", async () => {
   const previous = process.env.EMAIL_PROVIDER;
   process.env.EMAIL_PROVIDER = "brevo";
@@ -914,9 +993,6 @@ test("separate consents and address registration only after selection", async ()
         400,
       );
     }
-    f.db
-      .prepare("UPDATE influencer_profiles SET social_url='' WHERE user_id=?")
-      .run(f.ids.influencer);
     const a = await f.apply(c);
     const row = f.db
       .prepare("SELECT * FROM applications WHERE id=?")

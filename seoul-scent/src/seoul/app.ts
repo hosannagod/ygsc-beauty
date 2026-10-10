@@ -123,6 +123,7 @@ export function createApp(
     "/applications",
     "/applications/:id",
     "/profile",
+    "/account",
     "/notifications",
     "/admin/users",
     "/admin/settings",
@@ -147,6 +148,123 @@ export function createApp(
       ? c.json({ user: c.get("user") })
       : c.json({ error: "로그인이 필요합니다." }, 401),
   );
+  app.get("/api/account", (c) => {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
+    return c.json({
+      account: db
+        .prepare(
+          "SELECT id,email,name,role,brand_name,contact_name,phone FROM users WHERE id=?",
+        )
+        .get(user.id),
+    });
+  });
+  app.put("/api/account", async (c) => {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "로그인이 필요합니다." }, 401);
+    const body = await c.req.json().catch(() => null);
+    if (
+      !body ||
+      typeof body.current_password !== "string" ||
+      body.current_password.length > 128
+    )
+      return c.json({ error: "현재 비밀번호를 입력해 주세요." }, 400);
+    const saved = db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(user.id) as any;
+    const attemptKey = `account:${user.id}`;
+    const attempt = db
+      .prepare("SELECT * FROM login_attempts WHERE email=?")
+      .get(attemptKey) as any;
+    if (attempt?.locked_until > Date.now())
+      return c.json({ error: "잠시 후 다시 시도해 주세요." }, 429);
+    if (!verifyPassword(body.current_password, saved.password_hash)) {
+      const failures =
+        attempt?.locked_until && attempt.locked_until <= Date.now()
+          ? 1
+          : (attempt?.failures || 0) + 1;
+      db.prepare(
+        "INSERT INTO login_attempts VALUES(?,?,?) ON CONFLICT(email) DO UPDATE SET failures=excluded.failures,locked_until=excluded.locked_until",
+      ).run(attemptKey, failures, failures >= 5 ? Date.now() + 15 * 60_000 : 0);
+      return c.json({ error: "현재 비밀번호가 일치하지 않습니다." }, 400);
+    }
+    const field = (key: string, fallback: string) =>
+      typeof body[key] === "string"
+        ? body[key].trim()
+        : body[key] === undefined
+          ? fallback
+          : "";
+    const email = field("email", saved.email).toLowerCase();
+    const name = field("name", saved.name),
+      phone = field("phone", saved.phone);
+    const brandName = field("brand_name", saved.brand_name),
+      contactName = field("contact_name", saved.contact_name);
+    if (
+      !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email) ||
+      email.length > 254 ||
+      !/^[+0-9 ()-]{8,30}$/.test(phone) ||
+      (user.role === "brand"
+        ? brandName.length < 2 ||
+          brandName.length > 80 ||
+          contactName.length < 2 ||
+          contactName.length > 60
+        : name.length < 2 || name.length > 60)
+    )
+      return c.json({ error: "이름·이메일·연락처를 확인해 주세요." }, 400);
+    const password = body.new_password;
+    if (
+      password !== undefined &&
+      (typeof password !== "string" ||
+        (password !== "" &&
+          (password.length < 12 ||
+            password.length > 128 ||
+            password !== body.confirm_password)))
+    )
+      return c.json(
+        {
+          error: "새 비밀번호는 12~128자로 입력하고 확인 값과 일치해야 합니다.",
+        },
+        400,
+      );
+    const duplicate = db
+      .prepare("SELECT id FROM users WHERE email=? AND id!=?")
+      .get(email, user.id);
+    if (duplicate)
+      return c.json({ error: "이미 사용 중인 이메일입니다." }, 409);
+    const nextName = user.role === "brand" ? brandName : name;
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE users SET email=?,name=?,phone=?,brand_name=?,contact_name=?,password_hash=? WHERE id=?",
+      ).run(
+        email,
+        nextName,
+        phone,
+        user.role === "brand" ? brandName : saved.brand_name,
+        user.role === "brand" ? contactName : saved.contact_name,
+        password ? hashPassword(password) : saved.password_hash,
+        user.id,
+      );
+      if (user.role === "influencer") {
+        db.prepare(
+          "UPDATE influencer_profiles SET phone=? WHERE user_id=?",
+        ).run(phone, user.id);
+        if (email !== saved.email)
+          db.prepare(
+            "UPDATE email_outbox SET recipient=? WHERE application_id IN (SELECT id FROM applications WHERE influencer_id=?) AND status IN ('pending','failed')",
+          ).run(email, user.id);
+      }
+      db.prepare("DELETE FROM login_attempts WHERE email=?").run(attemptKey);
+      if (email !== saved.email || password)
+        db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+    })();
+    // Rotate this session after credential changes; all other sessions stay revoked.
+    if (email !== saved.email || password)
+      session(c, { ...user, email, name: nextName });
+    return c.json({
+      success: true,
+      credentials_changed: email !== saved.email || !!password,
+    });
+  });
   app.post("/api/register", async (c) => {
     const body = await c.req.json().catch(() => null);
     if (

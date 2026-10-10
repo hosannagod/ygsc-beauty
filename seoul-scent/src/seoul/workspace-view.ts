@@ -34,16 +34,19 @@ export function workspacePage(user: User, lang: Language = "ko") {
           ["/admin/settings", "⚙", t("운영 정책")],
         ]
       : []),
+    ["/account", "⚙", t("마이페이지")],
     ["/notifications", "○", t("알림")],
   ];
   return html`<!doctype html>
     <html lang="${lang}">
-      <head><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1">
+      <head>
+        <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1" />
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Seoul Scent · 협업 워크스페이스</title>
         <link rel="stylesheet" href="/assets/style.css" />
-        <script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script>
+        <script src="/assets/analytics.js" defer></script>
+        <script src="/assets/i18n.js" defer></script>
         <script src="/assets/app.js" defer></script>
         <script src="/assets/workspace.js" defer></script>
       </head>

@@ -1,4 +1,5 @@
 import { queueSelectionEmail, emailStatus } from "./email.js";
+import { profileComplete, socialProfileUrl } from "./profile.js";
 import {
   parseCampaignImages,
   saveCampaignImages,
@@ -88,10 +89,11 @@ export function registerWorkflow(
     "/api/work/profile",
     wrap((c) => {
       const u = role(c, "influencer");
+      const profile = db
+        .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+        .get(u.id);
       return c.json({
-        profile: db
-          .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
-          .get(u.id),
+        profile: { ...(profile as any), complete: profileComplete(profile) },
       });
     }),
   );
@@ -106,18 +108,17 @@ export function registerWorkflow(
             ? undefined
             : text(b.address, "배송지", 0, 300),
         social = text(b.social_url, "SNS 프로필 URL", 1, 500);
-      let url;
-      try {
-        url = new URL(social);
-      } catch {
-        fail("SNS 프로필 링크를 확인해 주세요.");
-      }
-      if (url!.protocol !== "https:" || url!.username || url!.password)
-        fail("HTTPS 프로필 링크를 입력해 주세요.");
+      if (!/^[+0-9 ()-]{8,30}$/.test(phone))
+        fail("연락처 형식을 확인해 주세요.");
+      if (!socialProfileUrl(social))
+        fail("지원되는 SNS의 HTTPS 프로필 링크를 입력해 주세요.");
       const followers = integer(b.followers, "팔로워 수", 0, 100_000_000);
-      db.prepare(
-        "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=? WHERE user_id=?",
-      ).run(phone, address ?? null, social, followers, u.id);
+      db.transaction(() => {
+        db.prepare(
+          "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=? WHERE user_id=?",
+        ).run(phone, address ?? null, social, followers, u.id);
+        db.prepare("UPDATE users SET phone=? WHERE id=?").run(phone, u.id);
+      })();
       return c.json({ success: true });
     }),
   );
@@ -472,6 +473,11 @@ export function registerWorkflow(
         )
           fail("2차 활용 및 고화질 원본 제공 동의가 필요합니다.");
         if (!p.phone) fail("먼저 내 프로필에 연락처를 입력해 주세요.");
+        if (!profileComplete(p))
+          fail(
+            "캠페인 지원 전에 내 프로필에 SNS 계정과 팔로워 정보를 등록해 주세요.",
+            409,
+          );
         if (
           db
             .prepare(

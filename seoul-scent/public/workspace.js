@@ -109,11 +109,14 @@
     return result;
   }
   async function api(path, method = "GET", body) {
-    const response = await fetch("/api/work" + path, {
-      method,
-      headers: body ? { "Content-Type": "application/json" } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const response = await fetch(
+      path.startsWith("/api/") ? path : "/api/work" + path,
+      {
+        method,
+        headers: body ? { "Content-Type": "application/json" } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      },
+    );
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 401) location.assign("/login");
@@ -253,7 +256,7 @@
         kpi(t("누적 완료"), profile.completed_count) +
         kpi(t("현재 티어"), `T${profile.tier + 1}`) +
         kpi(t("노쇼 이력"), profile.no_show_count);
-      main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.social_url ? t('<div class="notice">SNS 정보를 등록하면 브랜드가 선정할 때 참고할 수 있습니다. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
+      main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.complete ? t('<div class="notice">캠페인 지원 전에 SNS 계정과 팔로워 정보를 등록해 주세요. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
         <div class="section-heading">
           <h2>내 캠페인</h2>
           <a href="/applications">전체 보기 →</a>
@@ -570,32 +573,40 @@
               ? t(
                   '<div class="warning">현재 노쇼 제재로 지원할 수 없습니다.</div>',
                 )
-              : html`<form class="panel" data-task="apply" data-id="${id}">
-                  <h2>이 캠페인에 지원하기</h2>
-                  <p class="muted">
-                    지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤
-                    해당 캠페인에 등록합니다.
-                  </p>
-                  <label class="check"
-                    ><input
-                      type="checkbox"
-                      name="secondary_use_consent"
-                      required
-                    /><span
-                      >[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에
-                      동의합니다.</span
-                    ></label
-                  ><label class="check"
-                    ><input
-                      type="checkbox"
-                      name="original_delivery_consent"
-                      required
-                    /><span
-                      >[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을 공유
-                      링크로 제공하는 데 동의합니다.</span
-                    ></label
-                  >${submit(t("지원하기"))}
-                </form>`;
+              : !profile.complete
+                ? html`<section class="panel">
+                    <h2>프로필 등록이 필요합니다</h2>
+                    <p>
+                      캠페인 지원 전에 SNS 계정과 팔로워 정보를 등록해 주세요.
+                    </p>
+                    <a class="primary" href="/profile">프로필 완성하기 →</a>
+                  </section>`
+                : html`<form class="panel" data-task="apply" data-id="${id}">
+                    <h2>이 캠페인에 지원하기</h2>
+                    <p class="muted">
+                      지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤
+                      해당 캠페인에 등록합니다.
+                    </p>
+                    <label class="check"
+                      ><input
+                        type="checkbox"
+                        name="secondary_use_consent"
+                        required
+                      /><span
+                        >[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에
+                        동의합니다.</span
+                      ></label
+                    ><label class="check"
+                      ><input
+                        type="checkbox"
+                        name="original_delivery_consent"
+                        required
+                      /><span
+                        >[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을
+                        공유 링크로 제공하는 데 동의합니다.</span
+                      ></label
+                    >${submit(t("지원하기"))}
+                  </form>`;
     } else {
       if (c.status !== "completed") {
         const locked = applications.length > 0 || c.status !== "recruiting";
@@ -1024,12 +1035,16 @@
       heading(
         t("내 프로필"),
         t("브랜드에 전달할 연락처와 SNS 정보를 입력해 주세요."),
+        `<a class="secondary" href="/account">${t("계정 정보 수정")}</a>`,
       ) +
       html`<section class="kpi-grid">
           ${kpi(t("현재 티어"), `T${p.tier + 1}`)}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
         </section>
         ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
         <form class="panel editor" data-task="profile">
+          <p class="note left">
+            ${t("지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.")}
+          </p>
           ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", t("대표 SNS 프로필 링크"), "url", 'required maxlength="500"', p.social_url)}${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', p.followers)}
           <p class="note left">
             배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지
@@ -1037,6 +1052,27 @@
           </p>
           ${submit(t("프로필 저장"))}
         </form>`;
+  }
+  async function account() {
+    const { account: a } = await api("/api/account");
+    root.innerHTML =
+      heading(
+        t("마이페이지"),
+        t("계정 정보와 비밀번호를 수정할 수 있습니다."),
+        role === "influencer"
+          ? `<a class="secondary" href="/profile">${t("내 프로필")}</a>`
+          : "",
+      ) +
+      `<form class="panel editor" data-task="account">
+        ${role === "brand" ? input("brand_name", t("브랜드명"), "text", 'required minlength="2" maxlength="80"', a.brand_name) + input("contact_name", t("담당자명"), "text", 'required minlength="2" maxlength="60"', a.contact_name) : input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', a.name)}
+        ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30" autocomplete="tel"', a.phone)}
+        ${input("email", t("이메일"), "email", 'required maxlength="254" autocomplete="email"', a.email)}
+        ${input("current_password", t("현재 비밀번호"), "password", 'required maxlength="128" autocomplete="current-password"')}
+        ${input("new_password", t("새 비밀번호 (변경할 때만 입력)"), "password", 'minlength="12" maxlength="128" autocomplete="new-password"')}
+        ${input("confirm_password", t("새 비밀번호 확인"), "password", 'minlength="12" maxlength="128" autocomplete="new-password"')}
+        <p class="note left">${t("이메일 또는 비밀번호를 변경하면 다른 기기의 로그인은 해제됩니다. 변경한 이메일로 앞으로의 안내 메일을 받습니다.")}</p>
+        ${submit(t("계정 정보 저장"))}
+      </form>`;
   }
   async function notifications() {
     const { notifications } = await api("/notifications");
@@ -1157,6 +1193,7 @@
       else if (/^\/applications\/\d+$/.test(path))
         await applicationDetail(path.split("/")[2]);
       else if (path === "/profile") await profile();
+      else if (path === "/account") await account();
       else if (path === "/notifications") await notifications();
       else if (path === "/admin/users") await users();
       else if (path === "/admin/settings") await settings();
@@ -1235,6 +1272,12 @@
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
+        case "account":
+          if (data.new_password !== data.confirm_password)
+            throw new Error(t("새 비밀번호와 확인 값이 일치하지 않습니다."));
+          await api("/api/account", "PUT", data);
+          location.assign("/account");
+          return;
         case "campaign": {
           const r = await api("/campaigns", "POST", data);
           location.assign("/campaigns/" + r.id);

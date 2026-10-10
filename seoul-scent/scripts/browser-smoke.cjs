@@ -12,6 +12,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       DATABASE_PATH: tmp + "/db.sqlite",
       PORT: "3102",
       NODE_ENV: "test",
+      EMAIL_PROVIDER: "none",
     },
     base = "http://localhost:3102";
   const seeded = spawnSync("npm", ["run", "admin:create"], {
@@ -102,15 +103,13 @@ const { spawn, spawnSync } = require("node:child_process"),
     const photoBuffer = require("node:fs").readFileSync(
       "tests/fixtures/campaign-photo.jpg",
     );
-    await brand
-      .locator("[data-campaign-photos]")
-      .setInputFiles(
-        Array.from({ length: 4 }, (_, i) => ({
-          name: `product-${i}.jpg`,
-          mimeType: "image/jpeg",
-          buffer: photoBuffer,
-        })),
-      );
+    await brand.locator("[data-campaign-photos]").setInputFiles(
+      Array.from({ length: 4 }, (_, i) => ({
+        name: `product-${i}.jpg`,
+        mimeType: "image/jpeg",
+        buffer: photoBuffer,
+      })),
+    );
     await brand.waitForFunction(
       () => document.querySelectorAll(".photo-preview").length === 4,
     );
@@ -165,7 +164,12 @@ const { spawn, spawnSync } = require("node:child_process"),
         .getAttribute("href"),
       "https://example.com/updated",
     );
-    await influencer.getByRole("link", { name: "내 프로필" }).click();
+    await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer
+      .getByRole("heading", { name: "프로필 등록이 필요합니다" })
+      .waitFor();
+    assert.equal(await influencer.locator('[data-task="apply"]').count(), 0);
+    await influencer.locator('.nav-item[href="/profile"]').click();
     await influencer.locator("[name=phone]").fill("01012345678");
 
     await influencer
@@ -501,6 +505,39 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer
       .getByRole("button", { name: "Submit final URL", exact: false })
       .waitFor();
+    for (const [page, role] of [
+      [brand, "brand"],
+      [influencer, "influencer"],
+    ]) {
+      await page.goto(base + "/account");
+      await page.locator("[name=current_password]").waitFor();
+      const email = `updated-${role}@example.test`;
+      await page.locator("[name=email]").fill(email);
+      await page.locator("[name=phone]").fill("01099998888");
+      await page.locator("[name=current_password]").fill(password);
+      await page
+        .locator("[name=new_password]")
+        .fill("Updated-browser-password-123!");
+      await page
+        .locator("[name=confirm_password]")
+        .fill("Updated-browser-password-123!");
+      await Promise.all([
+        page.waitForNavigation(),
+        page.locator("form[data-task=account] button[type=submit]").click(),
+      ]);
+      await page.locator("[name=email]").waitFor();
+      assert.equal(await page.locator("[name=email]").inputValue(), email);
+      assert.equal(
+        await page.locator("[name=current_password]").inputValue(),
+        "",
+      );
+      const result = await page.request.get(base + "/api/me");
+      assert.equal((await result.json()).user.email, email);
+      if (role === "influencer") {
+        const profile = await page.request.get(base + "/api/work/profile");
+        assert.equal((await profile.json()).profile.phone, "01099998888");
+      }
+    }
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },

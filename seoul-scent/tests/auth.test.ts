@@ -4,6 +4,173 @@ import { createHash } from "node:crypto";
 import { openDb, hashPassword } from "../src/seoul/db.js";
 import { createApp } from "../src/seoul/app.js";
 const password = "Test-password-123!";
+for (const role of ["brand", "influencer"])
+  test(`${role} account editing verifies current password, preserves role and revokes other sessions`, async () => {
+    const { db, app } = setup();
+    const account = {
+      role,
+      name: "테스트 성함",
+      brand_name: "테스트 브랜드",
+      contact_name: "담당자 이름",
+      phone: "01012345678",
+      email: `${role}@edit.test`,
+      password,
+    };
+    try {
+      assert.equal((await post(app, "/api/register", account)).status, 201);
+      const login = async (email = account.email, pwd = password) =>
+        post(app, "/api/login", { email, password: pwd });
+      const first = await login(),
+        second = await login();
+      let cookie = first.headers.get("set-cookie")!.split(";")[0];
+      const other = second.headers.get("set-cookie")!.split(";")[0];
+      const put = (data: any, cookieValue = cookie) =>
+        app.request("/api/account", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Cookie: cookieValue },
+          body: JSON.stringify(data),
+        });
+      assert.equal((await app.request("/api/account")).status, 401);
+      assert.equal(
+        (await app.request("/account", { headers: { Cookie: cookie } })).status,
+        200,
+      );
+      const before = (await (
+        await app.request("/api/account", { headers: { Cookie: cookie } })
+      ).json()) as any;
+      assert.ok(!("password_hash" in before.account));
+      assert.equal(
+        (await put({ phone: "01099998888", current_password: "wrong" })).status,
+        400,
+      );
+      assert.equal(
+        (
+          await put({
+            phone: "01099998888",
+            current_password: password,
+            new_password: "too-short",
+            confirm_password: "too-short",
+          })
+        ).status,
+        400,
+      );
+      const nextPassword = "Changed-password-456!",
+        nextEmail = `updated-${role}@edit.test`;
+      const response = await put({
+        name: "변경 성함",
+        brand_name: "변경 브랜드",
+        contact_name: "변경 담당자",
+        email: nextEmail,
+        phone: "01099998888",
+        current_password: password,
+        new_password: nextPassword,
+        confirm_password: nextPassword,
+        role: "admin",
+        id: 999,
+      });
+      assert.equal(response.status, 200, await response.clone().text());
+      const current = response.headers.get("set-cookie")!.split(";")[0];
+      assert.equal(
+        (await app.request("/api/me", { headers: { Cookie: cookie } })).status,
+        401,
+      );
+      assert.equal(
+        (await app.request("/api/me", { headers: { Cookie: other } })).status,
+        401,
+      );
+      const saved = (await (
+        await app.request("/api/account", { headers: { Cookie: current } })
+      ).json()) as any;
+      assert.equal(saved.account.role, role);
+      assert.equal(saved.account.email, nextEmail);
+      assert.equal(saved.account.phone, "01099998888");
+      if (role === "brand") {
+        assert.equal(saved.account.brand_name, "변경 브랜드");
+        assert.equal(saved.account.contact_name, "변경 담당자");
+      } else
+        assert.equal(
+          (
+            db
+              .prepare("SELECT phone FROM influencer_profiles WHERE user_id=?")
+              .get(saved.account.id) as any
+          ).phone,
+          "01099998888",
+        );
+      assert.equal((await login()).status, 401);
+      assert.equal((await login(nextEmail, password)).status, 401);
+      assert.equal((await login(nextEmail, nextPassword)).status, 200);
+    } finally {
+      db.close();
+    }
+  });
+test("account update rejects duplicate email, cross-site writes and throttles password guesses", async () => {
+  const { db, app } = setup();
+  try {
+    for (const email of ["one@test.com", "two@test.com"])
+      assert.equal(
+        (
+          await post(app, "/api/register", {
+            role: "influencer",
+            name: "테스트 이름",
+            phone: "01012345678",
+            email,
+            password,
+          })
+        ).status,
+        201,
+      );
+    const response = await post(app, "/api/login", {
+      email: "one@test.com",
+      password,
+    });
+    const cookie = response.headers.get("set-cookie")!.split(";")[0];
+    const update = (data: any, extra = {}) =>
+      app.request("/api/account", {
+        method: "PUT",
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+          ...extra,
+        },
+        body: JSON.stringify(data),
+      });
+    assert.equal(
+      (await update({ current_password: password, email: "TWO@test.com" }))
+        .status,
+      409,
+    );
+    assert.equal(
+      (await update({ current_password: password, phone: "invalid-number" }))
+        .status,
+      400,
+    );
+    assert.equal(
+      (
+        await update(
+          { current_password: password },
+          { Origin: "https://evil.example" },
+        )
+      ).status,
+      403,
+    );
+    for (let i = 0; i < 5; i++)
+      assert.equal(
+        (await update({ current_password: "incorrect" })).status,
+        400,
+      );
+    assert.equal((await update({ current_password: password })).status, 429);
+    assert.equal(
+      (
+        db
+          .prepare("SELECT email FROM users WHERE email='one@test.com'")
+          .get() as any
+      ).email,
+      "one@test.com",
+    );
+  } finally {
+    db.close();
+  }
+});
 function setup(production = false) {
   const db = openDb(":memory:");
   return { db, app: createApp(db, production) };
