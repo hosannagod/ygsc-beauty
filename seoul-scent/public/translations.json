@@ -376,5 +376,19 @@
   "사진 파일을 읽을 수 없습니다.": "Unable to read this photo file.",
   "사진 크기를 줄이지 못했습니다. 다른 사진을 선택해 주세요.": "Unable to resize this photo. Please choose another image.",
   "캠페인 사진은 최대 4장까지 등록할 수 있습니다.": "You can attach up to 4 campaign photos.",
-  "사진 준비 중입니다. 잠시 후 저장해 주세요.": "Photos are being prepared. Please save in a moment."
+  "사진 준비 중입니다. 잠시 후 저장해 주세요.": "Photos are being prepared. Please save in a moment.",
+  "발송 대기": "Queued",
+  "발송 중": "Sending",
+  "서비스 접수 완료": "Accepted by provider",
+  "발송 실패": "Failed",
+  "선정 안내 메일": "Selection notification emails",
+  "연결 설정 완료": "Mail settings configured",
+  "메일 연결 설정 필요": "Mail setup required",
+  "최근 24시간 발송 시도 한도": "Sending attempt limit per rolling 24 hours",
+  "서비스 접수 완료는 받은편지함 도착을 보장하지 않습니다.": "Provider acceptance does not guarantee inbox delivery.",
+  "시도 횟수": "Attempts",
+  "작업": "Actions",
+  "새로운 선정부터 메일 발송 기록이 표시됩니다.": "Email records appear for new selections after enabling mail.",
+  "이 안내 메일을 다시 발송할까요?": "Retry this notification email?",
+  "실패한 메일만 재시도할 수 있습니다.": "Only failed emails can be retried."
 }

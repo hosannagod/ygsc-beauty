@@ -221,7 +221,8 @@
       <h3>${esc(a.title)}</h3>
       <p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p>
       <p class="small muted">
-        ${a.review_required ? html`초안 ${esc(a.draft_date)} · ` : t("초안 검수 없음 · ")}최종 ${esc(a.final_date)}
+        ${a.review_required ? html`초안 ${esc(a.draft_date)} · ` : t("초안 검수 없음 · ")}최종
+        ${esc(a.final_date)}
       </p>
       ${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a
         class="primary link-button"
@@ -290,6 +291,14 @@
         </div>
         ${campaigns.length ? `<section class="campaign-grid">${campaigns.slice(0, 4).map(campaignCard).join("")}</section>` : empty(t("첫 캠페인을 준비해 보세요"), t("제품과 가이드라인을 등록하면 인플루언서 모집을 시작할 수 있습니다."))}`;
       if (role === "admin") {
+        const mail = await api("/admin/email");
+        const emailStates = {
+          pending: t("발송 대기"),
+          sending: t("발송 중"),
+          sent: t("서비스 접수 완료"),
+          failed: t("발송 실패"),
+        };
+        main += `<section class="panel"><h2>${t("선정 안내 메일")}</h2><p>${esc(mail.provider)} · ${mail.configured ? t("연결 설정 완료") : t("메일 연결 설정 필요")}</p><p>${t("최근 24시간 발송 시도 한도")}: ${esc(mail.daily_limit)}</p><p class="note left">${t("서비스 접수 완료는 받은편지함 도착을 보장하지 않습니다.")}</p>${mail.messages.length ? `<div class="table-wrap"><table><thead><tr><th>${t("이메일")}</th><th>${t("상태")}</th><th>${t("시도 횟수")}</th><th>${t("작업")}</th></tr></thead><tbody>${mail.messages.map((m) => `<tr><td>${esc(m.recipient)}</td><td>${emailStates[m.status] || esc(m.status)}<small>${esc(m.last_error)}</small></td><td>${m.attempts}</td><td>${m.status === "failed" ? `<button class="secondary" data-email-retry="${m.id}">${t("다시 시도")}</button>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : `<p>${t("새로운 선정부터 메일 발송 기록이 표시됩니다.")}</p>`}</section>`;
         const { alerts } = await api("/admin/alerts");
         main += html`<div class="section-heading">
             <h2>마감 임박 · 노쇼</h2>
@@ -533,7 +542,8 @@
           <div class="deadline-strip">
             <span>모집 시작 <strong>${esc(c.recruit_start_date)}</strong></span
             ><span>모집 마감 <strong>${esc(c.recruit_date)}</strong></span
-            >${c.review_required ? html`<span>초안 <strong>${esc(c.draft_date)}</strong></span>` : t("<span>초안 검수 없음</span>")}<span>최종 <strong>${esc(c.final_date)}</strong></span
+            >${c.review_required ? html`<span>초안 <strong>${esc(c.draft_date)}</strong></span>` : t("<span>초안 검수 없음</span>")}<span
+              >최종 <strong>${esc(c.final_date)}</strong></span
             ><span>한국 시간 · 당일 자정 마감</span>
           </div>
         </section>`;
@@ -962,7 +972,9 @@
                 <dt>택배사</dt>
                 <dd>${esc(a.carrier) || t("등록 전")}</dd>
                 <dt>송장번호</dt>
-                <dd>${esc(a.tracking_number) || t("등록 전")}${a.tracking_url ? `<p>${link(a.tracking_url, t("배송 조회"))}</p>` : ""}</dd>
+                <dd>
+                  ${esc(a.tracking_number) || t("등록 전")}${a.tracking_url ? `<p>${link(a.tracking_url, t("배송 조회"))}</p>` : ""}
+                </dd>
                 <dt>배송지</dt>
                 <dd>
                   ${a.address ? `${esc(a.postal_code)} ${esc(a.address)} ${esc(a.address_detail)}` : t("선정 후 등록 대기")}
@@ -970,7 +982,9 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
-              <p class="note left">${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}</p>
+              <p class="note left">
+                ${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}
+              </p>
             </section>
             <section class="panel">
               <h3>동의 기록</h3>
@@ -1287,6 +1301,18 @@
       }
       if (button.hasAttribute("data-read-notifications")) {
         await api("/notifications/read", "POST", {});
+        await render();
+      }
+      if (button.dataset.emailRetry) {
+        if (!(await confirmAction(t("이 안내 메일을 다시 발송할까요?"))))
+          return;
+        button.disabled = true;
+        await api(
+          `/admin/email/${button.dataset.emailRetry}/retry`,
+          "POST",
+          {},
+        );
+        toast(t("처리되었습니다."));
         await render();
       }
       if (button.dataset.release) {

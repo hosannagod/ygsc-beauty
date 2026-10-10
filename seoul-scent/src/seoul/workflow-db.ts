@@ -140,4 +140,14 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   db.exec(
     `CREATE TABLE IF NOT EXISTS campaign_images(id INTEGER PRIMARY KEY,campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,position INTEGER NOT NULL,data BLOB NOT NULL); CREATE INDEX IF NOT EXISTS campaign_images_campaign ON campaign_images(campaign_id,position); INSERT OR IGNORE INTO schema_version VALUES(7)`,
   );
+  db.exec(`CREATE TABLE IF NOT EXISTS email_outbox (
+    id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES applications(id),
+    event_key TEXT NOT NULL UNIQUE, recipient TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','failed')),
+    attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL, last_attempt INTEGER,
+    last_error TEXT NOT NULL DEFAULT '', provider_id TEXT NOT NULL DEFAULT '', sent_at INTEGER, created_at INTEGER NOT NULL
+  ); CREATE INDEX IF NOT EXISTS email_outbox_pending ON email_outbox(status,next_attempt);
+  CREATE TABLE IF NOT EXISTS email_attempts(id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES email_outbox(id),created_at INTEGER NOT NULL);
+  CREATE INDEX IF NOT EXISTS email_attempts_time ON email_attempts(created_at);`);
+  db.exec("INSERT OR IGNORE INTO schema_version VALUES(8)");
 }

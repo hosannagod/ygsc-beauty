@@ -1,3 +1,4 @@
+import { queueSelectionEmail, emailStatus } from "./email.js";
 import {
   parseCampaignImages,
   saveCampaignImages,
@@ -781,12 +782,38 @@ export function registerWorkflow(
           "UPDATE applications SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
         ).run(status, a.id);
         event(db, a, u.id, status, note, link);
+        if (b.action === "select") queueSelectionEmail(db, a.id);
         notify(
           db,
           influencer ? a.brand_id : a.influencer_id,
           `${a.title}: ${note || status}`,
           influencer ? `/campaigns/${a.campaign_id}` : `/applications/${a.id}`,
         );
+      })();
+      return c.json({ success: true });
+    }),
+  );
+  app.get(
+    "/api/work/admin/email",
+    wrap((c) => {
+      role(c, "admin");
+      return c.json(emailStatus(db));
+    }),
+  );
+  app.post(
+    "/api/work/admin/email/:id/retry",
+    wrap((c) => {
+      const u = role(c, "admin");
+      db.transaction(() => {
+        const result = db
+          .prepare(
+            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed'",
+          )
+          .run(Date.now(), id(c));
+        if (!result.changes) fail("실패한 메일만 재시도할 수 있습니다.", 409);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,?,?,?)",
+        ).run(u.id, "email_retry", `email:${id(c)}`, Date.now());
       })();
       return c.json({ success: true });
     }),

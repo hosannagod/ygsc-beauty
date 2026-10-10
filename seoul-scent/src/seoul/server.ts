@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.js";
 import { openDb } from "./db.js";
+import { emailWorker, emailConfig } from "./email.js";
 const db = openDb(process.env.DATABASE_PATH || "./data/seoul-scent.db");
 const production = process.env.NODE_ENV === "production";
 const publicOrigin = process.env.APP_ORIGIN
@@ -27,15 +28,29 @@ const sweep = setInterval(() => {
   }
 }, 60_000);
 sweep.unref();
+const sendEmails = emailWorker(db);
+let emailRun: Promise<void> = Promise.resolve();
+const runEmails = () => {
+  emailRun = sendEmails().catch(() =>
+    console.error("Email worker failed; check database health."),
+  );
+};
+const mail = emailConfig();
+console.log(`Email provider: ${mail.provider}; configured: ${mail.configured}`);
+runEmails();
+const mailTimer = setInterval(runEmails, 30_000);
+mailTimer.unref();
 const port = Number(process.env.PORT || 3000);
 const server = serve({ fetch: app.fetch, port }, () =>
   console.log(`Seoul Scent listening on port ${port}`),
 );
 for (const signal of ["SIGINT", "SIGTERM"] as const)
-  process.on(signal, () =>
-    server.close(() => {
-      clearInterval(sweep);
+  process.on(signal, () => {
+    clearInterval(sweep);
+    clearInterval(mailTimer);
+    server.close(async () => {
+      await emailRun;
       db.close();
       process.exit(0);
-    }),
-  );
+    });
+  });

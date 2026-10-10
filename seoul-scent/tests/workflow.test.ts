@@ -110,6 +110,71 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("selection queues email atomically; mail history and retry are admin-only", async () => {
+  const previous = process.env.EMAIL_PROVIDER;
+  process.env.EMAIL_PROVIDER = "brevo";
+  const { db, req, create, apply, action } = await fixture();
+  try {
+    const campaignId = await create();
+    const applicationId = await apply(campaignId);
+    assert.equal(
+      (await action(applicationId, "select", {}, "otherbrand")).status,
+      403,
+    );
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
+      0,
+    );
+    assert.equal((await action(applicationId, "select")).status, 200);
+    assert.equal((await action(applicationId, "select")).status, 409);
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
+      1,
+    );
+    assert.equal((await req("influencer", "/admin/email")).status, 403);
+    assert.equal((await req("brand", "/admin/email")).status, 403);
+    assert.equal((await req("", "/admin/email")).status, 401);
+    const response = await req("admin", "/admin/email");
+    assert.equal(response.status, 200);
+    const info = (await response.json()) as any;
+    assert.equal(info.messages.length, 1);
+    const id = info.messages[0].id;
+    assert.equal(
+      (await req("admin", `/admin/email/${id}/retry`, "POST", {})).status,
+      409,
+    );
+    db.prepare(
+      "UPDATE email_outbox SET status='failed',attempts=5 WHERE id=?",
+    ).run(id);
+    assert.equal(
+      (await req("brand", `/admin/email/${id}/retry`, "POST", {})).status,
+      403,
+    );
+    assert.equal(
+      (await req("admin", `/admin/email/${id}/retry`, "POST", {})).status,
+      200,
+    );
+    assert.equal(
+      (db.prepare("SELECT status FROM email_outbox WHERE id=?").get(id) as any)
+        .status,
+      "pending",
+    );
+    assert.equal(
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM admin_audit WHERE action='email_retry'",
+          )
+          .get() as any
+      ).n,
+      1,
+    );
+  } finally {
+    db.close();
+    if (previous === undefined) delete process.env.EMAIL_PROVIDER;
+    else process.env.EMAIL_PROVIDER = previous;
+  }
+});
 test("full lifecycle with revision history, consent, notifications, completion exactly once", async () => {
   const f = await fixture();
   try {
