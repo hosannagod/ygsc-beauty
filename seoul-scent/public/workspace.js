@@ -124,6 +124,7 @@
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 401) location.assign("/login");
+      if (data.redirect === "/account") location.assign("/account");
       throw new Error(t(data.error) || t("요청을 처리하지 못했습니다."));
     }
     if (window.ScentI18n.lang === "en" && method === "GET") {
@@ -1072,6 +1073,7 @@
   }
   async function account() {
     const { account: a } = await api("/api/account");
+    document.body.dataset.mustChange = a.must_change_password ? "1" : "0";
     root.innerHTML =
       heading(
         t("마이페이지"),
@@ -1081,12 +1083,13 @@
           : "",
       ) +
       `<form class="panel editor" data-task="account">
+        ${a.must_change_password ? `<div class="warning">${t("임시 비밀번호로 로그인했습니다. 새 비밀번호를 설정해야 서비스를 이용할 수 있습니다.")}</div>` : ""}
         ${role === "brand" ? input("brand_name", t("브랜드명"), "text", 'required minlength="2" maxlength="80"', a.brand_name) + input("contact_name", t("담당자명"), "text", 'required minlength="2" maxlength="60"', a.contact_name) : input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', a.name)}
         ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30" autocomplete="tel"', a.phone)}
         ${input("email", t("이메일"), "email", 'required maxlength="254" autocomplete="email"', a.email)}
         ${input("current_password", t("현재 비밀번호"), "password", 'required maxlength="128" autocomplete="current-password"')}
-        ${input("new_password", t("새 비밀번호 (변경할 때만 입력)"), "password", 'minlength="12" maxlength="128" autocomplete="new-password"')}
-        ${input("confirm_password", t("새 비밀번호 확인"), "password", 'minlength="12" maxlength="128" autocomplete="new-password"')}
+        ${input("new_password", t("새 비밀번호 (변경할 때만 입력)"), "password", `${a.must_change_password ? "required" : ""} minlength="12" maxlength="128" autocomplete="new-password"`)}
+        ${input("confirm_password", t("새 비밀번호 확인"), "password", `${a.must_change_password ? "required" : ""} minlength="12" maxlength="128" autocomplete="new-password"`)}
         <p class="note left">${t("이메일 또는 비밀번호를 변경하면 다른 기기의 로그인은 해제됩니다. 변경한 이메일로 앞으로의 안내 메일을 받습니다.")}</p>
         ${submit(t("계정 정보 저장"))}
       </form>`;
@@ -1144,6 +1147,15 @@
       "beforeend",
       '<section id="history-results"></section>',
     );
+    root.insertAdjacentHTML(
+      "beforeend",
+      `<form class="panel editor" data-task="influencer-import">
+      <h2>${t("인플루언서 엑셀 등록")}</h2><p>${t("기존 이메일은 건너뛰며 비밀번호와 권한을 변경하지 않습니다. 신규 회원은 첫 로그인 시 비밀번호를 반드시 변경해야 합니다.")}</p>
+      <label>${t("지원서 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>
+      ${input("initial_password", t("임시 비밀번호"), "password", 'required minlength="4" maxlength="128"', "0000")}
+      ${submit(t("검토 후 등록"))}<div id="influencer-import-result"></div>
+    </form>`,
+    );
   }
   async function settings() {
     const [{ settings: s }, { audit }] = await Promise.all([
@@ -1175,7 +1187,7 @@
         </form>
         <section class="panel">
           <h3>운영 변경 기록</h3>
-          ${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${a.action === "settings" ? t("정책 변경") : t("지원 제한 해제")} · ${datetime(a.created_at)}</p>`).join("") : t('<p class="muted">변경 기록이 없습니다.</p>')}
+          ${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${esc({ settings: t("정책 변경"), release: t("지원 제한 해제"), email_retry: t("메일 재시도"), influencer_import: t("인플루언서 엑셀 등록") }[a.action] || a.action)} · ${datetime(a.created_at)}</p>`).join("") : t('<p class="muted">변경 기록이 없습니다.</p>')}
         </section>`;
   }
   async function refreshCount() {
@@ -1219,7 +1231,7 @@
           t("페이지를 찾을 수 없습니다"),
           t("메뉴에서 다른 화면을 선택해 주세요."),
         );
-      await refreshCount();
+      if (document.body.dataset.mustChange !== "1") await refreshCount();
     } catch (e) {
       root.innerHTML =
         heading(t("화면을 불러오지 못했습니다"), esc(e.message)) +
@@ -1289,6 +1301,46 @@
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
+        case "influencer-import": {
+          const file = form.querySelector("[name=file]").files[0];
+          if (!file || file.size > 2 * 1024 * 1024)
+            throw new Error(t("2MB 이하 XLSX 파일을 선택해 주세요."));
+          const encoded = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          const payload = {
+            file: encoded,
+            initial_password: data.initial_password,
+            dry_run: true,
+          };
+          const preview = await api(
+            "/admin/influencers/import",
+            "POST",
+            payload,
+          );
+          const result = form.querySelector("#influencer-import-result");
+          const summary = (r) =>
+            `${t("등록 대상")}: ${r.ready} · ${t("등록 완료")}: ${r.imported} · ${t("기존 계정")}: ${r.existing} · ${t("검토 필요")}: ${r.issues.length}`;
+          result.innerHTML = `<p>${esc(summary(preview))}</p>${preview.issues.map((issue) => `<p>${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
+          if (!preview.ready) return;
+          if (
+            !(await confirmAction(
+              summary(preview) + "\n" + t("신규 인플루언서 계정을 등록할까요?"),
+            ))
+          )
+            return;
+          const imported = await api("/admin/influencers/import", "POST", {
+            ...payload,
+            dry_run: false,
+          });
+          result.innerHTML = `<p>${esc(summary(imported))}</p><p>${t("프로필 확인 필요")}: ${imported.needs_profile}</p>${imported.issues.map((issue) => `<p>${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
+          form.querySelector("[name=initial_password]").value = "";
+          toast(t("등록되었습니다."));
+          return;
+        }
         case "account":
           if (data.new_password !== data.confirm_password)
             throw new Error(t("새 비밀번호와 확인 값이 일치하지 않습니다."));

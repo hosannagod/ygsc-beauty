@@ -551,6 +551,68 @@ const { spawn, spawnSync } = require("node:child_process"),
         assert.equal((await profile.json()).profile.phone, "01099998888");
       }
     }
+    const importBook = new (require("exceljs").Workbook)(),
+      importSheet = importBook.addWorksheet("responses");
+    importSheet.addRow([
+      "Name / 이름",
+      "Email / 이메일",
+      "연락처(Contact number)",
+      "Profile URL / 채널 링크",
+      "Current follower count on this channel / 해당 채널 팔로워 수",
+    ]);
+    importSheet.addRow([
+      "Imported Creator",
+      "imported@example.test",
+      "01012345678",
+      "https://instagram.com/imported",
+      2500,
+    ]);
+    await admin.goto(base + "/admin/users");
+    await admin
+      .locator('form[data-task="influencer-import"] input[type=file]')
+      .setInputFiles({
+        name: "responses.xlsx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        buffer: Buffer.from(await importBook.xlsx.writeBuffer()),
+      });
+    await admin.getByRole("button", { name: "검토 후 등록" }).click();
+    await admin.locator("#confirm-accept").click();
+    await admin
+      .locator("#influencer-import-result")
+      .getByText(/등록 완료: 1/)
+      .waitFor();
+    const importedPage = await browser.newPage();
+    importedPage.on("pageerror", (e) => errors.push(e.message));
+    await importedPage.goto(base + "/login");
+    await importedPage.locator("[name=email]").fill("imported@example.test");
+    await importedPage.locator("[name=password]").fill("0000");
+    await importedPage
+      .getByRole("button", { name: "로그인", exact: false })
+      .click();
+    await importedPage.waitForURL("**/account");
+    await importedPage.locator("[name=current_password]").waitFor();
+    assert.equal(
+      (await importedPage.request.get(base + "/api/work/campaigns")).status(),
+      403,
+    );
+    await importedPage.locator("[name=current_password]").fill("0000");
+    await importedPage
+      .locator("[name=new_password]")
+      .fill("Imported-new-password-123!");
+    await importedPage
+      .locator("[name=confirm_password]")
+      .fill("Imported-new-password-123!");
+    await Promise.all([
+      importedPage.waitForNavigation(),
+      importedPage
+        .locator("form[data-task=account] button[type=submit]")
+        .click(),
+    ]);
+    assert.equal(
+      (await importedPage.request.get(base + "/api/work/campaigns")).status(),
+      200,
+    );
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },

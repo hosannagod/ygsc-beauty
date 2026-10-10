@@ -8,7 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { openDb, hashPassword, verifyPassword, type User } from "./db.js";
 import { page } from "./views.js";
 
-const selectUser = "id, email, name, role";
+const selectUser = "id, email, name, role, must_change_password";
 const roles = ["admin", "brand", "influencer"] as const;
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
@@ -63,6 +63,27 @@ export function createApp(
             .get(digest(token), Date.now()) as User) || null
         : null,
     );
+    if (
+      c.get("user")?.must_change_password &&
+      ![
+        "/account",
+        "/api/account",
+        "/api/me",
+        "/api/logout",
+        "/health",
+      ].includes(c.req.path) &&
+      !c.req.path.startsWith("/assets/")
+    ) {
+      return c.req.path.startsWith("/api/")
+        ? c.json(
+            {
+              error: "임시 비밀번호를 먼저 변경해 주세요.",
+              redirect: "/account",
+            },
+            403,
+          )
+        : c.redirect("/account");
+    }
     await next();
   });
   function session(c: any, user: User) {
@@ -154,7 +175,7 @@ export function createApp(
     return c.json({
       account: db
         .prepare(
-          "SELECT id,email,name,role,brand_name,contact_name,phone FROM users WHERE id=?",
+          "SELECT id,email,name,role,brand_name,contact_name,phone,must_change_password FROM users WHERE id=?",
         )
         .get(user.id),
     });
@@ -212,6 +233,8 @@ export function createApp(
     )
       return c.json({ error: "이름·이메일·연락처를 확인해 주세요." }, 400);
     const password = body.new_password;
+    if (saved.must_change_password && !password)
+      return c.json({ error: "임시 비밀번호를 먼저 변경해 주세요." }, 400);
     if (
       password !== undefined &&
       (typeof password !== "string" ||
@@ -256,6 +279,10 @@ export function createApp(
       db.prepare("DELETE FROM login_attempts WHERE email=?").run(attemptKey);
       if (email !== saved.email || password)
         db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+      if (password)
+        db.prepare("UPDATE users SET must_change_password=0 WHERE id=?").run(
+          user.id,
+        );
     })();
     // Rotate this session after credential changes; all other sessions stay revoked.
     if (email !== saved.email || password)
@@ -373,9 +400,15 @@ export function createApp(
       email: user.email,
       name: user.name,
       role: user.role,
+      must_change_password: user.must_change_password,
     };
     session(c, safeUser);
-    return c.json({ user: safeUser, redirect: `/dashboard/${user.role}` });
+    return c.json({
+      user: safeUser,
+      redirect: user.must_change_password
+        ? "/account"
+        : `/dashboard/${user.role}`,
+    });
   });
   app.post("/api/logout", (c) => {
     const token = getCookie(c, cookie);

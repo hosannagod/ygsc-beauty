@@ -29,6 +29,7 @@ export function socialProfileUrl(value: unknown): boolean {
 export function profileComplete(profile: any): boolean {
   return (
     !!profile &&
+    !profile.import_review_required &&
     /^[+0-9 ()-]{8,30}$/.test(profile.phone) &&
     socialProfileUrl(profile.social_url) &&
     Number.isInteger(profile.followers) &&

@@ -1,5 +1,13 @@
 import type { openDb } from "./db.js";
 export function initializeWorkflow(db: ReturnType<typeof openDb>) {
+  if (
+    !(db.prepare("PRAGMA table_info(users)").all() as { name: string }[]).some(
+      (c) => c.name === "must_change_password",
+    )
+  )
+    db.exec(
+      "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))",
+    );
   db.exec(`
     CREATE TABLE IF NOT EXISTS influencer_profiles (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -162,4 +170,15 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       `CREATE TABLE IF NOT EXISTS activity_certificates(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,completed_count INTEGER NOT NULL,activities TEXT NOT NULL,issued_at INTEGER NOT NULL,UNIQUE(user_id,completed_count))`,
     );
   })();
+  if (
+    !(
+      db.prepare("PRAGMA table_info(influencer_profiles)").all() as {
+        name: string;
+      }[]
+    ).some((c) => c.name === "import_review_required")
+  )
+    db.exec(
+      "ALTER TABLE influencer_profiles ADD COLUMN import_review_required INTEGER NOT NULL DEFAULT 0",
+    );
+  db.exec("INSERT OR IGNORE INTO schema_version VALUES(10)");
 }

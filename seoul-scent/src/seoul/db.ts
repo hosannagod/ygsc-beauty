@@ -5,7 +5,13 @@ import { dirname } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export type Role = "admin" | "brand" | "influencer";
-export type User = { id: number; email: string; name: string; role: Role };
+export type User = {
+  id: number;
+  email: string;
+  name: string;
+  role: Role;
+  must_change_password?: number;
+};
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;

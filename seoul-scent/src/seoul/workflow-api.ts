@@ -1,4 +1,5 @@
 import { tierLabel } from "./tier.js";
+import { importInfluencers } from "./influencer-import.js";
 import { queueSelectionEmail, emailStatus } from "./email.js";
 import { profileComplete, socialProfileUrl } from "./profile.js";
 import {
@@ -40,6 +41,36 @@ export function registerWorkflow(
   db: DB,
 ) {
   const translateContent = contentTranslator(db);
+  app.post("/api/work/admin/influencers/import", async (c) => {
+    const u = c.get("user");
+    if (!u) return c.json({ error: "로그인이 필요합니다." }, 401);
+    if (u.role !== "admin")
+      return c.json({ error: "접근 권한이 없습니다." }, 403);
+    try {
+      const b = await c.req.json().catch(() => null);
+      if (!b || typeof b !== "object" || Array.isArray(b))
+        fail("입력 내용을 확인해 주세요.");
+      if (
+        typeof b.file !== "string" ||
+        b.file.length > 2_800_000 ||
+        !/^[A-Za-z0-9+/]+=*$/.test(b.file)
+      )
+        fail("2MB 이하 XLSX 파일을 선택해 주세요.");
+      return c.json(
+        await importInfluencers(
+          db,
+          Buffer.from(b.file, "base64"),
+          b.initial_password,
+          b.dry_run !== false,
+          u.id,
+        ),
+      );
+    } catch (e) {
+      if (e instanceof WorkflowError)
+        return c.json({ error: e.message }, e.status as any);
+      throw e;
+    }
+  });
   app.get("/api/work/campaigns/:id/english", async (c) => {
     try {
       const u = c.get("user");
@@ -149,7 +180,7 @@ export function registerWorkflow(
       const followers = integer(b.followers, "팔로워 수", 0, 100_000_000);
       db.transaction(() => {
         db.prepare(
-          "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=? WHERE user_id=?",
+          "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=?,import_review_required=0 WHERE user_id=?",
         ).run(phone, address ?? null, social, followers, u.id);
         db.prepare("UPDATE users SET phone=? WHERE id=?").run(phone, u.id);
       })();
