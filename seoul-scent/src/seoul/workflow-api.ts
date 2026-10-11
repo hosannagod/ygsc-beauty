@@ -1252,6 +1252,77 @@ export function registerWorkflow(
       return c.json({ success: true });
     }),
   );
+  app.put(
+    "/api/work/admin/users/:id/profile",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      db.transaction(() => {
+        const user = db
+          .prepare("SELECT id,name,role FROM users WHERE id=?")
+          .get(target) as any;
+        if (!user || user.role !== "influencer")
+          fail("인플루언서를 찾을 수 없습니다.", 404);
+        const profile = db
+          .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+          .get(target) as any;
+        const name = text(b.name ?? user.name, "이름", 2, 60);
+        const phone = text(b.phone ?? profile.phone, "연락처", 0, 30);
+        const social = text(
+          b.social_url ?? profile.social_url,
+          "SNS 프로필 URL",
+          0,
+          500,
+        );
+        const followers = integer(
+          b.followers ?? profile.followers,
+          "팔로워 수",
+          0,
+          100_000_000,
+        );
+        if (phone && !/^[+0-9 ()-]{8,30}$/.test(phone))
+          fail("연락처 형식을 확인해 주세요.");
+        if (social && !socialProfileUrl(social))
+          fail("지원되는 SNS의 HTTPS 프로필 링크를 입력해 주세요.");
+        const reviewed = profileComplete({
+          ...profile,
+          phone,
+          social_url: social,
+          followers,
+          import_review_required: 0,
+        });
+        db.prepare("UPDATE users SET name=?,phone=? WHERE id=?").run(
+          name,
+          phone,
+          target,
+        );
+        db.prepare(
+          "UPDATE influencer_profiles SET phone=?,social_url=?,followers=?,import_review_required=? WHERE user_id=?",
+        ).run(
+          phone,
+          social,
+          followers,
+          reviewed ? 0 : profile.import_review_required,
+          target,
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          target,
+          "profile_edit",
+          JSON.stringify({
+            fields: ["name", "phone", "social_url", "followers"].filter(
+              (field) => Object.hasOwn(b, field),
+            ),
+          }),
+          Date.now(),
+        );
+      })();
+      return c.json({ success: true });
+    }),
+  );
   app.get(
     "/api/work/admin/users/:id/history",
     wrap((c) => {

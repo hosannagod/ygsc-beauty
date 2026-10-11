@@ -1535,3 +1535,97 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     f.db.close();
   }
 });
+
+test("admin profile editing authorizes only admins, validates atomically and preserves account and activity fields", async () => {
+  const f = await fixture();
+  try {
+    const target = f.ids.influencer;
+    const endpoint = `/admin/users/${target}/profile`;
+    const before = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(target) as any;
+    const profile = f.db
+      .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+      .get(target) as any;
+    for (const actor of ["brand", "influencer", "other"])
+      assert.equal(
+        (
+          await f.req(actor, endpoint, "PUT", {
+            social_url: "https://instagram.com/edited",
+          })
+        ).status,
+        403,
+      );
+    assert.equal(
+      (await f.req("admin", `/admin/users/${f.ids.brand}/profile`, "PUT", {}))
+        .status,
+      404,
+    );
+    assert.equal(
+      (
+        await f.req("admin", endpoint, "PUT", {
+          name: "Updated Name",
+          social_url: "javascript:alert(1)",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (f.db.prepare("SELECT name FROM users WHERE id=?").get(target) as any)
+        .name,
+      before.name,
+    );
+    const edited = await f.req("admin", endpoint, "PUT", {
+      name: "Updated Name",
+      phone: "01087654321",
+      social_url: "https://www.tiktok.com/@edited",
+      followers: 25000,
+      role: "admin",
+      email: "changed@example.test",
+      completed_count: 999,
+      tier: 4,
+      blacklisted: 1,
+    });
+    assert.equal(edited.status, 200, await edited.text());
+    const after = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(target) as any;
+    assert.equal(after.name, "Updated Name");
+    assert.equal(after.phone, "01087654321");
+    for (const field of [
+      "email",
+      "role",
+      "password_hash",
+      "must_change_password",
+    ])
+      assert.equal(after[field], before[field]);
+    const p = f.db
+      .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+      .get(target) as any;
+    assert.equal(p.social_url, "https://www.tiktok.com/@edited");
+    assert.equal(p.phone, after.phone);
+    assert.equal(p.followers, 25000);
+    for (const field of [
+      "completed_count",
+      "tier",
+      "blacklisted",
+      "blocked_until",
+      "no_show_count",
+      "onboarding_approved",
+      "address",
+    ])
+      assert.equal(p[field], profile[field]);
+    const audit = f.db
+      .prepare("SELECT * FROM admin_audit WHERE action='profile_edit'")
+      .get() as any;
+    assert.equal(audit.actor_id, f.ids.admin);
+    assert.equal(audit.target_user_id, target);
+    assert.equal(
+      (await f.req("admin", endpoint, "PUT", { social_url: "", phone: "" }))
+        .status,
+      200,
+    );
+  } finally {
+    f.db.close();
+  }
+});

@@ -238,6 +238,28 @@ const { spawn, spawnSync } = require("node:child_process"),
       ),
     );
     assert.equal(await admin.locator("#history-results").innerText(), "");
+    await memberDialog.getByText("프로필 정보 수정", { exact: true }).click();
+    const profileEditor = memberDialog.locator(
+      'form[data-task="admin-profile"]',
+    );
+    await profileEditor
+      .locator("[name=social_url]")
+      .fill("https://www.tiktok.com/@seoulcreator");
+    await profileEditor.locator("[name=followers]").fill("15000");
+    await profileEditor.getByRole("button", { name: "프로필 저장" }).click();
+    await memberDialog.waitFor({ state: "hidden" });
+    await admin.locator("[data-history]").first().click();
+    await memberDialog.waitFor({ state: "visible" });
+    assert.ok(
+      (await memberDialog.locator(".influencer-fields").innerText()).includes(
+        "https://www.tiktok.com/@seoulcreator",
+      ),
+    );
+    assert.ok(
+      (await memberDialog.locator(".influencer-fields").innerText()).includes(
+        "15,000",
+      ),
+    );
     await memberDialog.locator("[data-close-influencer]").click();
     assert.equal(await memberDialog.isVisible(), false);
     await admin.locator("[data-history]").first().click();

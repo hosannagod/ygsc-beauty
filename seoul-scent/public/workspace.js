@@ -1667,6 +1667,12 @@
           location.assign("/applications/" + r.id);
           return;
         }
+        case "admin-profile":
+          await api(`/admin/users/${form.dataset.id}/profile`, "PUT", data);
+          document.querySelector("#influencer-detail").close();
+          await refreshUsers();
+          toast(t("저장되었습니다."));
+          return;
         case "profile":
           await api("/profile", "PUT", data);
           break;
@@ -1843,6 +1849,20 @@
                 </dd>
               </div>
             </dl>
+            <details class="detail-history">
+              <summary>${t("프로필 정보 수정")}</summary>
+              <form
+                class="editor"
+                data-task="admin-profile"
+                data-id="${person.id}"
+              >
+                ${input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', person.name)}
+                ${input("phone", t("연락처"), "tel", 'maxlength="30"', person.phone || "")}
+                ${input("social_url", t("대표 SNS 프로필 링크"), "url", 'maxlength="500" placeholder="https://www.instagram.com/account"', person.social_url || "")}
+                ${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', person.followers)}
+                ${submit(t("프로필 저장"))}
+              </form>
+            </details>
             <details open class="detail-history">
               <summary>${t("기존 프로젝트 참여 이력")}</summary>
               ${historyCards(history)}
