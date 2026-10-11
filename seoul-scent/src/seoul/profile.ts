@@ -2,25 +2,11 @@ export function socialProfileUrl(value: unknown): boolean {
   if (typeof value !== "string" || value.length > 500) return false;
   try {
     const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
     return (
-      url.protocol === "https:" &&
+      ["https:", "http:"].includes(url.protocol) &&
+      !!url.hostname &&
       !url.username &&
-      !url.password &&
-      [
-        "instagram.com",
-        "tiktok.com",
-        "youtube.com",
-        "m.youtube.com",
-        "xiaohongshu.com",
-        "xhslink.com",
-        "rednote.com",
-        "facebook.com",
-        "m.facebook.com",
-        "x.com",
-        "twitter.com",
-      ].includes(host) &&
-      url.pathname !== "/"
+      !url.password
     );
   } catch {
     return false;

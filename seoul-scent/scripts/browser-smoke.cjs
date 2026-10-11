@@ -244,7 +244,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     );
     await profileEditor
       .locator("[name=social_url]")
-      .fill("https://www.tiktok.com/@seoulcreator");
+      .fill("https://xhslink.cn/m/5XecEtzbF0m");
     await profileEditor.locator("[name=followers]").fill("15000");
     await profileEditor.getByRole("button", { name: "프로필 저장" }).click();
     await memberDialog.waitFor({ state: "hidden" });
@@ -252,7 +252,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     await memberDialog.waitFor({ state: "visible" });
     assert.ok(
       (await memberDialog.locator(".influencer-fields").innerText()).includes(
-        "https://www.tiktok.com/@seoulcreator",
+        "https://xhslink.cn/m/5XecEtzbF0m",
       ),
     );
     assert.ok(

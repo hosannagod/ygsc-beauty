@@ -278,7 +278,7 @@ export function registerWorkflow(
       if (!/^[+0-9 ()-]{8,30}$/.test(phone))
         fail("연락처 형식을 확인해 주세요.");
       if (!socialProfileUrl(social))
-        fail("지원되는 SNS의 HTTPS 프로필 링크를 입력해 주세요.");
+        fail("올바른 HTTP/HTTPS SNS 프로필 링크를 입력해 주세요.");
       const followers = integer(b.followers, "팔로워 수", 0, 100_000_000);
       db.transaction(() => {
         db.prepare(
@@ -1284,7 +1284,7 @@ export function registerWorkflow(
         if (phone && !/^[+0-9 ()-]{8,30}$/.test(phone))
           fail("연락처 형식을 확인해 주세요.");
         if (social && !socialProfileUrl(social))
-          fail("지원되는 SNS의 HTTPS 프로필 링크를 입력해 주세요.");
+          fail("올바른 HTTP/HTTPS SNS 프로필 링크를 입력해 주세요.");
         const reviewed = profileComplete({
           ...profile,
           phone,

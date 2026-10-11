@@ -206,7 +206,7 @@ test("certificates require completed activity and protect ownership with stable 
     f.db.close();
   }
 });
-test("applying requires a supported SNS profile; saving it enables application and syncs contact", async () => {
+test("applying requires a web profile link; saving it enables application and syncs contact", async () => {
   const { db, req, create, apply, ids } = await fixture();
   try {
     const campaignId = await create();
@@ -236,7 +236,7 @@ test("applying requires a supported SNS profile; saving it enables application a
       (
         await req("influencer", "/profile", "PUT", {
           phone: "01011112222",
-          social_url: "https://example.com/fake",
+          social_url: "javascript:alert(1)",
           followers: 100,
         })
       ).status,
@@ -246,7 +246,7 @@ test("applying requires a supported SNS profile; saving it enables application a
       (
         await req("influencer", "/profile", "PUT", {
           phone: "invalid123",
-          social_url: "https://instagram.com/creator",
+          social_url: "https://xhslink.cn/m/5XecEtzbF0m",
           followers: 100,
         })
       ).status,
@@ -256,7 +256,7 @@ test("applying requires a supported SNS profile; saving it enables application a
       (
         await req("influencer", "/profile", "PUT", {
           phone: "01011112222",
-          social_url: "https://instagram.com/creator",
+          social_url: "https://xhslink.cn/m/5XecEtzbF0m",
           followers: 0,
         })
       ).status,
@@ -264,6 +264,10 @@ test("applying requires a supported SNS profile; saving it enables application a
     );
     const profile = (await (await req("influencer", "/profile")).json()) as any;
     assert.equal(profile.profile.complete, true);
+    assert.equal(
+      profile.profile.social_url,
+      "https://xhslink.cn/m/5XecEtzbF0m",
+    );
     assert.equal(
       (
         db
@@ -1578,7 +1582,7 @@ test("admin profile editing authorizes only admins, validates atomically and pre
     const edited = await f.req("admin", endpoint, "PUT", {
       name: "Updated Name",
       phone: "01087654321",
-      social_url: "https://www.tiktok.com/@edited",
+      social_url: "http://creator.example.test/my-account?source=share",
       followers: 25000,
       role: "admin",
       email: "changed@example.test",
@@ -1602,7 +1606,10 @@ test("admin profile editing authorizes only admins, validates atomically and pre
     const p = f.db
       .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
       .get(target) as any;
-    assert.equal(p.social_url, "https://www.tiktok.com/@edited");
+    assert.equal(
+      p.social_url,
+      "http://creator.example.test/my-account?source=share",
+    );
     assert.equal(p.phone, after.phone);
     assert.equal(p.followers, 25000);
     for (const field of [
