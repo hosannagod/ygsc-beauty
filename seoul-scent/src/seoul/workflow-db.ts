@@ -115,8 +115,8 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       if (!campaignColumns.some((column) => column.name === name))
         db.exec(`ALTER TABLE campaigns ADD COLUMN ${name} ${definition}`);
     }
-    db.exec(`UPDATE campaigns SET recruit_start_date=MIN(date(created_at,'+9 hours'),recruit_date) WHERE recruit_start_date='';
-      UPDATE campaigns SET recruit_start=CAST(strftime('%s',recruit_start_date || ' 00:00:00','-9 hours') AS INTEGER)*1000 WHERE recruit_start=0;
+    db.exec(`UPDATE campaigns SET recruit_start_date=MIN(date(created_at,'+9 hours'),recruit_date) WHERE is_draft=0 AND recruit_start_date='' AND recruit_date<>'';
+      UPDATE campaigns SET recruit_start=CAST(strftime('%s',recruit_start_date || ' 00:00:00','-9 hours') AS INTEGER)*1000 WHERE is_draft=0 AND recruit_start=0 AND recruit_start_date<>'' AND strftime('%s',recruit_start_date || ' 00:00:00','-9 hours') IS NOT NULL;
       INSERT OR IGNORE INTO schema_version VALUES(3);`);
   })();
   db.transaction(() => {

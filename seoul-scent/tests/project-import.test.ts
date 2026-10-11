@@ -8,6 +8,9 @@ import {
   secondProjectBrands,
 } from "../src/seoul/project-import.js";
 import { finalizeSelection } from "../src/seoul/selection.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 async function fixture() {
   const book = new ExcelJS.Workbook();
@@ -46,6 +49,73 @@ async function fixture() {
   }
   return Buffer.from(await book.xlsx.writeBuffer());
 }
+
+test("imported drafts survive server restarts without losing accounts, applications or unset schedules", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "seoul-restart-"));
+  const path = join(dir, "db.sqlite");
+  let db = openDb(path);
+  try {
+    db.prepare(
+      "INSERT INTO users(email,name,role,password_hash) VALUES('admin@test.com','Admin','admin',?)",
+    ).run(hashPassword("Restart-test-password-123!"));
+    await importSecondProject(db, await fixture(), 1, false);
+    const before = db
+      .prepare(
+        "SELECT id,email,username,password_hash,must_change_password FROM users ORDER BY id",
+      )
+      .all();
+    const applications = db
+      .prepare("SELECT * FROM applications ORDER BY id")
+      .all();
+    const brand = (
+      db.prepare("SELECT id FROM users WHERE username='airmood'").get() as any
+    ).id;
+    db.prepare(
+      "INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due) VALUES(?,'Legacy published','Product','Description','Guidelines',10,'gifted','2030-01-01','2030-01-02','2030-01-03',1,2,3)",
+    ).run(brand);
+    for (let restart = 0; restart < 2; restart++) {
+      db.close();
+      db = openDb(path);
+      assert.equal((await createApp(db).request("/health")).status, 200);
+      assert.deepEqual(
+        db
+          .prepare(
+            "SELECT id,email,username,password_hash,must_change_password FROM users ORDER BY id",
+          )
+          .all(),
+        before,
+      );
+      assert.deepEqual(
+        db.prepare("SELECT * FROM applications ORDER BY id").all(),
+        applications,
+      );
+      const drafts = db
+        .prepare("SELECT * FROM campaigns WHERE is_draft=1 ORDER BY id")
+        .all() as any[];
+      assert.equal(drafts.length, 4);
+      assert.ok(
+        drafts.every(
+          (c) =>
+            c.recruit_start_date === "" &&
+            c.recruit_start === 0 &&
+            c.recruit_date === "" &&
+            c.final_due === 0 &&
+            c.capacity === 50,
+        ),
+      );
+      assert.ok(
+        (
+          db
+            .prepare("SELECT recruit_start FROM campaigns WHERE is_draft=0")
+            .get() as any
+        ).recruit_start > 0,
+      );
+    }
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 test("project import creates only drafts, preserves existing members and is idempotent", async () => {
   const db = openDb(":memory:");
   try {
