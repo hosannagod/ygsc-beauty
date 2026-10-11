@@ -443,3 +443,87 @@ test("imported drafts allow selection before consent and list applicants by comp
     db.close();
   }
 });
+
+test("imported campaigns save past recruitment dates and publish closed while content deadlines remain future", async () => {
+  const db = openDb(":memory:");
+  try {
+    db.prepare(
+      "INSERT INTO users(email,name,role,password_hash) VALUES('admin@test.com','Admin','admin',?)",
+    ).run(hashPassword("Admin-password-123!"));
+    const imported = await importSecondProject(db, await fixture(), 1, false);
+    const campaignId = imported.campaigns![0].id;
+    const app = createApp(db, false);
+    const login = await app.request("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "admin@test.com",
+        password: "Admin-password-123!",
+      }),
+    });
+    const Cookie = login.headers.get("set-cookie")!.split(";")[0];
+    const day = (offset: number) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(Date.now() + offset * 86400000));
+    const payload = {
+      recruit_start_date: day(-16),
+      recruit_date: day(-2),
+      final_date: day(19),
+      review_required: false,
+    };
+    const save = (body: object) =>
+      app.request(`/api/work/campaigns/${campaignId}/details`, {
+        method: "PUT",
+        headers: { Cookie, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const draft = await save(payload);
+    assert.equal(draft.status, 200, await draft.text());
+    assert.equal(
+      (
+        db
+          .prepare("SELECT is_draft FROM campaigns WHERE id=?")
+          .get(campaignId) as any
+      ).is_draft,
+      1,
+    );
+    const invalid = await save({
+      ...payload,
+      final_date: day(-1),
+      publish: true,
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal(
+      (
+        db
+          .prepare("SELECT final_date FROM campaigns WHERE id=?")
+          .get(campaignId) as any
+      ).final_date,
+      payload.final_date,
+    );
+    const published = await save({ ...payload, publish: true });
+    assert.equal(published.status, 200, await published.text());
+    const campaign = db
+      .prepare("SELECT * FROM campaigns WHERE id=?")
+      .get(campaignId) as any;
+    assert.equal(campaign.status, "closed");
+    assert.equal(campaign.is_draft, 0);
+    assert.equal(campaign.recruit_date, payload.recruit_date);
+    const brand = db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(campaign.brand_id) as any;
+    const applicant = db
+      .prepare("SELECT id FROM applications WHERE campaign_id=?")
+      .get(campaignId) as any;
+    assert.equal(
+      finalizeSelection(db, brand, campaignId, [applicant.id]).selected,
+      1,
+    );
+  } finally {
+    db.close();
+  }
+});

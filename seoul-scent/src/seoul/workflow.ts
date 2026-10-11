@@ -71,13 +71,16 @@ export function recruitmentDates(
   endDate: unknown,
   draftDue: number,
   now = Date.now(),
+  requireFuture = true,
 ) {
   const start = deadline(startDate) - 86400_000,
     end = deadline(endDate);
-  if (start >= end || end <= now || end >= draftDue)
+  if (start >= end || end >= draftDue)
     fail(
-      "모집 시작일 ≤ 모집 마감일 < 초안 마감일 순서로 입력해 주세요. 모집 마감일은 아직 지나지 않아야 합니다.",
+      "모집 시작일 ≤ 모집 마감일 < 콘텐츠 제출 마감일 순서로 입력해 주세요.",
     );
+  if (requireFuture && end <= now)
+    fail("새 캠페인의 모집 마감일은 아직 지나지 않아야 합니다.");
   return { start, end };
 }
 export function seoulToday() {

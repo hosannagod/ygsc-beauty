@@ -562,7 +562,13 @@ export function registerWorkflow(
             );
           draft = deadline(draftDate);
           final = deadline(finalDate);
-          ({ start, end } = recruitmentDates(startDate, endDate, draft));
+          ({ start, end } = recruitmentDates(
+            startDate,
+            endDate,
+            draft,
+            Date.now(),
+            !campaign.import_key,
+          ));
           if (review && final <= draft)
             fail("초안 마감 < 최종 마감 순서로 설정해 주세요.");
         }
@@ -590,12 +596,23 @@ export function registerWorkflow(
         );
         if (b.publish === true) {
           if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
-          recruitmentDates(startDate, endDate, draft);
+          recruitmentDates(
+            startDate,
+            endDate,
+            draft,
+            Date.now(),
+            !campaign.import_key,
+          );
+          if (draft <= Date.now() || final <= Date.now())
+            fail(
+              "공개할 캠페인의 콘텐츠 제출 마감일은 미래 날짜로 설정해 주세요.",
+            );
           if (final < draft || (review && final === draft))
             fail("캠페인 제출 일정을 확인해 주세요.");
-          db.prepare(
-            "UPDATE campaigns SET is_draft=0,status='recruiting' WHERE id=?",
-          ).run(campaign.id);
+          db.prepare("UPDATE campaigns SET is_draft=0,status=? WHERE id=?").run(
+            end <= Date.now() ? "closed" : "recruiting",
+            campaign.id,
+          );
         }
         saveCampaignImages(db, campaign.id, images);
         const sources = { title, product, description, guidelines };

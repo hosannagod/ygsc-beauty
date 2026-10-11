@@ -593,5 +593,8 @@
   "관리자가 삭제한 캠페인입니다. 참여 이력만 확인할 수 있습니다.": "This campaign was deleted by an administrator. Participation history is available for reference.",
   "외부 신청서로 등록된 지원입니다. 배송지 등록 전에 필수 동의를 확인해 주세요.": "Your application was imported from an external form. Please confirm the required consent before registering your shipping address.",
   "배송지 등록 전에 필수 동의를 확인해 주세요.": "Please confirm the required consent before registering your shipping address.",
-  "발송 전에 필수 동의가 필요합니다.": "Required consent must be confirmed before shipment."
+  "발송 전에 필수 동의가 필요합니다.": "Required consent must be confirmed before shipment.",
+  "모집 시작일 ≤ 모집 마감일 < 콘텐츠 제출 마감일 순서로 입력해 주세요.": "Use this date order: recruitment start ≤ recruitment end < content submission deadline.",
+  "새 캠페인의 모집 마감일은 아직 지나지 않아야 합니다.": "The recruitment deadline for a new campaign must be in the future.",
+  "공개할 캠페인의 콘텐츠 제출 마감일은 미래 날짜로 설정해 주세요.": "Set future content submission deadlines before publishing the campaign."
 }
