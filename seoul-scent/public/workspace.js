@@ -797,11 +797,7 @@
                 (a) =>
                   a.id === n &&
                   a.status === "applied" &&
-                  !c.is_draft &&
-                  !(
-                    a.consent_version.startsWith("external-form-v2") &&
-                    (!a.secondary_use_consent || !a.original_delivery_consent)
-                  ),
+                  (!c.is_draft || !!c.import_key),
               ),
             )
           : [],
@@ -836,13 +832,7 @@
       root.querySelector("[data-select-all]").onclick = () => {
         applications
           .filter(
-            (a) =>
-              a.status === "applied" &&
-              !c.is_draft &&
-              !(
-                a.consent_version.startsWith("external-form-v2") &&
-                (!a.secondary_use_consent || !a.original_delivery_consent)
-              ),
+            (a) => a.status === "applied" && (!c.is_draft || !!c.import_key),
           )
           .forEach((a) => chosen.add(a.id));
         updateSelection();
@@ -895,7 +885,7 @@
                     (a) =>
                       html`<tr>
                         <td>
-                          ${a.status === "applied" && !c.is_draft && !(a.consent_version.startsWith("external-form-v2") && (!a.secondary_use_consent || !a.original_delivery_consent)) ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
+                          ${a.status === "applied" && (!c.is_draft || !!c.import_key) ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
                         </td>
                         <td>
                           <strong>${esc(a.influencer_name)}</strong
@@ -963,11 +953,14 @@
     let actions = "";
     if (influencer) {
       if (
-        a.status === "applied" &&
+        ["applied", "selected"].includes(a.status) &&
         a.consent_version.startsWith("external-form-v2")
       )
-        actions = `<form data-task="import-consent" data-id="${a.id}"><div class="warning">${t("외부 신청서로 등록된 지원입니다. 선정 전에 필수 동의를 확인해 주세요.")}</div><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>${t("해당 캠페인의 2차 저작물 활용에 동의합니다.")}</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>${t("고화질 원본 제공에 동의합니다.")}</span></label>${submit(t("추가 동의 저장"))}</form>`;
-      if (a.status === "selected")
+        actions = `<form data-task="import-consent" data-id="${a.id}"><div class="warning">${t("외부 신청서로 등록된 지원입니다. 배송지 등록 전에 필수 동의를 확인해 주세요.")}</div><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>${t("해당 캠페인의 2차 저작물 활용에 동의합니다.")}</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>${t("고화질 원본 제공에 동의합니다.")}</span></label>${submit(t("추가 동의 저장"))}</form>`;
+      if (
+        a.status === "selected" &&
+        !a.consent_version.startsWith("external-form-v2")
+      )
         actions = actionForm(
           a,
           "address",

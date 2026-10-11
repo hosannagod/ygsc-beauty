@@ -23,21 +23,17 @@ export function finalizeSelection(
   return db.transaction(() => {
     const campaign = campaignFor(db, campaignId, user, true);
     if (
-      campaign.is_draft ||
+      (campaign.is_draft && !campaign.import_key) ||
       campaign.status === "completed" ||
-      Date.now() >=
-        (campaign.review_required ? campaign.draft_due : campaign.final_due)
+      (!campaign.is_draft &&
+        Date.now() >=
+          (campaign.review_required ? campaign.draft_due : campaign.final_due))
     )
       fail("선정 가능한 캠페인 기간이 아닙니다.", 409);
     const applicants = ids.map((id) => applicationFor(db, id, user));
     for (const a of applicants) {
       if (a.campaign_id !== campaignId || a.status !== "applied")
         fail("이 캠페인의 미선정 지원자만 선택할 수 있습니다.", 409);
-      if (
-        a.consent_version.startsWith("external-form-v2") &&
-        (!a.secondary_use_consent || !a.original_delivery_consent)
-      )
-        fail("선정 전에 추가 동의가 필요합니다.", 409);
       const p = db
         .prepare(
           "SELECT blacklisted,blocked_until FROM influencer_profiles WHERE user_id=?",
@@ -56,7 +52,7 @@ export function finalizeSelection(
     if (count + ids.length > campaign.capacity)
       fail("남은 모집 인원보다 많이 선택했습니다.", 409);
     const note =
-      "캠페인 참여자로 선정되었습니다. 참여 내역에서 배송지를 등록해 주세요.";
+      "캠페인 참여자로 선정되었습니다. 참여 내역에서 필수 동의를 확인하고 배송지를 등록해 주세요.";
     for (const a of applicants) {
       db.prepare(
         "UPDATE applications SET status='selected',updated_at=CURRENT_TIMESTAMP WHERE id=?",

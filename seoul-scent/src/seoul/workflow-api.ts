@@ -152,7 +152,7 @@ export function registerWorkflow(
         b = await body(c);
       if (
         a.campaign_deleted_at ||
-        a.status !== "applied" ||
+        !["applied", "selected"].includes(a.status) ||
         !a.consent_version.startsWith("external-form-v2")
       )
         fail("추가 동의 대상이 아닙니다.", 409);
@@ -169,7 +169,7 @@ export function registerWorkflow(
           db,
           a,
           u.id,
-          "applied",
+          a.status,
           "2차 활용 및 고화질 원본 제공 추가 동의 완료",
         );
       })();
@@ -658,7 +658,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY p.completed_count DESC,a.id ASC`,
               )
               .all(campaign.id);
       return c.json({
@@ -859,43 +859,8 @@ export function registerWorkflow(
         switch (b.action) {
           case "select": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
-            requireState(["applied"]);
-            if (Date.now() >= (a.review_required ? a.draft_due : a.final_due))
-              fail("초안 마감이 지난 캠페인에서는 선정할 수 없습니다.", 409);
-            const count = (
-              db
-                .prepare(
-                  "SELECT COUNT(*) AS n FROM applications WHERE campaign_id=? AND status NOT IN ('applied','rejected')",
-                )
-                .get(a.campaign_id) as any
-            ).n;
-            if (count >= a.capacity)
-              fail("모집 인원이 모두 선정되었습니다.", 409);
-            const p = db
-              .prepare(
-                "SELECT blacklisted,blocked_until FROM influencer_profiles WHERE user_id=?",
-              )
-              .get(a.influencer_id) as any;
-            if (p.blacklisted || p.blocked_until > Date.now())
-              fail("지원자가 현재 제재 중입니다.", 409);
-            if (
-              a.is_draft ||
-              (
-                db
-                  .prepare("SELECT is_draft FROM campaigns WHERE id=?")
-                  .get(a.campaign_id) as any
-              ).is_draft
-            )
-              fail("비공개 초안에서는 선정할 수 없습니다.", 409);
-            if (
-              a.consent_version.startsWith("external-form-v2") &&
-              (!a.secondary_use_consent || !a.original_delivery_consent)
-            )
-              fail("선정 전에 추가 동의가 필요합니다.", 409);
-            status = "selected";
-            note =
-              "캠페인 참여자로 선정되었습니다. 참여 내역에서 배송지를 등록해 주세요.";
-            break;
+            finalizeSelection(db, u, a.campaign_id, [a.id]);
+            return;
           }
           case "reject":
             if (!brand) fail("접근 권한이 없습니다.", 403);
@@ -909,6 +874,11 @@ export function registerWorkflow(
           case "address": {
             if (!influencer) fail("접근 권한이 없습니다.", 403);
             requireState(["selected"]);
+            if (
+              a.consent_version.startsWith("external-form-v2") &&
+              (!a.secondary_use_consent || !a.original_delivery_consent)
+            )
+              fail("배송지 등록 전에 필수 동의를 확인해 주세요.", 409);
             const recipient = text(b.recipient_name, "수령인", 2, 60),
               phone = text(b.phone, "연락처", 8, 30),
               postal = text(b.postal_code, "우편번호", 3, 12),
@@ -928,6 +898,11 @@ export function registerWorkflow(
           case "ship": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
             requireState(["selected", "shipping"]);
+            if (
+              a.consent_version.startsWith("external-form-v2") &&
+              (!a.secondary_use_consent || !a.original_delivery_consent)
+            )
+              fail("발송 전에 필수 동의가 필요합니다.", 409);
             if (!a.address || !a.phone)
               fail("선정자가 배송지를 먼저 등록해야 합니다.", 409);
             const carrier = text(b.carrier, "택배사", 2, 40),
@@ -1430,6 +1405,11 @@ export function registerWorkflow(
           !["selected", "shipping"].includes(a.status)
         )
           fail(`${i}행: 해당 캠페인의 선정/배송 단계가 아닙니다.`);
+        if (
+          a.consent_version.startsWith("external-form-v2") &&
+          (!a.secondary_use_consent || !a.original_delivery_consent)
+        )
+          fail(`${i}행: 발송 전에 필수 동의가 필요합니다.`, 409);
         if (!a.address || !a.phone)
           fail(`${i}행: 선정자의 배송지가 아직 등록되지 않았습니다.`);
         const carrier = text(value("carrier"), "택배사", 2, 40),

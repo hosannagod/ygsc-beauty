@@ -258,10 +258,35 @@ test("project import creates only drafts, preserves existing members and is idem
     const application = db
       .prepare("SELECT * FROM applications WHERE campaign_id=?")
       .get(campaignId) as any;
-    assert.throws(
-      () => finalizeSelection(db, brand, campaignId, [application.id]),
-      /추가 동의/,
+    assert.equal(
+      finalizeSelection(db, brand, campaignId, [application.id]).selected,
+      1,
     );
+    assert.equal(
+      (
+        db
+          .prepare(
+            "SELECT original_delivery_consent FROM applications WHERE id=?",
+          )
+          .get(application.id) as any
+      ).original_delivery_consent,
+      0,
+    );
+    const addressBeforeConsent = await app.request(
+      `/api/work/applications/${application.id}/action`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({
+          action: "address",
+          recipient_name: "Creator",
+          phone: "01012345678",
+          postal_code: "12345",
+          address: "Seoul address 123",
+        }),
+      },
+    );
+    assert.equal(addressBeforeConsent.status, 409);
     const agree = await app.request(
       `/api/work/applications/${application.id}/consent`,
       {
@@ -275,8 +300,28 @@ test("project import creates only drafts, preserves existing members and is idem
     );
     assert.equal(agree.status, 200);
     assert.equal(
-      finalizeSelection(db, brand, campaignId, [application.id]).selected,
-      1,
+      (
+        db
+          .prepare("SELECT status FROM applications WHERE id=?")
+          .get(application.id) as any
+      ).status,
+      "selected",
+    );
+    assert.equal(
+      (
+        await app.request(`/api/work/applications/${application.id}/action`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: JSON.stringify({
+            action: "address",
+            recipient_name: "Creator",
+            phone: "01012345678",
+            postal_code: "12345",
+            address: "Seoul address 123",
+          }),
+        })
+      ).status,
+      200,
     );
   } finally {
     db.close();
@@ -301,6 +346,100 @@ test("project import rejects account role collisions without partial writes", as
       1,
     );
   } finally {
+    db.close();
+  }
+});
+
+test("imported drafts allow selection before consent and list applicants by completed participation", async () => {
+  const db = openDb(":memory:");
+  const previousProvider = process.env.EMAIL_PROVIDER;
+  process.env.EMAIL_PROVIDER = "brevo";
+  try {
+    db.prepare(
+      "INSERT INTO users(email,name,role,password_hash) VALUES('admin@test.com','Admin','admin','test')",
+    ).run();
+    const imported = await importSecondProject(db, await fixture(), 1, false);
+    const campaignId = imported.campaigns![0].id;
+    const brand = db
+      .prepare("SELECT * FROM users WHERE username='varihope'")
+      .get() as any;
+    db.prepare(
+      "UPDATE users SET password_hash=?,must_change_password=0 WHERE id=?",
+    ).run(hashPassword("Brand-password-123!"), brand.id);
+    const original = db
+      .prepare("SELECT id FROM applications WHERE campaign_id=?")
+      .get(campaignId) as any;
+    const expected: number[] = [];
+    for (const count of [10, 50, 3]) {
+      const user = Number(
+        db
+          .prepare(
+            "INSERT INTO users(email,name,role,password_hash) VALUES(?,?,'influencer','test')",
+          )
+          .run(`creator${count}@example.test`, `Creator ${count}`)
+          .lastInsertRowid,
+      );
+      db.prepare(
+        "UPDATE influencer_profiles SET completed_count=? WHERE user_id=?",
+      ).run(count, user);
+      expected.push(
+        Number(
+          db
+            .prepare(
+              "INSERT INTO applications(campaign_id,influencer_id,consent_at,phone,address) VALUES(?,?,1,'01012345678','')",
+            )
+            .run(campaignId, user).lastInsertRowid,
+        ),
+      );
+    }
+    const app = createApp(db, false);
+    const login = await app.request("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "varihope",
+        password: "Brand-password-123!",
+      }),
+    });
+    const Cookie = login.headers.get("set-cookie")!.split(";")[0];
+    const detail = (await (
+      await app.request(`/api/work/campaigns/${campaignId}`, {
+        headers: { Cookie },
+      })
+    ).json()) as any;
+    assert.deepEqual(
+      detail.applications.map((a: any) => a.completed_count),
+      [50, 10, 3, 0],
+    );
+    const selected = await app.request(
+      `/api/work/campaigns/${campaignId}/selection`,
+      {
+        method: "POST",
+        headers: { Cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ application_ids: [original.id] }),
+      },
+    );
+    assert.equal(selected.status, 200, await selected.text());
+    const row = db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(original.id) as any;
+    assert.equal(row.status, "selected");
+    assert.equal(row.original_delivery_consent, 0);
+    assert.equal(row.secondary_use_consent, 0);
+    assert.equal(
+      (db.prepare("SELECT count(*) n FROM email_outbox").get() as any).n,
+      1,
+    );
+    assert.throws(() =>
+      finalizeSelection(db, brand, campaignId, [original.id]),
+    );
+    assert.equal(
+      (db.prepare("SELECT count(*) n FROM email_outbox").get() as any).n,
+      1,
+    );
+  } finally {
+    if (previousProvider === undefined) delete process.env.EMAIL_PROVIDER;
+    else process.env.EMAIL_PROVIDER = previousProvider;
     db.close();
   }
 });
