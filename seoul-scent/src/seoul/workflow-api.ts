@@ -1252,6 +1252,90 @@ export function registerWorkflow(
       return c.json({ success: true });
     }),
   );
+  app.delete(
+    "/api/work/admin/users/:id",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      db.transaction(() => {
+        const user = db
+          .prepare("SELECT id,name,email,role FROM users WHERE id=?")
+          .get(target) as any;
+        if (!user || user.role !== "influencer")
+          fail("인플루언서를 찾을 수 없습니다.", 404);
+        if (b.confirm_email !== user.email || b.confirm_name !== user.name)
+          fail("삭제할 계정의 이름과 이메일을 확인해 주세요.", 409);
+        const profile = db
+          .prepare(
+            "SELECT completed_count FROM influencer_profiles WHERE user_id=?",
+          )
+          .get(target) as any;
+        const hasActivities = db
+          .prepare(
+            "SELECT 1 FROM historical_activities WHERE user_id=? UNION ALL SELECT 1 FROM activity_certificates WHERE user_id=? LIMIT 1",
+          )
+          .get(target, target);
+        const progressed = db
+          .prepare(
+            "SELECT 1 FROM applications WHERE influencer_id=? AND status NOT IN ('applied','rejected') LIMIT 1",
+          )
+          .get(target);
+        if (profile.completed_count || hasActivities || progressed)
+          fail("선정 또는 활동 이력이 있는 계정은 삭제할 수 없습니다.", 409);
+        const applicationIds = (
+          db
+            .prepare("SELECT id FROM applications WHERE influencer_id=?")
+            .all(target) as { id: number }[]
+        ).map((a) => a.id);
+        for (const applicationId of applicationIds) {
+          db.prepare(
+            "DELETE FROM email_attempts WHERE email_id IN (SELECT id FROM email_outbox WHERE application_id=?)",
+          ).run(applicationId);
+          db.prepare("DELETE FROM email_outbox WHERE application_id=?").run(
+            applicationId,
+          );
+          db.prepare(
+            "DELETE FROM application_events WHERE application_id=?",
+          ).run(applicationId);
+        }
+        db.prepare("DELETE FROM applications WHERE influencer_id=?").run(
+          target,
+        );
+        db.prepare("DELETE FROM notifications WHERE user_id=?").run(target);
+        db.prepare("DELETE FROM onboarding_submissions WHERE user_id=?").run(
+          target,
+        );
+        db.prepare(
+          "UPDATE onboarding_submissions SET reviewer_id=NULL WHERE reviewer_id=?",
+        ).run(target);
+        db.prepare(
+          "UPDATE application_events SET actor_id=NULL WHERE actor_id=?",
+        ).run(target);
+        db.prepare(
+          "UPDATE admin_audit SET target_user_id=NULL WHERE target_user_id=?",
+        ).run(target);
+        db.prepare("DELETE FROM login_attempts WHERE email IN (?,?)").run(
+          user.email,
+          `login:${target}`,
+        );
+        db.prepare("DELETE FROM users WHERE id=?").run(target);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,?,?,?)",
+        ).run(
+          actor.id,
+          "influencer_delete",
+          JSON.stringify({
+            user_id: target,
+            name: user.name,
+            applications_removed: applicationIds.length,
+          }),
+          Date.now(),
+        );
+      })();
+      return c.json({ success: true });
+    }),
+  );
   app.put(
     "/api/work/admin/users/:id/profile",
     wrap(async (c) => {

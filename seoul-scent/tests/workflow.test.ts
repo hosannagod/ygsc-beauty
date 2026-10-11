@@ -1636,3 +1636,87 @@ test("admin profile editing authorizes only admins, validates atomically and pre
     f.db.close();
   }
 });
+
+test("admin removal verifies identity, revokes sessions and removes unselected applications while protecting activity history", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    await f.apply(campaignId);
+    const target = f.ids.influencer;
+    const endpoint = `/admin/users/${target}`;
+    const confirm = {
+      confirm_email: "influencer@test.com",
+      confirm_name: "influencer",
+    };
+    for (const actor of ["influencer", "brand"])
+      assert.equal(
+        (await f.req(actor, endpoint, "DELETE", confirm)).status,
+        403,
+      );
+    assert.equal(
+      (
+        await f.req("admin", endpoint, "DELETE", {
+          ...confirm,
+          confirm_name: "Wrong person",
+        })
+      ).status,
+      409,
+    );
+    f.db
+      .prepare(
+        "UPDATE influencer_profiles SET completed_count=1 WHERE user_id=?",
+      )
+      .run(target);
+    assert.equal(
+      (await f.req("admin", endpoint, "DELETE", confirm)).status,
+      409,
+    );
+    f.db
+      .prepare(
+        "UPDATE influencer_profiles SET completed_count=0 WHERE user_id=?",
+      )
+      .run(target);
+    f.db
+      .prepare(
+        "UPDATE applications SET status='selected' WHERE influencer_id=?",
+      )
+      .run(target);
+    assert.equal(
+      (await f.req("admin", endpoint, "DELETE", confirm)).status,
+      409,
+    );
+    f.db
+      .prepare("UPDATE applications SET status='applied' WHERE influencer_id=?")
+      .run(target);
+    const beforeOther = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(f.ids.other);
+    const removed = await f.req("admin", endpoint, "DELETE", confirm);
+    assert.equal(removed.status, 200, await removed.text());
+    assert.equal(
+      f.db.prepare("SELECT id FROM users WHERE id=?").get(target),
+      undefined,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT count(*) n FROM applications WHERE influencer_id=?")
+          .get(target) as any
+      ).n,
+      0,
+    );
+    assert.equal((await f.req("influencer", "/profile")).status, 401);
+    assert.deepEqual(
+      f.db.prepare("SELECT * FROM users WHERE id=?").get(f.ids.other),
+      beforeOther,
+    );
+    const audit = f.db
+      .prepare("SELECT * FROM admin_audit WHERE action='influencer_delete'")
+      .get() as any;
+    assert.equal(audit.actor_id, f.ids.admin);
+    assert.equal(JSON.parse(audit.note).user_id, target);
+    assert.equal(f.db.prepare("PRAGMA foreign_key_check").all().length, 0);
+  } finally {
+    f.db.close();
+  }
+});
