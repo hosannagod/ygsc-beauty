@@ -1208,3 +1208,46 @@ summary {
 .info-tooltip[popover]:popover-open {
   display: block;
 }
+
+#user-results[hidden] {
+  display: none;
+}
+dialog.influencer-detail {
+  max-width: 920px;
+  max-height: 88dvh;
+  overflow-y: auto;
+}
+.detail-heading {
+  align-items: flex-start;
+}
+.detail-heading h2 {
+  margin-top: 0;
+}
+.influencer-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.influencer-fields dt {
+  font-size: 12px;
+  color: #7b8971;
+}
+.influencer-fields dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.detail-history > summary {
+  font-size: 16px;
+  font-weight: 600;
+}
+.detail-history .panel {
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  dialog.influencer-detail {
+    padding: 20px;
+  }
+  .influencer-fields {
+    grid-template-columns: 1fr;
+  }
+}

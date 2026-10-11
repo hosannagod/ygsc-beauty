@@ -1247,12 +1247,14 @@
         '<p class="note left">현재 알림은 시스템 내부에서 제공됩니다. 이메일·SMS 발송은 외부 서비스 연결 후 활성화됩니다.</p>',
       );
   }
+  let managedUsers = [];
   let refreshUsers = async () => {};
   async function users() {
     const [{ users }, onboarding] = await Promise.all([
       api("/admin/users"),
       api("/admin/onboarding"),
     ]);
+    managedUsers = users;
     const stats = () => {
       const influencers = users.filter((u) => u.role === "influencer");
       return `${kpi(t("전체 인플루언서"), influencers.length)}${kpi(t("캠페인 지원 가능"), influencers.filter((u) => u.can_apply).length)}${kpi(t("홍보 인증 검토 대기"), onboarding.submissions.filter((s) => s.status === "pending").length)}${kpi(t("지원 제한 중"), influencers.filter((u) => u.blacklisted || u.blocked_until > Date.now()).length)}`;
@@ -1267,7 +1269,7 @@
       ) +
       `<section class="kpi-grid" id="user-stats">${stats()}</section>` +
       `<div class="button-row"><a class="secondary" href="#user-results">${t("인플루언서 목록")}</a><a class="secondary" href="#promotion-admin">${t("홍보 인증 관리")}</a><a class="secondary" href="#admin-imports">${t("회원·이력 엑셀 등록")}</a></div>` +
-      `<div class="toolbar"><input id="user-search" aria-label="${t("인플루언서 검색")}" placeholder="${t("이름·이메일·연락처 검색")}"><select id="user-role" aria-label="${t("계정 유형")} "><option value="influencer">${t("전체 인플루언서")}</option><option value="brand">${t("브랜드")}</option><option value="admin">${t("운영사")}</option><option value="all">${t("전체 계정")}</option></select><select id="user-grade" aria-label="${t("등급 필터")}"><option value="all">${t("전체 등급")}</option>${["basic", "bronze", "silver", "gold", "platinum"].map((value, i) => `<option value="${value}">${[t("기본"), t("브론즈"), t("실버"), t("골드"), t("플래티넘")][i]}</option>`).join("")}</select><select id="user-status" aria-label="${t("상태 필터")}"><option value="all">${t("전체 상태")}</option><option value="pending">${t("홍보 인증 검토 대기")}</option><option value="restricted">${t("지원 제한 중")}</option></select></div><p id="user-count" class="muted" aria-live="polite"></p><div class="panel table-wrap" id="user-results"></div>`;
+      `<div class="toolbar"><input id="user-search" aria-label="${t("인플루언서 검색")}" placeholder="${t("이름·이메일·연락처 검색")}"><select id="user-role" aria-label="${t("계정 유형")} "><option value="influencer">${t("전체 인플루언서")}</option><option value="brand">${t("브랜드")}</option><option value="admin">${t("운영사")}</option><option value="all">${t("전체 계정")}</option></select><select id="user-grade" aria-label="${t("등급 필터")}"><option value="all">${t("전체 등급")}</option>${["basic", "bronze", "silver", "gold", "platinum"].map((value, i) => `<option value="${value}">${[t("기본"), t("브론즈"), t("실버"), t("골드"), t("플래티넘")][i]}</option>`).join("")}</select><select id="user-status" aria-label="${t("상태 필터")}"><option value="all">${t("전체 상태")}</option><option value="pending">${t("홍보 인증 검토 대기")}</option><option value="restricted">${t("지원 제한 중")}</option></select></div><div class="section-heading"><p id="user-count" class="muted" aria-live="polite"></p><button class="secondary" data-toggle-users aria-expanded="true" aria-controls="user-results">${t("목록 접기")}</button></div><div class="panel table-wrap" id="user-results"></div>`;
     const render = () => {
       document.querySelector("#user-stats").innerHTML = stats();
       const q = document
@@ -1331,7 +1333,7 @@
     root.insertAdjacentHTML("beforeend", promotionAdmin(onboarding));
     root.insertAdjacentHTML(
       "beforeend",
-      '<section id="history-results"></section>',
+      `<section id="history-results"></section><dialog id="influencer-detail" class="influencer-detail" aria-labelledby="influencer-detail-title"><div id="influencer-detail-content"></div></dialog>`,
     );
     root.insertAdjacentHTML(
       "beforeend",
@@ -1703,45 +1705,112 @@
           .querySelector("#history-results")
           .scrollIntoView({ behavior: "smooth" });
       }
+      if (button.hasAttribute("data-toggle-users")) {
+        const list = document.querySelector("#user-results");
+        list.hidden = !list.hidden;
+        button.setAttribute("aria-expanded", String(!list.hidden));
+        button.textContent = t(list.hidden ? "목록 펼치기" : "목록 접기");
+        return;
+      }
+      if (button.hasAttribute("data-close-influencer")) {
+        document.querySelector("#influencer-detail").close();
+        return;
+      }
       if (button.dataset.history) {
+        button.disabled = true;
+        const person = managedUsers.find(
+          (u) => String(u.id) === button.dataset.history,
+        );
         const { applications, history } = await api(
           `/admin/users/${button.dataset.history}/history`,
         );
-        document.querySelector("#history-results").innerHTML = html`<div
-            class="section-heading"
-          >
-            <h2>참여 이력</h2>
-          </div>
-          ${historyCards(history)}
-          <section class="panel">
-            ${
-              applications.length
-                ? applications
-                    .map(
-                      (a) =>
-                        html`<div class="alert-row">
-                          <div>
-                            ${badge(a.status)} <strong>${esc(a.title)}</strong>
-                            <p class="muted">
-                              ${esc(a.brand_name)} · ${a.views}
-                              조회${a.best ? " · Best" : ""}
-                            </p>
-                          </div>
-                          <a class="text-link" href="/applications/${a.id}"
-                            >상세 →</a
-                          >
-                        </div>`,
-                    )
-                    .join("")
-                : empty(
-                    t("참여 이력이 없습니다"),
-                    t("아직 지원한 캠페인이 없습니다."),
-                  )
-            }
-          </section>`;
-        document
-          .querySelector("#history-results")
-          .scrollIntoView({ behavior: "smooth" });
+        const dialog = document.querySelector("#influencer-detail");
+        document.querySelector("#influencer-detail-content").innerHTML =
+          html` <div class="section-heading detail-heading">
+              <div>
+                <p class="muted">${t("인플루언서 상세")}</p>
+                <h2 id="influencer-detail-title">${esc(person.name)}</h2>
+              </div>
+              <button class="secondary" data-close-influencer>
+                ${t("닫기")}
+              </button>
+            </div>
+            <dl class="influencer-fields">
+              <div>
+                <dt>${t("이메일")}</dt>
+                <dd>${esc(person.email)}</dd>
+              </div>
+              <div>
+                <dt>${t("연락처")}</dt>
+                <dd>${esc(person.phone || "—")}</dd>
+              </div>
+              <div>
+                <dt>${t("SNS 계정")}</dt>
+                <dd>
+                  ${person.social_url ? link(person.social_url, person.social_url) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>${t("팔로워")}</dt>
+                <dd>${money(person.followers)}</dd>
+              </div>
+              <div>
+                <dt>${t("현재 등급")}</dt>
+                <dd>
+                  ${tierName(person.tier, person.completed_count, person.onboarding_approved)}
+                </dd>
+              </div>
+              <div>
+                <dt>${t("완료 횟수")}</dt>
+                <dd>${person.completed_count}</dd>
+              </div>
+              <div>
+                <dt>${t("진행 중")}</dt>
+                <dd>${person.active_count}</dd>
+              </div>
+              <div>
+                <dt>${t("노쇼 · 제한")}</dt>
+                <dd>
+                  ${person.no_show_count} ·
+                  ${person.blacklisted ? t("영구 제한") : person.blocked_until > Date.now() ? date(person.blocked_until) + t("까지") : t("없음")}
+                </dd>
+              </div>
+            </dl>
+            <details open class="detail-history">
+              <summary>${t("기존 프로젝트 참여 이력")}</summary>
+              ${historyCards(history)}
+            </details>
+            <details open class="detail-history">
+              <summary>${t("캠페인 지원·진행 이력")}</summary>
+              <section class="panel">
+                ${
+                  applications.length
+                    ? applications
+                        .map(
+                          (a) =>
+                            html`<div class="alert-row">
+                              <div>
+                                ${badge(a.status)}
+                                <strong>${esc(a.title)}</strong>
+                                <p class="muted">
+                                  ${esc(a.brand_name)} · ${a.views}
+                                  조회${a.best ? " · Best" : ""}
+                                </p>
+                              </div>
+                              <a class="text-link" href="/applications/${a.id}"
+                                >상세 →</a
+                              >
+                            </div>`,
+                        )
+                        .join("")
+                    : empty(
+                        t("참여 이력이 없습니다"),
+                        t("아직 지원한 캠페인이 없습니다."),
+                      )
+                }
+              </section>
+            </details>`;
+        dialog.showModal();
       }
     } catch (e) {
       toast(e.message);

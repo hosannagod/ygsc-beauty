@@ -561,5 +561,13 @@
   "검색 결과": "Search results",
   "연락처 · SNS": "Contact · Social profile",
   "SNS 프로필 보기": "View social profile",
-  "운영 정책을 변경하고 전체 인플루언서의 등급을 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다.": "Update policies and recalculate grades for all influencers? Existing no-show histories and restrictions will remain."
+  "운영 정책을 변경하고 전체 인플루언서의 등급을 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다.": "Update policies and recalculate grades for all influencers? Existing no-show histories and restrictions will remain.",
+  "목록 접기": "Collapse list",
+  "목록 펼치기": "Expand list",
+  "인플루언서 상세": "Influencer details",
+  "닫기": "Close",
+  "SNS 계정": "Social account",
+  "기존 프로젝트 참여 이력": "Past project participation",
+  "캠페인 지원·진행 이력": "Campaign applications and progress",
+  "완료 횟수": "Completed projects"
 }

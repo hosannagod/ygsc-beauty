@@ -218,6 +218,40 @@ const { spawn, spawnSync } = require("node:child_process"),
     await admin.getByRole("button", { name: "로그인", exact: false }).click();
     await admin.waitForURL("**/dashboard/admin");
     await admin.goto(base + "/admin/users");
+    const memberName = await admin
+      .locator("#user-results tbody tr strong")
+      .first()
+      .innerText();
+    const listToggle = admin.locator("[data-toggle-users]");
+    await listToggle.click();
+    assert.equal(await admin.locator("#user-results").isVisible(), false);
+    assert.equal(await listToggle.getAttribute("aria-expanded"), "false");
+    await listToggle.click();
+    assert.equal(await admin.locator("#user-results").isVisible(), true);
+    await admin.locator("[data-history]").first().click();
+    const memberDialog = admin.locator("#influencer-detail");
+    await memberDialog.waitFor({ state: "visible" });
+    assert.equal(await memberDialog.locator("h2").innerText(), memberName);
+    assert.ok(
+      (await memberDialog.locator(".influencer-fields").innerText()).includes(
+        "https://www.instagram.com/seoulcreator",
+      ),
+    );
+    assert.equal(await admin.locator("#history-results").innerText(), "");
+    await memberDialog.locator("[data-close-influencer]").click();
+    assert.equal(await memberDialog.isVisible(), false);
+    await admin.locator("[data-history]").first().click();
+    await memberDialog.waitFor({ state: "visible" });
+    await admin.keyboard.press("Escape");
+    assert.equal(await memberDialog.isVisible(), false);
+    await admin.setViewportSize({ width: 390, height: 844 });
+    await admin.locator("[data-history]").first().click();
+    await memberDialog.waitFor({ state: "visible" });
+    assert.ok(
+      await memberDialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    );
+    await memberDialog.locator("[data-close-influencer]").click();
+    await admin.setViewportSize({ width: 1280, height: 720 });
     await admin
       .locator('form[data-task="promotion-image"] input[type=file]')
       .setInputFiles({
@@ -513,7 +547,8 @@ const { spawn, spawnSync } = require("node:child_process"),
     await admin.getByRole("button", { name: "이력 보기" }).waitFor();
     await admin.locator("#user-search").fill("");
     await admin.getByRole("button", { name: "이력 보기" }).click();
-    await admin.getByRole("heading", { name: "참여 이력" }).waitFor();
+    await admin.locator("#influencer-detail").waitFor({ state: "visible" });
+    await admin.locator("#influencer-detail [data-close-influencer]").click();
     await admin.getByRole("link", { name: "운영 정책" }).click();
     await admin.locator("[name=penalty_days]").waitFor();
     await admin.getByRole("button", { name: "운영 정책 저장" }).click();
