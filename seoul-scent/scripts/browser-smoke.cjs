@@ -175,6 +175,33 @@ const { spawn, spawnSync } = require("node:child_process"),
       .waitFor();
     assert.equal(await influencer.locator('[data-task="apply"]').count(), 0);
     await influencer.locator('.nav-item[href="/profile"]').click();
+    const profileInfo = influencer.getByRole("button", {
+      name: "등급 기준 안내",
+    });
+    await profileInfo.waitFor();
+    const profileTooltip = influencer.locator("[role=tooltip]");
+    assert.equal(await profileTooltip.isVisible(), false);
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "visible" });
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "hidden" });
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "visible" });
+    await influencer
+      .getByRole("heading", { name: "내 프로필", exact: true })
+      .click();
+    await profileTooltip.waitFor({ state: "hidden" });
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "visible" });
+    await influencer.keyboard.press("Escape");
+    await profileTooltip.waitFor({ state: "hidden" });
+    await influencer.setViewportSize({ width: 390, height: 844 });
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "visible" });
+    await profileInfo.click();
+    await profileTooltip.waitFor({ state: "hidden" });
+    await influencer.setViewportSize({ width: 1280, height: 720 });
+
     await influencer.locator("[name=phone]").fill("01012345678");
 
     await influencer
