@@ -1,3 +1,4 @@
+import { importSecondProject } from "./project-import.js";
 import { finalizeSelection } from "./selection.js";
 import { registerOnboarding, campaignEligible } from "./onboarding.js";
 import { tierLabel } from "./tier.js";
@@ -121,6 +122,59 @@ export function registerWorkflow(
         throw e;
       }
     };
+  app.post(
+    "/api/work/admin/projects/second/import",
+    wrap(async (c) => {
+      const u = role(c, "admin"),
+        b = await body(c);
+      if (
+        typeof b.file !== "string" ||
+        b.file.length > 2_800_000 ||
+        !/^[A-Za-z0-9+/]+=*$/.test(b.file)
+      )
+        fail("2MB 이하 XLSX 파일을 선택해 주세요.");
+      return c.json(
+        await importSecondProject(
+          db,
+          Buffer.from(b.file, "base64"),
+          u.id,
+          b.dry_run !== false,
+          b.skip_invalid === true,
+        ),
+      );
+    }),
+  );
+  app.post(
+    "/api/work/applications/:id/consent",
+    wrap(async (c) => {
+      const u = role(c, "influencer"),
+        a = applicationFor(db, id(c), u),
+        b = await body(c);
+      if (
+        a.status !== "applied" ||
+        !a.consent_version.startsWith("external-form-v2")
+      )
+        fail("추가 동의 대상이 아닙니다.", 409);
+      if (
+        b.secondary_use_consent !== true ||
+        b.original_delivery_consent !== true
+      )
+        fail("필수 동의 항목을 모두 확인해 주세요.");
+      db.transaction(() => {
+        db.prepare(
+          "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1,consent_at=?,consent_version='secondary-use-v2',updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        ).run(Date.now(), a.id);
+        event(
+          db,
+          a,
+          u.id,
+          "applied",
+          "2차 활용 및 고화질 원본 제공 추가 동의 완료",
+        );
+      })();
+      return c.json({ success: true });
+    }),
+  );
   app.get(
     "/api/work/certificate",
     wrap((c) => {
@@ -238,7 +292,12 @@ export function registerWorkflow(
     "/api/work/campaigns",
     wrap((c) => {
       const u = current(c);
-      const where = u.role === "brand" ? "WHERE c.brand_id=?" : "";
+      const where =
+        u.role === "brand"
+          ? "WHERE c.brand_id=?"
+          : u.role === "influencer"
+            ? "WHERE c.is_draft=0"
+            : "";
       const query = db.prepare(`SELECT c.*,u.name AS brand_name,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id) AS applicant_count,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id AND a.status NOT IN ('applied','rejected')) AS selected_count,
@@ -353,7 +412,8 @@ export function registerWorkflow(
           )
           .all(campaign.id) as { influencer_id: number; status: string }[];
         const locked =
-          applicants.length > 0 || campaign.status !== "recruiting";
+          !campaign.is_draft &&
+          (applicants.length > 0 || campaign.status !== "recruiting");
         const title = text(b.title ?? campaign.title, "캠페인명", 2, 100),
           product = text(b.product ?? campaign.product, "제품", 2, 200),
           description = text(
@@ -443,7 +503,7 @@ export function registerWorkflow(
           draft = deadline(draftDate);
           final = deadline(finalDate);
           ({ start, end } = recruitmentDates(startDate, endDate, draft));
-          if (final <= draft)
+          if (review && final <= draft)
             fail("초안 마감 < 최종 마감 순서로 설정해 주세요.");
         }
         db.prepare(
@@ -468,6 +528,15 @@ export function registerWorkflow(
           review ? 1 : 0,
           campaign.id,
         );
+        if (b.publish === true) {
+          if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
+          recruitmentDates(startDate, endDate, draft);
+          if (final < draft || (review && final === draft))
+            fail("캠페인 제출 일정을 확인해 주세요.");
+          db.prepare(
+            "UPDATE campaigns SET is_draft=0,status='recruiting' WHERE id=?",
+          ).run(campaign.id);
+        }
         saveCampaignImages(db, campaign.id, images);
         const sources = { title, product, description, guidelines };
         for (const field of englishFields) {
@@ -747,6 +816,20 @@ export function registerWorkflow(
               .get(a.influencer_id) as any;
             if (p.blacklisted || p.blocked_until > Date.now())
               fail("지원자가 현재 제재 중입니다.", 409);
+            if (
+              a.is_draft ||
+              (
+                db
+                  .prepare("SELECT is_draft FROM campaigns WHERE id=?")
+                  .get(a.campaign_id) as any
+              ).is_draft
+            )
+              fail("비공개 초안에서는 선정할 수 없습니다.", 409);
+            if (
+              a.consent_version.startsWith("external-form-v2") &&
+              (!a.secondary_use_consent || !a.original_delivery_consent)
+            )
+              fail("선정 전에 추가 동의가 필요합니다.", 409);
             status = "selected";
             note =
               "캠페인 참여자로 선정되었습니다. 참여 내역에서 배송지를 등록해 주세요.";
@@ -1056,7 +1139,7 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,u.email,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({

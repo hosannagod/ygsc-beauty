@@ -11,6 +11,7 @@ export type User = {
   name: string;
   role: Role;
   must_change_password?: number;
+  username?: string | null;
 };
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");

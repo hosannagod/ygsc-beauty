@@ -569,5 +569,17 @@
   "SNS 계정": "Social account",
   "기존 프로젝트 참여 이력": "Past project participation",
   "캠페인 지원·진행 이력": "Campaign applications and progress",
-  "완료 횟수": "Completed projects"
+  "완료 횟수": "Completed projects",
+  "비공개 초안": "Private draft",
+  "브랜드 아이디": "Brand username",
+  "이메일 또는 브랜드 아이디": "Email or brand username",
+  "아이디 또는 비밀번호가 올바르지 않습니다.": "Incorrect username or password.",
+  "비공개 초안입니다. 모집 인원과 일정·가이드라인을 설정한 후 공개해 주세요.": "This is a private draft. Set the capacity, schedule, and content guidelines before publishing.",
+  "저장 후 캠페인 공개": "Publish campaign after saving",
+  "외부 신청서로 등록된 지원입니다. 선정 전에 필수 동의를 확인해 주세요.": "This application was imported from an external form. Confirm the required consents before selection.",
+  "해당 캠페인의 2차 저작물 활용에 동의합니다.": "I agree to secondary use of the content for this campaign.",
+  "고화질 원본 제공에 동의합니다.": "I agree to provide high-resolution original files.",
+  "추가 동의 저장": "Save additional consent",
+  "선정 전에 추가 동의가 필요합니다.": "Additional consent is required before selection.",
+  "추가 동의 필요": "Additional consent needed"
 }

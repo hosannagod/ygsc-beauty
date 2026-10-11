@@ -28,6 +28,7 @@
     no_show: t("노쇼 · 페널티"),
     recruiting: t("모집 중"),
     scheduled: t("모집 예정"),
+    draft: t("비공개 초안"),
     closed: t("모집 마감"),
   };
   const date = (n) =>
@@ -181,9 +182,11 @@
     });
   }
   const campaignStatus = (c) =>
-    c.status === "recruiting" && c.recruit_start > Date.now()
-      ? "scheduled"
-      : c.status;
+    c.is_draft
+      ? "draft"
+      : c.status === "recruiting" && c.recruit_start > Date.now()
+        ? "scheduled"
+        : c.status;
   const today = () =>
     new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Seoul",
@@ -640,11 +643,13 @@
                     </form>`;
     } else {
       if (c.status !== "completed") {
-        const locked = applications.length > 0 || c.status !== "recruiting";
+        const locked =
+          !c.is_draft && (applications.length > 0 || c.status !== "recruiting");
         root.innerHTML += html`<section class="panel">
           <details>
             <summary>캠페인 편집</summary>
             <form class="editor" data-task="campaign-details" data-id="${id}">
+              ${c.is_draft ? `<div class="warning">${t("비공개 초안입니다. 모집 인원과 일정·가이드라인을 설정한 후 공개해 주세요.")}</div><label class="check"><input type="checkbox" name="publish"><span>${t("저장 후 캠페인 공개")}</span></label>` : ""}
               ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', (c._original || c).title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', (c._original || c).product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', (c._original || c).description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"', (c._original || c).guidelines)}
               <div class="form-grid">
                 ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', c.capacity)}<label
@@ -752,7 +757,7 @@
             >
           </p>
           ${
-            c.status === "recruiting"
+            !c.is_draft && c.status === "recruiting"
               ? html`<button
                   class="secondary"
                   data-campaign-action="close"
@@ -760,7 +765,7 @@
                 >
                   모집 마감하기
                 </button>`
-              : c.status === "closed"
+              : !c.is_draft && c.status === "closed"
                 ? html`<button
                       class="secondary"
                       data-campaign-action="complete"
@@ -772,7 +777,9 @@
                       진행 중인 활동과 미처리 지원자가 없어야 종료할 수
                       있습니다.
                     </p>`
-                : t('<p class="muted">종료된 캠페인입니다.</p>')
+                : c.is_draft
+                  ? `<p class="muted">${t("비공개 초안입니다. 모집 인원과 일정·가이드라인을 설정한 후 공개해 주세요.")}</p>`
+                  : t('<p class="muted">종료된 캠페인입니다.</p>')
           }
         </section>`;
       const draftKey = "seoul-selection:" + id;
@@ -783,7 +790,16 @@
       const chosen = new Set(
         Array.isArray(saved)
           ? saved.filter((n) =>
-              applications.some((a) => a.id === n && a.status === "applied"),
+              applications.some(
+                (a) =>
+                  a.id === n &&
+                  a.status === "applied" &&
+                  !c.is_draft &&
+                  !(
+                    a.consent_version.startsWith("external-form-v2") &&
+                    (!a.secondary_use_consent || !a.original_delivery_consent)
+                  ),
+              ),
             )
           : [],
       );
@@ -816,7 +832,15 @@
       };
       root.querySelector("[data-select-all]").onclick = () => {
         applications
-          .filter((a) => a.status === "applied")
+          .filter(
+            (a) =>
+              a.status === "applied" &&
+              !c.is_draft &&
+              !(
+                a.consent_version.startsWith("external-form-v2") &&
+                (!a.secondary_use_consent || !a.original_delivery_consent)
+              ),
+          )
           .forEach((a) => chosen.add(a.id));
         updateSelection();
       };
@@ -868,7 +892,7 @@
                     (a) =>
                       html`<tr>
                         <td>
-                          ${a.status === "applied" ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
+                          ${a.status === "applied" && !c.is_draft && !(a.consent_version.startsWith("external-form-v2") && (!a.secondary_use_consent || !a.original_delivery_consent)) ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
                         </td>
                         <td>
                           <strong>${esc(a.influencer_name)}</strong
@@ -935,6 +959,11 @@
     const influencer = role === "influencer";
     let actions = "";
     if (influencer) {
+      if (
+        a.status === "applied" &&
+        a.consent_version.startsWith("external-form-v2")
+      )
+        actions = `<form data-task="import-consent" data-id="${a.id}"><div class="warning">${t("외부 신청서로 등록된 지원입니다. 선정 전에 필수 동의를 확인해 주세요.")}</div><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>${t("해당 캠페인의 2차 저작물 활용에 동의합니다.")}</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>${t("고화질 원본 제공에 동의합니다.")}</span></label>${submit(t("추가 동의 저장"))}</form>`;
       if (a.status === "selected")
         actions = actionForm(
           a,
@@ -1216,10 +1245,11 @@
           : "",
       ) +
       `<form class="panel editor" data-task="account">
+        ${a.username ? `<p>${t("브랜드 아이디")}: <strong>${esc(a.username)}</strong></p>` : ""}
         ${a.must_change_password ? `<div class="warning">${t("임시 비밀번호로 로그인했습니다. 새 비밀번호를 설정해야 서비스를 이용할 수 있습니다.")}</div>` : ""}
-        ${role === "brand" ? input("brand_name", t("브랜드명"), "text", 'required minlength="2" maxlength="80"', a.brand_name) + input("contact_name", t("담당자명"), "text", 'required minlength="2" maxlength="60"', a.contact_name) : input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', a.name)}
-        ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30" autocomplete="tel"', a.phone)}
-        ${input("email", t("이메일"), "email", 'required maxlength="254" autocomplete="email"', a.email)}
+        ${role === "brand" ? input("brand_name", t("브랜드명"), "text", 'required minlength="2" maxlength="80"', a.brand_name) + input("contact_name", t("담당자명"), "text", `${a.username ? "" : "required"} minlength="2" maxlength="60"`, a.contact_name) : input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', a.name)}
+        ${input("phone", t("연락처"), "tel", `${a.username ? "" : "required"} minlength="8" maxlength="30" autocomplete="tel"`, a.phone)}
+        ${input("email", t("이메일"), "email", `${a.username ? "" : "required"} maxlength="254" autocomplete="email"`, a.email)}
         ${input("current_password", t("현재 비밀번호"), "password", 'required maxlength="128" autocomplete="current-password"')}
         ${input("new_password", t("새 비밀번호 (변경할 때만 입력)"), "password", `${a.must_change_password ? "required" : ""} minlength="12" maxlength="128" autocomplete="new-password"`)}
         ${input("confirm_password", t("새 비밀번호 확인"), "password", `${a.must_change_password ? "required" : ""} minlength="12" maxlength="128" autocomplete="new-password"`)}
@@ -1295,7 +1325,7 @@
               onboarding.submissions.some(
                 (s) => s.user_id === u.id && s.status === "pending",
               ))) &&
-          [u.name, u.email, u.phone, u.social_url].some((v) =>
+          [u.name, u.email, u.username, u.phone, u.social_url].some((v) =>
             String(v || "")
               .toLowerCase()
               .includes(q),
@@ -1316,7 +1346,7 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
@@ -1605,6 +1635,9 @@
           location.assign("/campaigns/" + r.id);
           return;
         }
+        case "import-consent":
+          await api(`/applications/${form.dataset.id}/consent`, "POST", data);
+          break;
         case "campaign-details":
           await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);
           break;

@@ -8,6 +8,16 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     db.exec(
       "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))",
     );
+  db.transaction(() => {
+    const users = db.prepare("PRAGMA table_info(users)").all() as {
+      name: string;
+    }[];
+    if (!users.some((c) => c.name === "username"))
+      db.exec("ALTER TABLE users ADD COLUMN username TEXT");
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username) WHERE username IS NOT NULL",
+    );
+  })();
   db.exec(`
     CREATE TABLE IF NOT EXISTS influencer_profiles (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -67,6 +77,20 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     CREATE INDEX IF NOT EXISTS events_application_idx ON application_events(application_id,id);
     INSERT OR IGNORE INTO schema_version VALUES(2);
   `);
+  db.transaction(() => {
+    const cols = db.prepare("PRAGMA table_info(campaigns)").all() as {
+      name: string;
+    }[];
+    if (!cols.some((c) => c.name === "is_draft"))
+      db.exec(
+        "ALTER TABLE campaigns ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0 CHECK(is_draft IN (0,1))",
+      );
+    if (!cols.some((c) => c.name === "import_key"))
+      db.exec("ALTER TABLE campaigns ADD COLUMN import_key TEXT");
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS campaigns_import_key_idx ON campaigns(import_key) WHERE import_key IS NOT NULL; INSERT OR IGNORE INTO schema_version VALUES(13)",
+    );
+  })();
   const columns = db.prepare("PRAGMA table_info(applications)").all() as {
     name: string;
   }[];

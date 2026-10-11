@@ -68,10 +68,10 @@ export function page(
               <form id="auth-form" data-mode="${kind}">
                 ${register ? t('<fieldset><legend>가입 유형</legend><div class="role-options"><label><input type="radio" name="role" value="brand" checked> 브랜드</label><label><input type="radio" name="role" value="influencer"> 인플루언서</label></div></fieldset><div id="brand-fields"><label>브랜드명<input name="brand_name" autocomplete="organization" required minlength="2" maxlength="60" placeholder="브랜드명을 입력해 주세요"></label><label>담당자명<input name="contact_name" autocomplete="name" required minlength="2" maxlength="60" placeholder="담당자 성함을 입력해 주세요"></label></div><div id="influencer-fields" hidden><label>성함<input name="name" autocomplete="name" disabled minlength="2" maxlength="60" placeholder="성함을 입력해 주세요"></label></div><label>연락처<input name="phone" type="tel" autocomplete="tel" required minlength="8" maxlength="30" placeholder="010-1234-5678"></label>') : ""}
                 <label
-                  >이메일<input
+                  >${register ? t("이메일") : t("이메일 또는 브랜드 아이디")}<input
                     name="email"
-                    type="email"
-                    autocomplete="email"
+                    type="${register ? "email" : "text"}"
+                    autocomplete="${register ? "email" : "username"}"
                     required
                     maxlength="254"
                     placeholder="you@example.com" /></label

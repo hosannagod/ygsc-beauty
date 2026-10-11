@@ -173,7 +173,7 @@ export function campaignFor(db: DB, id: number, user: User, manage = false) {
       "SELECT c.*, u.name AS brand_name FROM campaigns c JOIN users u ON u.id=c.brand_id WHERE c.id=?",
     )
     .get(id) as any;
-  if (!row) fail("캠페인을 찾을 수 없습니다.", 404);
+  if (!row || (row.is_draft && user.role === "influencer")) fail("캠페인을 찾을 수 없습니다.", 404);
   if (
     manage &&
     user.role !== "admin" &&
@@ -207,7 +207,7 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
     const rows = db
       .prepare(
         `SELECT a.*,c.title,c.brand_id,c.review_required,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
-      WHERE c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
+      WHERE c.is_draft=0 AND c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
       )
       .all() as any[];
     let penalized = 0;

@@ -23,6 +23,7 @@ export function finalizeSelection(
   return db.transaction(() => {
     const campaign = campaignFor(db, campaignId, user, true);
     if (
+      campaign.is_draft ||
       campaign.status === "completed" ||
       Date.now() >=
         (campaign.review_required ? campaign.draft_due : campaign.final_due)
@@ -32,6 +33,11 @@ export function finalizeSelection(
     for (const a of applicants) {
       if (a.campaign_id !== campaignId || a.status !== "applied")
         fail("이 캠페인의 미선정 지원자만 선택할 수 있습니다.", 409);
+      if (
+        a.consent_version.startsWith("external-form-v2") &&
+        (!a.secondary_use_consent || !a.original_delivery_consent)
+      )
+        fail("선정 전에 추가 동의가 필요합니다.", 409);
       const p = db
         .prepare(
           "SELECT blacklisted,blocked_until FROM influencer_profiles WHERE user_id=?",

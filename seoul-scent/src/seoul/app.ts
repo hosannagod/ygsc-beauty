@@ -8,7 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { openDb, hashPassword, verifyPassword, type User } from "./db.js";
 import { page } from "./views.js";
 
-const selectUser = "id, email, name, role, must_change_password";
+const selectUser = "id, email, name, role, must_change_password, username";
 const roles = ["admin", "brand", "influencer"] as const;
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
@@ -175,7 +175,7 @@ export function createApp(
     return c.json({
       account: db
         .prepare(
-          "SELECT id,email,name,role,brand_name,contact_name,phone,must_change_password FROM users WHERE id=?",
+          "SELECT id,CASE WHEN email=username THEN '' ELSE email END AS email,username,name,role,brand_name,contact_name,phone,must_change_password FROM users WHERE id=?",
         )
         .get(user.id),
     });
@@ -215,19 +215,24 @@ export function createApp(
         : body[key] === undefined
           ? fallback
           : "";
-    const email = field("email", saved.email).toLowerCase();
+    const email = (
+      field("email", saved.email) ||
+      (saved.username ?? "")
+    ).toLowerCase();
+    const usernameBrand = user.role === "brand" && !!saved.username;
     const name = field("name", saved.name),
       phone = field("phone", saved.phone);
     const brandName = field("brand_name", saved.brand_name),
       contactName = field("contact_name", saved.contact_name);
     if (
-      !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email) ||
+      (!/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email) &&
+        !(usernameBrand && email === saved.username)) ||
       email.length > 254 ||
-      !/^[+0-9 ()-]{8,30}$/.test(phone) ||
+      (!/^[+0-9 ()-]{8,30}$/.test(phone) && !(usernameBrand && !phone)) ||
       (user.role === "brand"
         ? brandName.length < 2 ||
           brandName.length > 80 ||
-          contactName.length < 2 ||
+          (contactName.length < 2 && !(usernameBrand && !contactName)) ||
           contactName.length > 60
         : name.length < 2 || name.length > 60)
     )
@@ -368,7 +373,14 @@ export function createApp(
       body.password.length > 128
     )
       return c.json({ error: "입력 내용을 확인해 주세요." }, 400);
-    const email = body.email.trim().toLowerCase();
+    const identifier = body.email.trim().toLowerCase();
+    const user = db
+      .prepare(
+        `SELECT ${selectUser}, password_hash FROM users WHERE email=? OR username=?`,
+      )
+      .get(identifier, identifier) as
+      (User & { password_hash: string }) | undefined;
+    const email = user?.username ? `login:${user.id}` : identifier;
     const attempt = db
       .prepare("SELECT * FROM login_attempts WHERE email=?")
       .get(email) as any;
@@ -377,9 +389,6 @@ export function createApp(
         { error: "로그인 시도가 너무 많습니다. 15분 후 다시 시도해 주세요." },
         429,
       );
-    const user = db
-      .prepare(`SELECT ${selectUser}, password_hash FROM users WHERE email=?`)
-      .get(email) as (User & { password_hash: string }) | undefined;
     if (
       !verifyPassword(body.password, user?.password_hash || dummyHash) ||
       !user
@@ -390,7 +399,7 @@ export function createApp(
         "INSERT INTO login_attempts VALUES (?,?,?) ON CONFLICT(email) DO UPDATE SET failures=excluded.failures, locked_until=excluded.locked_until",
       ).run(email, failures, failures >= 5 ? Date.now() + 15 * 60_000 : 0);
       return c.json(
-        { error: "이메일 또는 비밀번호가 올바르지 않습니다." },
+        { error: "아이디 또는 비밀번호가 올바르지 않습니다." },
         401,
       );
     }
@@ -401,6 +410,7 @@ export function createApp(
       name: user.name,
       role: user.role,
       must_change_password: user.must_change_password,
+      username: user.username,
     };
     session(c, safeUser);
     return c.json({
