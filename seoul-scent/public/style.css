@@ -1251,3 +1251,10 @@ dialog.influencer-detail {
     grid-template-columns: 1fr;
   }
 }
+
+.applicant-social .text-link {
+  display: inline-block;
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

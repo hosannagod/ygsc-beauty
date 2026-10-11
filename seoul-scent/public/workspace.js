@@ -70,6 +70,18 @@
     );
   const link = (url, label) =>
     `<a class="text-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`;
+  const socialAccountLink = (value) => {
+    if (!value) return "—";
+    try {
+      const url = new URL(value);
+      if (!["https:", "http:"].includes(url.protocol)) return "—";
+      const label =
+        url.hostname.replace(/^www\./, "") + url.pathname.replace(/\/$/, "");
+      return link(url.href, label);
+    } catch {
+      return "—";
+    }
+  };
   const input = (name, label, type = "text", attrs = "", value = "") =>
     `<label>${label}<input name="${name}" type="${type}" ${attrs} value="${esc(value)}"></label>`;
   const textarea = (name, label, attrs = "", value = "") =>
@@ -873,6 +885,7 @@
                 <tr>
                   <th>선택</th>
                   <th>인플루언서</th>
+                  <th>${t("SNS 계정")}</th>
                   <th>${t("팔로워 · 등급")}${gradeInfo()}</th>
                   <th>${t("참여 횟수")}${participationInfo()}</th>
                   <th>상태</th>
@@ -890,6 +903,9 @@
                         <td>
                           <strong>${esc(a.influencer_name)}</strong
                           ><small>${esc(a.influencer_email)}</small>
+                        </td>
+                        <td class="applicant-social">
+                          ${socialAccountLink(a.social_url)}
                         </td>
                         <td>
                           ${money(a.followers)} ·
