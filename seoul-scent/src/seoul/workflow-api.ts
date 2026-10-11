@@ -1337,6 +1337,55 @@ export function registerWorkflow(
     }),
   );
   app.put(
+    "/api/work/admin/users/:id/email",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      db.transaction(() => {
+        const user = db
+          .prepare("SELECT id,email,role FROM users WHERE id=?")
+          .get(target) as any;
+        if (!user || user.role !== "influencer")
+          fail("인플루언서를 찾을 수 없습니다.", 404);
+        if (b.confirm_email !== user.email)
+          fail("변경 전 이메일을 확인해 주세요.", 409);
+        const email = text(b.email, "이메일", 3, 254).toLowerCase();
+        if (!/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email))
+          fail("이메일 형식을 확인해 주세요.");
+        if (
+          db
+            .prepare(
+              "SELECT id FROM users WHERE (email=? OR username=?) AND id!=?",
+            )
+            .get(email, email, target)
+        )
+          fail("이미 사용 중인 이메일입니다.", 409);
+        if (email === user.email) return;
+        db.prepare("UPDATE users SET email=? WHERE id=?").run(email, target);
+        db.prepare("DELETE FROM sessions WHERE user_id=?").run(target);
+        db.prepare("DELETE FROM login_attempts WHERE email IN (?,?,?)").run(
+          user.email,
+          email,
+          `login:${target}`,
+        );
+        db.prepare(
+          "UPDATE email_outbox SET recipient=? WHERE application_id IN (SELECT id FROM applications WHERE influencer_id=?) AND status IN ('pending','failed')",
+        ).run(email, target);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          target,
+          "account_email",
+          JSON.stringify({ previous_email: user.email, email }),
+          Date.now(),
+        );
+      })();
+      return c.json({ success: true });
+    }),
+  );
+  app.put(
     "/api/work/admin/users/:id/profile",
     wrap(async (c) => {
       const actor = role(c, "admin"),

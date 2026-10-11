@@ -1720,3 +1720,108 @@ test("admin removal verifies identity, revokes sessions and removes unselected a
     f.db.close();
   }
 });
+
+test("admin email corrections preserve participant identity and history, reject collisions and revoke old sessions", async () => {
+  const f = await fixture();
+  try {
+    const target = f.ids.influencer,
+      endpoint = `/admin/users/${target}/email`;
+    const payload = {
+      confirm_email: "influencer@test.com",
+      email: "corrected@test.com",
+    };
+    const before = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(target) as any;
+    f.db
+      .prepare(
+        "INSERT INTO historical_activities(user_id,project_key,content_links,submitted_at,imported_at) VALUES(?,'Archive','[]','',1)",
+      )
+      .run(target);
+    const historyBefore = f.db
+      .prepare("SELECT * FROM historical_activities WHERE user_id=?")
+      .all(target);
+    const campaignId = await f.create(),
+      appId = await f.apply(campaignId);
+    f.db
+      .prepare(
+        "INSERT INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at) VALUES(?,'test-correction','influencer@test.com','Test','Test',1,1)",
+      )
+      .run(appId);
+    for (const actor of ["influencer", "brand"])
+      assert.equal((await f.req(actor, endpoint, "PUT", payload)).status, 403);
+    assert.equal(
+      (
+        await f.req("admin", endpoint, "PUT", {
+          ...payload,
+          confirm_email: "wrong@test.com",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.req("admin", endpoint, "PUT", {
+          ...payload,
+          email: "other@test.com",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.req("admin", endpoint, "PUT", {
+          ...payload,
+          email: "not-an-email",
+        })
+      ).status,
+      400,
+    );
+    const corrected = await f.req("admin", endpoint, "PUT", payload);
+    assert.equal(corrected.status, 200, await corrected.text());
+    const after = f.db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(target) as any;
+    assert.equal(after.email, payload.email);
+    for (const field of [
+      "id",
+      "name",
+      "role",
+      "password_hash",
+      "must_change_password",
+    ])
+      assert.equal(after[field], before[field]);
+    assert.deepEqual(
+      f.db
+        .prepare("SELECT * FROM historical_activities WHERE user_id=?")
+        .all(target),
+      historyBefore,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT influencer_id FROM applications WHERE id=?")
+          .get(appId) as any
+      ).influencer_id,
+      target,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT recipient FROM email_outbox WHERE application_id=?")
+          .get(appId) as any
+      ).recipient,
+      payload.email,
+    );
+    assert.equal((await f.req("influencer", "/profile")).status, 401);
+    const login = await f.app.request("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: payload.email, password }),
+    });
+    assert.equal(login.status, 200);
+    assert.equal(((await login.json()) as any).user.id, target);
+  } finally {
+    f.db.close();
+  }
+});
