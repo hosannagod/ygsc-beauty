@@ -1,5 +1,6 @@
 import { translator, type Language } from "./i18n.js";
 import type { User } from "./db.js";
+import { socialPreview } from "./social-preview.js";
 const escape = (value: string) =>
   value.replace(
     /[&<>"']/g,
@@ -42,6 +43,7 @@ export function workspacePage(user: User, lang: Language = "ko") {
       <head>
         <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1" />
         <meta charset="utf-8" />
+        ${socialPreview(lang)}
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Seoul Scent · 협업 워크스페이스</title>
         <link rel="stylesheet" href="/assets/style.css" />
