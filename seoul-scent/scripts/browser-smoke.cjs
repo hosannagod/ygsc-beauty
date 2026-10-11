@@ -500,7 +500,18 @@ const { spawn, spawnSync } = require("node:child_process"),
       .getByRole("heading", { name: "전체 캠페인", exact: true })
       .waitFor();
     await admin.screenshot({ path: tmp + "/dashboard.png", fullPage: true });
-    await admin.getByRole("link", { name: "등급관리" }).click();
+    await admin.getByRole("link", { name: "인플루언서·등급관리" }).click();
+    await admin.getByRole("heading", { name: "인플루언서·등급관리" }).waitFor();
+    assert.equal(await admin.locator("#user-role").inputValue(), "influencer");
+    await admin.locator("#user-grade").selectOption("basic");
+    assert.equal(
+      await admin.getByRole("button", { name: "이력 보기" }).count(),
+      0,
+    );
+    await admin.locator("#user-grade").selectOption("all");
+    await admin.locator("#user-search").fill("01012345678");
+    await admin.getByRole("button", { name: "이력 보기" }).waitFor();
+    await admin.locator("#user-search").fill("");
     await admin.getByRole("button", { name: "이력 보기" }).click();
     await admin.getByRole("heading", { name: "참여 이력" }).waitFor();
     await admin.getByRole("link", { name: "운영 정책" }).click();
@@ -686,6 +697,14 @@ const { spawn, spawnSync } = require("node:child_process"),
       .locator("#influencer-import-result")
       .getByText(/등록 완료: 1/)
       .waitFor();
+    assert.equal(
+      await admin
+        .locator("#user-stats .kpi")
+        .first()
+        .locator("strong")
+        .innerText(),
+      "2",
+    );
     const importedPage = await browser.newPage();
     importedPage.on("pageerror", (e) => errors.push(e.message));
     await importedPage.goto(base + "/login");

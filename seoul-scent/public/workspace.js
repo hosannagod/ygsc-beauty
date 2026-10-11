@@ -1161,7 +1161,7 @@
     return `<section class="panel"><h2>${t("브론즈 홍보 인증")}</h2><p>${t("Seoul Scent 홍보 이미지와 아래 링크를 SNS 게시물 또는 스토리에 함께 올린 뒤 링크나 스크린샷을 제출해 주세요. 운영사 승인 후 캠페인에 지원할 수 있습니다.")}</p><p>${link(data.promotion_link, data.promotion_link)}</p>${data.has_promotion_image ? `<p><a class="secondary" href="/api/work/onboarding/promotion-image" download="seoul-scent-promotion.jpg">${t("홍보 이미지 다운로드")}</a></p>` : `<p class="note left">${t("운영사에서 안내받은 홍보 이미지를 사용해 주세요.")}</p>`}<p>${t("인증 상태")}: ${esc(status)}</p>${submission?.feedback ? `<p class="preline">${esc(submission.feedback)}</p>` : ""}${submission?.url ? `<p>${link(submission.url, t("제출한 홍보 링크"))}</p>` : ""}${submission?.image_url ? `<div class="campaign-gallery"><a href="${esc(submission.image_url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(submission.image_url)}" alt="${t("홍보 인증 스크린샷")}"></a></div>` : ""}${submission?.status === "pending" ? `<p>${t("운영사가 제출 자료를 확인하고 있습니다.")}</p>` : `<form class="editor" data-task="onboarding"><label>${t("홍보 게시물 링크 (선택)")}<input name="url" type="url" maxlength="2000" placeholder="https://..."></label><label>${t("홍보 인증 스크린샷 (선택)")}<input name="proof_image" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="note left">${t("스토리는 사라질 수 있으니 링크가 포함된 화면의 스크린샷을 권장합니다. 링크 또는 이미지 중 하나는 필수입니다.")}</p><label class="check"><input name="confirmation" type="checkbox" required><span>${t("Seoul Scent 홍보 이미지와 필수 링크를 포함했습니다.")}</span></label>${submit(t("홍보 인증 제출"))}</form>`}</section>`;
   }
   function promotionAdmin(data) {
-    return `<section class="panel"><h2>${t("홍보 인증 관리")}</h2><p>${t("승인하면 브론즈 지원 자격만 부여합니다. 완료 횟수와 활동증명서는 늘어나지 않습니다.")}</p><form class="editor" data-task="promotion-image"><label>${t("공식 홍보 이미지")}<input name="proof_image" type="file" accept="image/jpeg,image/png,image/webp" required></label>${data.has_promotion_image ? `<p>${link("/api/work/onboarding/promotion-image", t("현재 홍보 이미지 보기"))}</p>` : ""}${submit(t("홍보 이미지 저장"))}</form>${data.submissions.length ? data.submissions.map((r) => `<article class="panel"><h3>${esc(r.name)}</h3><p>${esc(r.email)} · ${esc({ pending: t("검토 대기"), approved: t("승인 완료"), rejected: t("반려") }[r.status])}</p>${r.url ? link(r.url, t("제출한 홍보 링크")) : ""}${r.has_image ? `<div class="campaign-gallery"><a href="/api/work/onboarding/${r.id}/image" target="_blank" rel="noopener noreferrer"><img src="/api/work/onboarding/${r.id}/image" alt="${t("홍보 인증 스크린샷")}" loading="lazy"></a></div>` : ""}${r.feedback ? `<p class="preline">${esc(r.feedback)}</p>` : ""}${r.status === "pending" ? `<form class="editor" data-task="onboarding-review" data-id="${r.id}"><label>${t("검토 결과")}<select name="decision"><option value="approved">${t("승인")}</option><option value="rejected">${t("반려")}</option></select></label>${textarea("feedback", t("피드백 (반려 시 필수)"), 'maxlength="2000" rows="3"')}${submit(t("검토 결과 저장"))}</form>` : ""}</article>`).join("") : `<p>${t("제출된 홍보 인증이 없습니다.")}</p>`}</section>`;
+    return `<section class="panel" id="promotion-admin"><h2>${t("홍보 인증 관리")}</h2><p>${t("승인하면 브론즈 지원 자격만 부여합니다. 완료 횟수와 활동증명서는 늘어나지 않습니다.")}</p><form class="editor" data-task="promotion-image"><label>${t("공식 홍보 이미지")}<input name="proof_image" type="file" accept="image/jpeg,image/png,image/webp" required></label>${data.has_promotion_image ? `<p>${link("/api/work/onboarding/promotion-image", t("현재 홍보 이미지 보기"))}</p>` : ""}${submit(t("홍보 이미지 저장"))}</form>${data.submissions.length ? data.submissions.map((r) => `<article class="panel"><h3>${esc(r.name)}</h3><p>${esc(r.email)} · ${esc({ pending: t("검토 대기"), approved: t("승인 완료"), rejected: t("반려") }[r.status])}</p>${r.url ? link(r.url, t("제출한 홍보 링크")) : ""}${r.has_image ? `<div class="campaign-gallery"><a href="/api/work/onboarding/${r.id}/image" target="_blank" rel="noopener noreferrer"><img src="/api/work/onboarding/${r.id}/image" alt="${t("홍보 인증 스크린샷")}" loading="lazy"></a></div>` : ""}${r.feedback ? `<p class="preline">${esc(r.feedback)}</p>` : ""}${r.status === "pending" ? `<form class="editor" data-task="onboarding-review" data-id="${r.id}"><label>${t("검토 결과")}<select name="decision"><option value="approved">${t("승인")}</option><option value="rejected">${t("반려")}</option></select></label>${textarea("feedback", t("피드백 (반려 시 필수)"), 'maxlength="2000" rows="3"')}${submit(t("검토 결과 저장"))}</form>` : ""}</article>`).join("") : `<p>${t("제출된 홍보 인증이 없습니다.")}</p>`}</section>`;
   }
   const historyCards = (history = []) =>
     history.length
@@ -1253,20 +1253,60 @@
       api("/admin/users"),
       api("/admin/onboarding"),
     ]);
+    const stats = () => {
+      const influencers = users.filter((u) => u.role === "influencer");
+      return `${kpi(t("전체 인플루언서"), influencers.length)}${kpi(t("캠페인 지원 가능"), influencers.filter((u) => u.can_apply).length)}${kpi(t("홍보 인증 검토 대기"), onboarding.submissions.filter((s) => s.status === "pending").length)}${kpi(t("지원 제한 중"), influencers.filter((u) => u.blacklisted || u.blocked_until > Date.now()).length)}`;
+    };
     root.innerHTML =
-      heading(t("등급관리"), t("참여 이력과 노쇼 제재를 확인하세요.")) +
-      t(
-        '<div class="toolbar"><input id="user-search" aria-label="계정 검색" placeholder="이름·이메일 검색"></div><div class="panel table-wrap" id="user-results"></div>',
-      );
+      heading(
+        t("인플루언서·등급관리"),
+        t(
+          "전체 인플루언서의 연락처·SNS·등급·참여 이력과 홍보 인증을 함께 관리합니다.",
+        ),
+        `<a class="secondary" href="/admin/settings">${t("등급 기준 설정")}</a>`,
+      ) +
+      `<section class="kpi-grid" id="user-stats">${stats()}</section>` +
+      `<div class="button-row"><a class="secondary" href="#user-results">${t("인플루언서 목록")}</a><a class="secondary" href="#promotion-admin">${t("홍보 인증 관리")}</a><a class="secondary" href="#admin-imports">${t("회원·이력 엑셀 등록")}</a></div>` +
+      `<div class="toolbar"><input id="user-search" aria-label="${t("인플루언서 검색")}" placeholder="${t("이름·이메일·연락처 검색")}"><select id="user-role" aria-label="${t("계정 유형")} "><option value="influencer">${t("전체 인플루언서")}</option><option value="brand">${t("브랜드")}</option><option value="admin">${t("운영사")}</option><option value="all">${t("전체 계정")}</option></select><select id="user-grade" aria-label="${t("등급 필터")}"><option value="all">${t("전체 등급")}</option>${["basic", "bronze", "silver", "gold", "platinum"].map((value, i) => `<option value="${value}">${[t("기본"), t("브론즈"), t("실버"), t("골드"), t("플래티넘")][i]}</option>`).join("")}</select><select id="user-status" aria-label="${t("상태 필터")}"><option value="all">${t("전체 상태")}</option><option value="pending">${t("홍보 인증 검토 대기")}</option><option value="restricted">${t("지원 제한 중")}</option></select></div><p id="user-count" class="muted" aria-live="polite"></p><div class="panel table-wrap" id="user-results"></div>`;
     const render = () => {
-      const q = document.querySelector("#user-search").value.toLowerCase(),
-        rows = users.filter((u) =>
-          (u.name + " " + u.email).toLowerCase().includes(q),
+      document.querySelector("#user-stats").innerHTML = stats();
+      const q = document
+          .querySelector("#user-search")
+          .value.trim()
+          .toLowerCase(),
+        roleFilter = document.querySelector("#user-role").value,
+        gradeFilter = document.querySelector("#user-grade").value,
+        statusFilter = document.querySelector("#user-status").value;
+      const rows = users.filter((u) => {
+        const grade =
+          u.completed_count === 0 && !u.onboarding_approved
+            ? "basic"
+            : ["bronze", "silver", "gold", "platinum"][u.tier];
+        return (
+          (roleFilter === "all" || u.role === roleFilter) &&
+          (gradeFilter === "all" ||
+            (u.role === "influencer" && grade === gradeFilter)) &&
+          (statusFilter === "all" ||
+            (statusFilter === "restricted" &&
+              (u.blacklisted || u.blocked_until > Date.now())) ||
+            (statusFilter === "pending" &&
+              onboarding.submissions.some(
+                (s) => s.user_id === u.id && s.status === "pending",
+              ))) &&
+          [u.name, u.email, u.phone, u.social_url].some((v) =>
+            String(v || "")
+              .toLowerCase()
+              .includes(q),
+          )
         );
+      });
+      document.querySelector("#user-count").textContent =
+        t("검색 결과") + ": " + rows.length;
       document.querySelector("#user-results").innerHTML = html`<table>
         <thead>
           <tr>
             <th>계정</th>
+            <th>${t("연락처 · SNS")}</th>
             <th>역할</th>
             <th>${t("등급 · 완료")}${gradeInfo()}</th>
             <th>노쇼 · 제한</th>
@@ -1274,11 +1314,14 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
     document.querySelector("#user-search").oninput = render;
+    ["#user-role", "#user-grade", "#user-status"].forEach(
+      (id) => (document.querySelector(id).onchange = render),
+    );
     refreshUsers = async () => {
       const fresh = await api("/admin/users");
       users.splice(0, users.length, ...fresh.users);
@@ -1292,7 +1335,7 @@
     );
     root.insertAdjacentHTML(
       "beforeend",
-      `<form class="panel editor" data-task="activity-import"><h2>${t("기존 프로젝트 이력 등록")}</h2><p>${t("4개 프로젝트 원본 엑셀을 등록합니다. 프로젝트당 완료 횟수는 1회만 반영하며 기존 회원 이메일로 연결합니다.")}</p><label>${t("프로젝트 이력 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>${input("initial_password", t("신규 계정 임시 비밀번호"), "password", 'minlength="4" maxlength="128"', "0000")}<label class="check"><input type="checkbox" name="create_missing_accounts" checked><span>${t("계정이 없는 이메일은 파일의 이름으로 신규 등록합니다. 첫 로그인 시 비밀번호 변경이 필수입니다.")}</span></label>${submit(t("검토 후 등록"))}<div id="activity-import-result"></div></form>`,
+      `<form class="panel editor" id="admin-imports" data-task="activity-import"><h2>${t("기존 프로젝트 이력 등록")}</h2><p>${t("4개 프로젝트 원본 엑셀을 등록합니다. 프로젝트당 완료 횟수는 1회만 반영하며 기존 회원 이메일로 연결합니다.")}</p><label>${t("프로젝트 이력 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>${input("initial_password", t("신규 계정 임시 비밀번호"), "password", 'minlength="4" maxlength="128"', "0000")}<label class="check"><input type="checkbox" name="create_missing_accounts" checked><span>${t("계정이 없는 이메일은 파일의 이름으로 신규 등록합니다. 첫 로그인 시 비밀번호 변경이 필수입니다.")}</span></label>${submit(t("검토 후 등록"))}<div id="activity-import-result"></div></form>`,
     );
     root.insertAdjacentHTML(
       "beforeend",
@@ -1314,7 +1357,7 @@
       html`<form
           class="panel editor"
           data-task="settings"
-          data-confirm="운영 정책을 변경하고 전체 인플루언서의 등급를 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."
+          data-confirm="운영 정책을 변경하고 전체 인플루언서의 등급을 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."
         >
           <h2>노쇼 제재</h2>
           <div class="form-grid">

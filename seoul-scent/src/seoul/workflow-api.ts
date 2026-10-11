@@ -1056,9 +1056,19 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,u.email,u.role,u.created_at,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,u.email,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
-          .all(),
+          .all()
+          .map((u: any) => ({
+            ...u,
+            can_apply:
+              u.role === "influencer" &&
+              !u.must_change_password &&
+              profileComplete(u) &&
+              campaignEligible(u) &&
+              !u.blacklisted &&
+              u.blocked_until <= Date.now(),
+          })),
       });
     }),
   );
