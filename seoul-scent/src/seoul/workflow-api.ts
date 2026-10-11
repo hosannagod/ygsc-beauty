@@ -1210,6 +1210,81 @@ export function registerWorkflow(
     }),
   );
   app.get(
+    "/api/work/admin/influencers.xlsx",
+    wrap(async (c) => {
+      role(c, "admin");
+      const rows = db
+        .prepare(
+          `SELECT u.id,u.name,u.email,p.phone,p.social_url,p.followers,p.tier,p.completed_count,p.onboarding_approved
+         FROM users u JOIN influencer_profiles p ON p.user_id=u.id
+         WHERE u.role='influencer' ORDER BY p.followers DESC,u.id ASC`,
+        )
+        .all() as any[];
+      const book = new ExcelJS.Workbook();
+      const summary = book.addWorksheet("요약");
+      summary.addRows([
+        ["항목", "결과"],
+        [
+          "생성 일시 (한국 시간)",
+          new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        ],
+        ["전체 인플루언서", rows.length],
+        ["팔로워 수 등록 인원", rows.filter((r) => r.followers > 0).length],
+        ["팔로워 수 미등록 인원", rows.filter((r) => r.followers === 0).length],
+        ["팔로워 합계", rows.reduce((sum, r) => sum + r.followers, 0)],
+        [
+          "집계 안내",
+          "현재 저장된 수치입니다. 반올림된 표시값을 환산한 수치가 포함될 수 있으며, 계정 간 팔로워 중복을 제거한 고유 도달 인원이 아닙니다.",
+        ],
+      ]);
+      const columns = [
+        { header: "이름", key: "name", width: 28 },
+        { header: "이메일", key: "email", width: 38 },
+        { header: "연락처", key: "phone", width: 22 },
+        { header: "SNS 링크", key: "social_url", width: 65 },
+        { header: "팔로워 수", key: "followers", width: 18 },
+        { header: "등급", key: "grade", width: 16 },
+        { header: "완료 참여 횟수", key: "completed_count", width: 20 },
+        { header: "확인 상태", key: "status", width: 25 },
+      ];
+      const output = rows.map((r) => ({
+        ...r,
+        grade: tierLabel(r.tier, r.completed_count, r.onboarding_approved),
+        status:
+          r.followers > 0
+            ? "수치 등록됨"
+            : r.social_url
+              ? "팔로워 수 확인 필요"
+              : "SNS 미등록",
+      }));
+      for (const [name, data] of [
+        ["전체 명단", output],
+        ["팔로워 확인 필요", output.filter((r) => r.followers === 0)],
+      ] as const) {
+        const sheet = book.addWorksheet(name);
+        sheet.columns = columns;
+        sheet.addRows(data);
+        sheet.views = [{ state: "frozen", ySplit: 1 }];
+        sheet.autoFilter = { from: "A1", to: "H1" };
+        sheet.getColumn("phone").numFmt = "@";
+        sheet.getColumn("followers").numFmt = "#,##0";
+      }
+      summary.getColumn(1).width = 30;
+      summary.getColumn(2).width = 90;
+      summary.getColumn(2).alignment = { wrapText: true };
+      for (const sheet of book.worksheets)
+        sheet.getRow(1).font = { bold: true };
+      return new Response((await book.xlsx.writeBuffer()) as any, {
+        headers: {
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="seoul-scent-influencers-${seoulToday()}.xlsx"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }),
+  );
+  app.get(
     "/api/work/admin/audit",
     wrap((c) => {
       role(c, "admin");
