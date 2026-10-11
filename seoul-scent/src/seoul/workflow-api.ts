@@ -4,6 +4,7 @@ import { registerOnboarding, campaignEligible } from "./onboarding.js";
 import { tierLabel } from "./tier.js";
 import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
+import { mergeInfluencers } from "./influencer-merge.js";
 import { queueSelectionEmail, emailStatus } from "./email.js";
 import { profileComplete, socialProfileUrl } from "./profile.js";
 import {
@@ -1325,6 +1326,37 @@ export function registerWorkflow(
         );
       })();
       return c.json({ success: true });
+    }),
+  );
+  app.post(
+    "/api/work/admin/users/:id/merge",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      const user = db
+        .prepare("SELECT email,role FROM users WHERE id=?")
+        .get(target) as any;
+      if (!user || user.role !== "influencer")
+        fail("인플루언서를 찾을 수 없습니다.", 404);
+      if (b.confirm_email !== user.email)
+        fail("유지할 계정의 이메일을 확인해 주세요.", 409);
+      if (
+        !Array.isArray(b.source_emails) ||
+        b.source_emails.some(
+          (email: unknown) => typeof email !== "string" || email.length > 254,
+        )
+      )
+        fail("합칠 계정 이메일을 확인해 주세요.");
+      return c.json(
+        mergeInfluencers(
+          db,
+          target,
+          b.source_emails,
+          actor.id,
+          b.dry_run !== false,
+        ),
+      );
     }),
   );
   app.delete(
