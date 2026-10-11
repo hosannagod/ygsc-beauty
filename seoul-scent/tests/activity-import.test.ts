@@ -193,3 +193,89 @@ test("history can create missing accounts with forced initial password change wh
     db.close();
   }
 });
+
+test("normalized archive imports additional brands once per creator and project", async () => {
+  const db = openDb(":memory:");
+  try {
+    const book = new ExcelJS.Workbook();
+    const sheet = book.addWorksheet("참여 이력");
+    sheet.addRow(["프로젝트", "이메일", "올린 링크", "인플루언서명"]);
+    sheet.addRow([
+      "배리홉",
+      "creator@example.com",
+      "https://instagram.com/reel/first",
+      "Creator",
+    ]);
+    sheet.addRow([
+      "배리홉",
+      "creator@example.com",
+      "https://instagram.com/reel/second",
+      "Creator",
+    ]);
+    sheet.addRow([
+      "테리브",
+      "creator@example.com",
+      "https://instagram.com/reel/third",
+      "Creator",
+    ]);
+    sheet.addRow([
+      "베일코스메틱",
+      "creator@example.com",
+      "https://instagram.com/reel/fourth",
+      "Creator",
+    ]);
+    const buffer = Buffer.from(await book.xlsx.writeBuffer());
+    const options = { createMissing: true, password: "0000" };
+    const result = await importActivities(
+      db,
+      buffer,
+      false,
+      undefined,
+      options,
+    );
+    assert.equal(result.imported, 3);
+    assert.equal(result.accounts_created, 1);
+    assert.deepEqual(result.projects, ["배리홉", "테리브", "베일코스메틱"]);
+    const user = db
+      .prepare("SELECT * FROM users WHERE email=?")
+      .get("creator@example.com") as any;
+    assert.equal(user.must_change_password, 1);
+    assert.equal(
+      historicalActivities(db, user.id).find((h) => h.title === "배리홉")!.links
+        .length,
+      2,
+    );
+    const repeat = await importActivities(
+      db,
+      buffer,
+      false,
+      undefined,
+      options,
+    );
+    assert.equal(repeat.imported, 0);
+    assert.equal(repeat.existing, 3);
+    assert.equal(
+      (
+        db
+          .prepare(
+            "SELECT completed_count FROM influencer_profiles WHERE user_id=?",
+          )
+          .get(user.id) as any
+      ).completed_count,
+      3,
+    );
+    sheet.addRow([
+      "",
+      "creator@example.com",
+      "https://instagram.com/reel/invalid",
+      "Creator",
+    ]);
+    assert.equal(
+      (await readActivityWorkbook(Buffer.from(await book.xlsx.writeBuffer())))
+        .issues.length,
+      1,
+    );
+  } finally {
+    db.close();
+  }
+});

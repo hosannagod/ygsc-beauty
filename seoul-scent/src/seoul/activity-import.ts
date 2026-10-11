@@ -39,10 +39,19 @@ export async function readActivityWorkbook(buffer: Buffer) {
   >();
   const issues: { sheet: string; row: number; reason: string }[] = [];
   let rows = 0;
-  for (const project of archiveProjects) {
-    const sheet =
-      book.getWorksheet(project) ||
-      fail("4개 프로젝트 시트를 모두 포함한 원본 엑셀을 선택해 주세요.");
+  // Normalized archives can include completed projects beyond the original four.
+  const normalized = book.getWorksheet("참여 이력");
+  const sheets = normalized
+    ? [{ sheet: normalized, project: "" }]
+    : archiveProjects.map((project) => ({
+        project,
+        sheet:
+          book.getWorksheet(project) ||
+          fail(
+            "4개 프로젝트 시트 또는 프로젝트 열이 있는 참여 이력 시트를 포함해 주세요.",
+          ),
+      }));
+  for (const { sheet, project: sheetProject } of sheets) {
     if (sheet.rowCount > 1001 || sheet.columnCount > 30)
       fail("프로젝트 시트 크기가 너무 큽니다.");
     const headers = new Map<string, number>();
@@ -54,6 +63,8 @@ export async function readActivityWorkbook(buffer: Buffer) {
       dateCol = headers.get("제출일시"),
       nameCol = headers.get("인플루언서명"),
       socialCol = headers.get("인스타그램/SNS");
+    const projectCol = normalized ? headers.get("프로젝트") : undefined;
+    if (normalized && !projectCol) fail("프로젝트 열을 찾을 수 없습니다.");
     if (!emailCol || !linkCol)
       fail("이메일 또는 올린 링크 열을 찾을 수 없습니다.");
     for (let row = 2; row <= sheet.rowCount; row++) {
@@ -63,6 +74,15 @@ export async function readActivityWorkbook(buffer: Buffer) {
         raw = text(linkCol);
       if (!email && !raw) continue;
       rows++;
+      const project = normalized ? text(projectCol) : sheetProject;
+      if (!project || project.length > 120 || /[\u0000-\u001f]/.test(project)) {
+        issues.push({
+          sheet: sheet.name,
+          row,
+          reason: "프로젝트 이름 형식 오류",
+        });
+        continue;
+      }
       if (
         email.length > 254 ||
         !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email)
@@ -149,7 +169,7 @@ export async function importActivities(
           .get(g.user, g.project),
     ).length + freshActivities;
   const summary = {
-    projects: archiveProjects,
+    projects: [...new Set(parsed.groups.map((g) => g.project))],
     source_rows: parsed.rows,
     participations: parsed.groups.length,
     ready,
