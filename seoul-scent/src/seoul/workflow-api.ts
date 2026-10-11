@@ -1,4 +1,6 @@
+import { registerOnboarding, campaignEligible } from "./onboarding.js";
 import { tierLabel } from "./tier.js";
+import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
 import { queueSelectionEmail, emailStatus } from "./email.js";
 import { profileComplete, socialProfileUrl } from "./profile.js";
@@ -40,6 +42,7 @@ export function registerWorkflow(
   app: Hono<{ Variables: { user: User | null } }>,
   db: DB,
 ) {
+  registerOnboarding(app, db);
   const translateContent = contentTranslator(db);
   app.post("/api/work/admin/influencers/import", async (c) => {
     const u = c.get("user");
@@ -145,6 +148,27 @@ export function registerWorkflow(
       return c.html(certificatePage(certificate));
     }),
   );
+  app.post(
+    "/api/work/admin/activities/import",
+    wrap(async (c) => {
+      const u = role(c, "admin"),
+        b = await body(c);
+      if (
+        typeof b.file !== "string" ||
+        b.file.length > 2_800_000 ||
+        !/^[A-Za-z0-9+/]+=*$/.test(b.file)
+      )
+        fail("2MB 이하 XLSX 파일을 선택해 주세요.");
+      return c.json(
+        await importActivities(
+          db,
+          Buffer.from(b.file, "base64"),
+          b.dry_run !== false,
+          u.id,
+        ),
+      );
+    }),
+  );
   // Sweep before each authenticated workflow request as well as the background timer.
   app.use("/api/work/*", async (c, next) => {
     if (c.get("user")) sweepDeadlines(db);
@@ -158,7 +182,12 @@ export function registerWorkflow(
         .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
         .get(u.id);
       return c.json({
-        profile: { ...(profile as any), complete: profileComplete(profile) },
+        profile: {
+          ...(profile as any),
+          complete: profileComplete(profile),
+          campaign_eligible: campaignEligible(profile),
+        },
+        history: historicalActivities(db, u.id),
       });
     }),
   );
@@ -482,7 +511,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
               )
               .all(campaign.id);
       return c.json({
@@ -543,6 +572,8 @@ export function registerWorkflow(
             "캠페인 지원 전에 내 프로필에 SNS 계정과 팔로워 정보를 등록해 주세요.",
             409,
           );
+        if (!campaignEligible(p))
+          fail("홍보 인증 승인 후 캠페인에 지원할 수 있습니다.", 409);
         if (
           db
             .prepare(
@@ -999,7 +1030,7 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,u.email,u.role,u.created_at,p.followers,p.tier,p.completed_count,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,u.email,u.role,u.created_at,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all(),
       });
@@ -1053,6 +1084,7 @@ export function registerWorkflow(
     wrap((c) => {
       role(c, "admin");
       return c.json({
+        history: historicalActivities(db, id(c)),
         applications: db
           .prepare(
             `SELECT a.*,c.title,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE a.influencer_id=? ORDER BY a.id DESC`,
@@ -1127,7 +1159,7 @@ export function registerWorkflow(
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,a.best,a.views,p.tier,p.completed_count,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
+          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,a.best,a.views,p.tier,p.completed_count,p.onboarding_approved,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -1146,7 +1178,11 @@ export function registerWorkflow(
       sheet.addRows(
         rows.map((row: any) => ({
           ...row,
-          tier: tierLabel(row.tier, row.completed_count),
+          tier: tierLabel(
+            row.tier,
+            row.completed_count,
+            row.onboarding_approved,
+          ),
         })),
       );
       sheet.getRow(1).font = { bold: true };

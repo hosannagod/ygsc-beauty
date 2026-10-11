@@ -47,10 +47,10 @@
         timeStyle: "short",
       },
     ).format(new Date(n));
-  const tierName = (tier, count) =>
-    count === 0
-      ? t("미등급")
-      : [t("브론즈"), t("실버"), t("골드"), t("플래티넘")][tier] || t("미등급");
+  const tierName = (tier, count, approved = 0) =>
+    count === 0 && !approved
+      ? t("기본")
+      : [t("브론즈"), t("실버"), t("골드"), t("플래티넘")][tier] || t("기본");
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const money = (n) =>
@@ -259,9 +259,16 @@
           ).length,
         ) +
         kpi(t("누적 완료"), profile.completed_count) +
-        kpi(t("현재 티어"), tierName(profile.tier, profile.completed_count)) +
+        kpi(
+          t("현재 티어"),
+          tierName(
+            profile.tier,
+            profile.completed_count,
+            profile.onboarding_approved,
+          ),
+        ) +
         kpi(t("노쇼 이력"), profile.no_show_count);
-      main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.complete ? t('<div class="notice">캠페인 지원 전에 SNS 계정과 팔로워 정보를 등록해 주세요. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
+      main = html`${profile.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한되어 있습니다.</div>') : profile.blocked_until > Date.now() ? html`<div class="warning">${date(profile.blocked_until)}까지 신규 지원이 제한됩니다.</div>` : ""}${!profile.campaign_eligible ? t('<div class="notice">브론즈 홍보 인증을 완료하고 캠페인에 지원하세요. <a href="/profile">홍보 인증하기 →</a></div>') : ""}${!profile.complete ? t('<div class="notice">캠페인 지원 전에 SNS 계정과 팔로워 정보를 등록해 주세요. <a href="/profile">프로필 완성하기 →</a></div>') : ""}
         <div class="section-heading">
           <h2>내 캠페인</h2>
           <a href="/applications">전체 보기 →</a>
@@ -586,32 +593,41 @@
                     </p>
                     <a class="primary" href="/profile">프로필 완성하기 →</a>
                   </section>`
-                : html`<form class="panel" data-task="apply" data-id="${id}">
-                    <h2>이 캠페인에 지원하기</h2>
-                    <p class="muted">
-                      지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤
-                      해당 캠페인에 등록합니다.
-                    </p>
-                    <label class="check"
-                      ><input
-                        type="checkbox"
-                        name="secondary_use_consent"
-                        required
-                      /><span
-                        >[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에
-                        동의합니다.</span
-                      ></label
-                    ><label class="check"
-                      ><input
-                        type="checkbox"
-                        name="original_delivery_consent"
-                        required
-                      /><span
-                        >[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을
-                        공유 링크로 제공하는 데 동의합니다.</span
-                      ></label
-                    >${submit(t("지원하기"))}
-                  </form>`;
+                : !profile.campaign_eligible
+                  ? html`<section class="panel">
+                      <h2>브론즈 홍보 인증이 필요합니다</h2>
+                      <p>
+                        홍보 자료를 제출하고 운영사 승인을 받은 후 캠페인에
+                        지원할 수 있습니다.
+                      </p>
+                      <a class="primary" href="/profile">홍보 인증하기 →</a>
+                    </section>`
+                  : html`<form class="panel" data-task="apply" data-id="${id}">
+                      <h2>이 캠페인에 지원하기</h2>
+                      <p class="muted">
+                        지원 시 연락처가 브랜드에 전달됩니다. 배송지는 선정된 뒤
+                        해당 캠페인에 등록합니다.
+                      </p>
+                      <label class="check"
+                        ><input
+                          type="checkbox"
+                          name="secondary_use_consent"
+                          required
+                        /><span
+                          >[필수] 해당 캠페인에서 제작한 콘텐츠의 2차 활용에
+                          동의합니다.</span
+                        ></label
+                      ><label class="check"
+                        ><input
+                          type="checkbox"
+                          name="original_delivery_consent"
+                          required
+                        /><span
+                          >[필수] 브랜드 검수 및 활용을 위해 고화질 원본 파일을
+                          공유 링크로 제공하는 데 동의합니다.</span
+                        ></label
+                      >${submit(t("지원하기"))}
+                    </form>`;
     } else {
       if (c.status !== "completed") {
         const locked = applications.length > 0 || c.status !== "recruiting";
@@ -773,7 +789,7 @@
                         </td>
                         <td>
                           ${money(a.followers)} ·
-                          ${tierName(a.tier, a.completed_count)}
+                          ${tierName(a.tier, a.completed_count, a.onboarding_approved)}
                         </td>
                         <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
                         <td>
@@ -981,7 +997,7 @@
           <div>
             <section class="panel">
               <h2>제출 콘텐츠</h2>
-              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
             </section>
             <section class="panel">
               <h3>배송 정보</h3>
@@ -1037,11 +1053,33 @@
           </div>
         </div>`;
   }
+  function promotionPanel(profile, data) {
+    const submission = data.submission;
+    const status = submission
+      ? {
+          pending: t("검토 대기"),
+          approved: t("승인 완료"),
+          rejected: t("반려 · 재제출 필요"),
+        }[submission.status]
+      : t("미제출");
+    if (profile.campaign_eligible)
+      return `<section class="panel"><h2>${t("캠페인 지원 자격")}</h2><p>${t("브론즈 이상으로 캠페인에 지원할 수 있습니다. 홍보 인증은 완료 횟수에 포함되지 않습니다.")}</p></section>`;
+    return `<section class="panel"><h2>${t("브론즈 홍보 인증")}</h2><p>${t("Seoul Scent 홍보 이미지와 아래 링크를 SNS 게시물 또는 스토리에 함께 올린 뒤 링크나 스크린샷을 제출해 주세요. 운영사 승인 후 캠페인에 지원할 수 있습니다.")}</p><p>${link(data.promotion_link, data.promotion_link)}</p>${data.has_promotion_image ? `<p><a class="secondary" href="/api/work/onboarding/promotion-image" download="seoul-scent-promotion.jpg">${t("홍보 이미지 다운로드")}</a></p>` : `<p class="note left">${t("운영사에서 안내받은 홍보 이미지를 사용해 주세요.")}</p>`}<p>${t("인증 상태")}: ${esc(status)}</p>${submission?.feedback ? `<p class="preline">${esc(submission.feedback)}</p>` : ""}${submission?.url ? `<p>${link(submission.url, t("제출한 홍보 링크"))}</p>` : ""}${submission?.image_url ? `<div class="campaign-gallery"><a href="${esc(submission.image_url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(submission.image_url)}" alt="${t("홍보 인증 스크린샷")}"></a></div>` : ""}${submission?.status === "pending" ? `<p>${t("운영사가 제출 자료를 확인하고 있습니다.")}</p>` : `<form class="editor" data-task="onboarding"><label>${t("홍보 게시물 링크 (선택)")}<input name="url" type="url" maxlength="2000" placeholder="https://..."></label><label>${t("홍보 인증 스크린샷 (선택)")}<input name="proof_image" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="note left">${t("스토리는 사라질 수 있으니 링크가 포함된 화면의 스크린샷을 권장합니다. 링크 또는 이미지 중 하나는 필수입니다.")}</p><label class="check"><input name="confirmation" type="checkbox" required><span>${t("Seoul Scent 홍보 이미지와 필수 링크를 포함했습니다.")}</span></label>${submit(t("홍보 인증 제출"))}</form>`}</section>`;
+  }
+  function promotionAdmin(data) {
+    return `<section class="panel"><h2>${t("홍보 인증 관리")}</h2><p>${t("승인하면 브론즈 지원 자격만 부여합니다. 완료 횟수와 활동증명서는 늘어나지 않습니다.")}</p><form class="editor" data-task="promotion-image"><label>${t("공식 홍보 이미지")}<input name="proof_image" type="file" accept="image/jpeg,image/png,image/webp" required></label>${data.has_promotion_image ? `<p>${link("/api/work/onboarding/promotion-image", t("현재 홍보 이미지 보기"))}</p>` : ""}${submit(t("홍보 이미지 저장"))}</form>${data.submissions.length ? data.submissions.map((r) => `<article class="panel"><h3>${esc(r.name)}</h3><p>${esc(r.email)} · ${esc({ pending: t("검토 대기"), approved: t("승인 완료"), rejected: t("반려") }[r.status])}</p>${r.url ? link(r.url, t("제출한 홍보 링크")) : ""}${r.has_image ? `<div class="campaign-gallery"><a href="/api/work/onboarding/${r.id}/image" target="_blank" rel="noopener noreferrer"><img src="/api/work/onboarding/${r.id}/image" alt="${t("홍보 인증 스크린샷")}" loading="lazy"></a></div>` : ""}${r.feedback ? `<p class="preline">${esc(r.feedback)}</p>` : ""}${r.status === "pending" ? `<form class="editor" data-task="onboarding-review" data-id="${r.id}"><label>${t("검토 결과")}<select name="decision"><option value="approved">${t("승인")}</option><option value="rejected">${t("반려")}</option></select></label>${textarea("feedback", t("피드백 (반려 시 필수)"), 'maxlength="2000" rows="3"')}${submit(t("검토 결과 저장"))}</form>` : ""}</article>`).join("") : `<p>${t("제출된 홍보 인증이 없습니다.")}</p>`}</section>`;
+  }
+  const historyCards = (history = []) =>
+    history.length
+      ? `<section class="panel"><h2>${t("기존 프로젝트 이력")}</h2>${history.map((a) => `<div class="alert-row"><div><strong>${esc(a.title)}</strong><p>${t("완료")}${a.submitted_at ? " · " + esc(a.submitted_at) : ""}</p>${a.links.map((url) => link(url, t("콘텐츠 링크"))).join("<br>")}</div></div>`).join("")}</section>`
+      : "";
   async function profile() {
-    const [{ profile: p }, certificate] = await Promise.all([
-      api("/profile"),
-      api("/certificate"),
-    ]);
+    const [{ profile: p, history }, certificate, onboarding] =
+      await Promise.all([
+        api("/profile"),
+        api("/certificate"),
+        api("/onboarding"),
+      ]);
     root.innerHTML =
       heading(
         t("내 프로필"),
@@ -1049,9 +1087,10 @@
         `<a class="secondary" href="/account">${t("계정 정보 수정")}</a>`,
       ) +
       html`<section class="kpi-grid">
-          ${kpi(t("현재 티어"), tierName(p.tier, p.completed_count))}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
+          ${kpi(t("현재 티어"), tierName(p.tier, p.completed_count, p.onboarding_approved))}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
         </section>
         ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
+        ${promotionPanel(p, onboarding)} ${historyCards(history)}
         <section class="panel">
           <h2>${t("활동증명서")}</h2>
           <p>
@@ -1114,8 +1153,12 @@
         '<p class="note left">현재 알림은 시스템 내부에서 제공됩니다. 이메일·SMS 발송은 외부 서비스 연결 후 활성화됩니다.</p>',
       );
   }
+  let refreshUsers = async () => {};
   async function users() {
-    const { users } = await api("/admin/users");
+    const [{ users }, onboarding] = await Promise.all([
+      api("/admin/users"),
+      api("/admin/onboarding"),
+    ]);
     root.innerHTML =
       heading(t("계정·티어 관리"), t("참여 이력과 노쇼 제재를 확인하세요.")) +
       t(
@@ -1137,15 +1180,25 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count)} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
     document.querySelector("#user-search").oninput = render;
+    refreshUsers = async () => {
+      const fresh = await api("/admin/users");
+      users.splice(0, users.length, ...fresh.users);
+      render();
+    };
     render();
+    root.insertAdjacentHTML("beforeend", promotionAdmin(onboarding));
     root.insertAdjacentHTML(
       "beforeend",
       '<section id="history-results"></section>',
+    );
+    root.insertAdjacentHTML(
+      "beforeend",
+      `<form class="panel editor" data-task="activity-import"><h2>${t("기존 프로젝트 이력 등록")}</h2><p>${t("4개 프로젝트 원본 엑셀을 등록합니다. 프로젝트당 완료 횟수는 1회만 반영하며 기존 회원 이메일로 연결합니다.")}</p><label>${t("프로젝트 이력 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>${submit(t("검토 후 등록"))}<div id="activity-import-result"></div></form>`,
     );
     root.insertAdjacentHTML(
       "beforeend",
@@ -1180,14 +1233,16 @@
           </p>
           <h2>티어 기준</h2>
           <p class="muted">
-            완료한 캠페인 수를 기준으로 승급합니다. 브론즈는 1개부터이며, 0개는
-            미등급입니다. 노쇼 누적에 따른 강등이 함께 반영됩니다.
+            홍보 인증 승인 또는 완료 캠페인 1개 이상이면 브론즈입니다. 신규
+            가입자는 기본 등급이며 홍보 인증은 완료 횟수에 포함하지 않습니다.
+            실버·골드·플래티넘은 실제 완료 횟수로 승급합니다. 노쇼 강등과 지원
+            제한은 유지됩니다.
           </p>
           ${[2, 3, 4].map((n) => `<h3>${tierName(n - 1)}</h3><div class="form-grid">${input(`tier${n}_count`, t("최소 완료 횟수"), "number", 'required min="1"', s[`tier${n}_count`])}</div>`).join("")}${submit(t("운영 정책 저장"))}
         </form>
         <section class="panel">
           <h3>운영 변경 기록</h3>
-          ${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${esc({ settings: t("정책 변경"), release: t("지원 제한 해제"), email_retry: t("메일 재시도"), influencer_import: t("인플루언서 엑셀 등록") }[a.action] || a.action)} · ${datetime(a.created_at)}</p>`).join("") : t('<p class="muted">변경 기록이 없습니다.</p>')}
+          ${audit.length ? audit.map((a) => `<p class="small">${esc(a.actor_name)} · ${esc({ settings: t("정책 변경"), release: t("지원 제한 해제"), email_retry: t("메일 재시도"), influencer_import: t("인플루언서 엑셀 등록"), activity_import: t("기존 프로젝트 이력 등록"), onboarding_review: t("홍보 인증 검토"), promotion_image: t("홍보 이미지 변경") }[a.action] || a.action)} · ${datetime(a.created_at)}</p>`).join("") : t('<p class="muted">변경 기록이 없습니다.</p>')}
         </section>`;
   }
   async function refreshCount() {
@@ -1301,7 +1356,37 @@
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
+        case "onboarding":
+        case "promotion-image": {
+          const proof = form.querySelector("[name=proof_image]").files[0];
+          let image;
+          if (proof) {
+            const photo = await preparePhoto(proof);
+            image = photo.data;
+            URL.revokeObjectURL(photo.url);
+          }
+          await api(
+            form.dataset.task === "onboarding"
+              ? "/onboarding"
+              : "/admin/onboarding/promotion-image",
+            "POST",
+            { url: data.url, image, confirmation: data.confirmation },
+          );
+          break;
+        }
+        case "onboarding-review":
+          await api(
+            `/admin/onboarding/${form.dataset.id}/review`,
+            "POST",
+            data,
+          );
+          break;
+        case "activity-import":
         case "influencer-import": {
+          const activity = form.dataset.task === "activity-import";
+          const endpoint = activity
+            ? "/admin/activities/import"
+            : "/admin/influencers/import";
           const file = form.querySelector("[name=file]").files[0];
           if (!file || file.size > 2 * 1024 * 1024)
             throw new Error(t("2MB 이하 XLSX 파일을 선택해 주세요."));
@@ -1316,29 +1401,35 @@
             initial_password: data.initial_password,
             dry_run: true,
           };
-          const preview = await api(
-            "/admin/influencers/import",
-            "POST",
-            payload,
+          const preview = await api(endpoint, "POST", payload);
+          const result = form.querySelector(
+            activity ? "#activity-import-result" : "#influencer-import-result",
           );
-          const result = form.querySelector("#influencer-import-result");
           const summary = (r) =>
-            `${t("등록 대상")}: ${r.ready} · ${t("등록 완료")}: ${r.imported} · ${t("기존 계정")}: ${r.existing} · ${t("검토 필요")}: ${r.issues.length}`;
-          result.innerHTML = `<p>${esc(summary(preview))}</p>${preview.issues.map((issue) => `<p>${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
-          if (!preview.ready) return;
+            `${activity ? t("신규 완료 이력") : t("등록 대상")}: ${r.ready} · ${t("등록 완료")}: ${r.imported} · ${activity ? t("기존 이력") : t("기존 계정")}: ${r.existing}${activity ? " · " + t("계정 매칭 필요") + ": " + r.unmatched.length : ""} · ${t("검토 필요")}: ${r.issues.length}`;
+          result.innerHTML = `<p>${esc(summary(preview))}</p>${activity ? preview.unmatched.map((r) => `<p>${esc(r.project)} · ${esc(r.email)} (${t("계정 매칭 필요")})</p>`).join("") : ""}${preview.issues.map((issue) => `<p>${issue.sheet ? esc(issue.sheet) + " · " : ""}${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
+          if (!preview.ready && !(activity && preview.existing)) return;
           if (
             !(await confirmAction(
-              summary(preview) + "\n" + t("신규 인플루언서 계정을 등록할까요?"),
+              summary(preview) +
+                "\n" +
+                t(
+                  activity
+                    ? "기존 프로젝트 활동을 완료 이력으로 반영할까요?"
+                    : "신규 인플루언서 계정을 등록할까요?",
+                ),
             ))
           )
             return;
-          const imported = await api("/admin/influencers/import", "POST", {
+          const imported = await api(endpoint, "POST", {
             ...payload,
             dry_run: false,
           });
-          result.innerHTML = `<p>${esc(summary(imported))}</p><p>${t("프로필 확인 필요")}: ${imported.needs_profile}</p>${imported.issues.map((issue) => `<p>${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
-          form.querySelector("[name=initial_password]").value = "";
+          result.innerHTML = `<p>${esc(summary(imported))}</p>${activity ? `<p>${t("계정 매칭 필요")}: ${imported.unmatched.length}</p>${imported.unmatched.map((r) => `<p>${esc(r.project)} · ${esc(r.email)}</p>`).join("")}` : `<p>${t("프로필 확인 필요")}: ${imported.needs_profile}</p>`}${imported.issues.map((issue) => `<p>${issue.sheet ? esc(issue.sheet) + " · " : ""}${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
+          if (!activity)
+            form.querySelector("[name=initial_password]").value = "";
           toast(t("등록되었습니다."));
+          await refreshUsers();
           return;
         }
         case "account":
@@ -1453,7 +1544,7 @@
           .scrollIntoView({ behavior: "smooth" });
       }
       if (button.dataset.history) {
-        const { applications } = await api(
+        const { applications, history } = await api(
           `/admin/users/${button.dataset.history}/history`,
         );
         document.querySelector("#history-results").innerHTML = html`<div
@@ -1461,6 +1552,7 @@
           >
             <h2>참여 이력</h2>
           </div>
+          ${historyCards(history)}
           <section class="panel">
             ${
               applications.length

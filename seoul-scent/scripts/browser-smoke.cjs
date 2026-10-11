@@ -183,6 +183,67 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.locator("[name=followers]").fill("12000");
     await influencer.getByRole("button", { name: "프로필 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
+    const admin = await browser.newPage();
+    admin.on("pageerror", (e) => errors.push(e.message));
+    await admin.goto(base + "/login");
+    await admin.locator("[name=email]").fill("admin@example.test");
+    await admin.locator("[name=password]").fill(password);
+    await admin.getByRole("button", { name: "로그인", exact: false }).click();
+    await admin.waitForURL("**/dashboard/admin");
+    await admin.goto(base + "/admin/users");
+    await admin
+      .locator('form[data-task="promotion-image"] input[type=file]')
+      .setInputFiles({
+        name: "promotion.jpg",
+        mimeType: "image/jpeg",
+        buffer: photoBuffer,
+      });
+    await admin.getByRole("button", { name: "홍보 이미지 저장" }).click();
+    await admin.getByRole("link", { name: "현재 홍보 이미지 보기" }).waitFor();
+    await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer
+      .getByRole("heading", { name: "브론즈 홍보 인증이 필요합니다" })
+      .waitFor();
+    await influencer.getByRole("link", { name: "홍보 인증하기" }).click();
+    await influencer
+      .locator('form[data-task="onboarding"] [name=url]')
+      .fill("https://instagram.com/p/promotion-proof");
+    await influencer
+      .getByRole("link", { name: "홍보 이미지 다운로드" })
+      .waitFor();
+    await influencer
+      .locator('form[data-task="onboarding"] input[type=file]')
+      .setInputFiles({
+        name: "story-proof.jpg",
+        mimeType: "image/jpeg",
+        buffer: photoBuffer,
+      });
+    await influencer
+      .locator('form[data-task="onboarding"] [name=confirmation]')
+      .check();
+    await influencer.getByRole("button", { name: "홍보 인증 제출" }).click();
+    await influencer
+      .getByText("운영사가 제출 자료를 확인하고 있습니다.")
+      .waitFor();
+    await admin.goto(base + "/admin/users");
+    await admin.getByAltText("홍보 인증 스크린샷").evaluate(async (img) => {
+      await img.decode();
+      if (!img.naturalWidth) throw new Error("Proof image failed to load");
+    });
+    await admin
+      .locator('form[data-task="onboarding-review"]')
+      .getByRole("button", { name: "검토 결과 저장" })
+      .click();
+    await admin.getByText(/· 승인 완료/).waitFor();
+    const approvedProfile = await (
+      await influencer.request.get(base + "/api/work/profile")
+    ).json();
+    assert.equal(approvedProfile.profile.onboarding_approved, 1);
+    assert.equal(approvedProfile.profile.completed_count, 0);
+    const initialCertificate = await (
+      await influencer.request.get(base + "/api/work/certificate")
+    ).json();
+    assert.equal(initialCertificate.eligible, false);
     await influencer.goto(base + "/campaigns/" + campaignId);
     await influencer.waitForFunction(
       () => document.querySelectorAll(".campaign-gallery img").length === 3,
@@ -393,13 +454,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .waitFor();
     await brand.goto(base + "/campaigns/" + scheduled.id);
     await brand.getByRole("button", { name: "모집 마감하기" }).waitFor();
-    const admin = await browser.newPage();
-    admin.on("pageerror", (e) => errors.push(e.message));
-    await admin.goto(base + "/login");
-    await admin.locator("[name=email]").fill("admin@example.test");
-    await admin.locator("[name=password]").fill(password);
-    await admin.getByRole("button", { name: "로그인", exact: false }).click();
-    await admin.waitForURL("**/dashboard/admin");
+    await admin.goto(base + "/dashboard/admin");
     await admin
       .getByRole("heading", { name: "전체 캠페인", exact: true })
       .waitFor();
@@ -576,7 +631,10 @@ const { spawn, spawnSync } = require("node:child_process"),
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         buffer: Buffer.from(await importBook.xlsx.writeBuffer()),
       });
-    await admin.getByRole("button", { name: "검토 후 등록" }).click();
+    await admin
+      .locator('form[data-task="influencer-import"]')
+      .getByRole("button", { name: "검토 후 등록" })
+      .click();
     await admin.locator("#confirm-accept").click();
     await admin
       .locator("#influencer-import-result")
@@ -613,6 +671,53 @@ const { spawn, spawnSync } = require("node:child_process"),
       (await importedPage.request.get(base + "/api/work/campaigns")).status(),
       200,
     );
+    const historyBook = new (require("exceljs").Workbook)();
+    for (const project of [
+      "Aeluri Formula",
+      "뷰티비티",
+      "두유본색",
+      "로레코",
+    ]) {
+      const sheet = historyBook.addWorksheet(project);
+      sheet.addRow(["이메일", "올린 링크", "제출일시"]);
+      sheet.addRow([
+        "imported@example.test",
+        "https://instagram.com/p/history",
+        "2026-09-01",
+      ]);
+      sheet.addRow([
+        "imported@example.test",
+        "https://tiktok.com/@imported/video/123",
+        "2026-09-02",
+      ]);
+    }
+    await admin
+      .locator('form[data-task="activity-import"] input[type=file]')
+      .setInputFiles({
+        name: "history.xlsx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        buffer: Buffer.from(await historyBook.xlsx.writeBuffer()),
+      });
+    await admin
+      .locator('form[data-task="activity-import"]')
+      .getByRole("button", { name: "검토 후 등록" })
+      .click();
+    await admin.locator("#confirm-accept").click();
+    await admin
+      .locator("#activity-import-result")
+      .getByText(/등록 완료: 4/)
+      .waitFor();
+    await importedPage.goto(base + "/profile");
+    await importedPage
+      .getByRole("heading", { name: "기존 프로젝트 이력" })
+      .waitFor();
+    const importedProfile = await (
+      await importedPage.request.get(base + "/api/work/profile")
+    ).json();
+    assert.equal(importedProfile.profile.completed_count, 4);
+    assert.equal(importedProfile.history.length, 4);
+    assert.equal(importedProfile.history[0].links.length, 2);
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },

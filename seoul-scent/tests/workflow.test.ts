@@ -75,6 +75,7 @@ async function fixture() {
       ).status,
       200,
     );
+  db.prepare("UPDATE influencer_profiles SET onboarding_approved=1").run();
   const create = async (extra = {}) => {
     const r = await req("brand", "/campaigns", "POST", {
       ...campaign,

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { User } from "./db.js";
 import { fail, type DB } from "./workflow.js";
+import { historicalActivities } from "./activity-import.js";
 const escape = (v: unknown) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -10,12 +11,19 @@ const escape = (v: unknown) =>
       ]!,
   );
 export function completedActivities(db: DB, user: number) {
-  return db
-    .prepare(
-      `SELECT c.title,c.title_en,a.updated_at FROM applications a JOIN campaigns c ON c.id=a.campaign_id
+  return [
+    ...(db
+      .prepare(
+        `SELECT c.title,c.title_en,a.updated_at FROM applications a JOIN campaigns c ON c.id=a.campaign_id
     WHERE a.influencer_id=? AND a.status='completed' ORDER BY a.id`,
-    )
-    .all(user) as any[];
+      )
+      .all(user) as any[]),
+    ...historicalActivities(db, user).map((a) => ({
+      title: a.title,
+      title_en: "",
+      updated_at: a.submitted_at,
+    })),
+  ];
 }
 export function issueCertificate(db: DB, user: User) {
   return db.transaction(() => {

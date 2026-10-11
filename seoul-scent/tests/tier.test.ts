@@ -10,7 +10,7 @@ test("tier boundaries use completions without views and preserve penalties", () 
     "INSERT INTO users(id,email,name,role,password_hash) VALUES(1,'test@example.com','Test','influencer','unused')",
   ).run();
   for (const [count, tier, label] of [
-    [0, 0, "미등급"],
+    [0, 0, "기본"],
     [1, 0, "브론즈"],
     [9, 0, "브론즈"],
     [10, 1, "실버"],

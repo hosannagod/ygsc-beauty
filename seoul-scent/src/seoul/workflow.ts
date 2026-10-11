@@ -153,7 +153,7 @@ export function applicationFor(db: DB, id: number, user: User) {
   const row = db
     .prepare(
       `SELECT a.*, c.review_required,c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
-    u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.social_url
+    u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.social_url
     FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id
     JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.id=?`,
     )

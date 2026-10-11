@@ -181,4 +181,21 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       "ALTER TABLE influencer_profiles ADD COLUMN import_review_required INTEGER NOT NULL DEFAULT 0",
     );
   db.exec("INSERT OR IGNORE INTO schema_version VALUES(10)");
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS historical_activities(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),project_key TEXT NOT NULL,content_links TEXT NOT NULL,submitted_at TEXT NOT NULL,imported_at INTEGER NOT NULL,UNIQUE(user_id,project_key));INSERT OR IGNORE INTO schema_version VALUES(11)`,
+  );
+  if (
+    !(
+      db.prepare("PRAGMA table_info(influencer_profiles)").all() as {
+        name: string;
+      }[]
+    ).some((c) => c.name === "onboarding_approved")
+  )
+    db.exec(
+      "ALTER TABLE influencer_profiles ADD COLUMN onboarding_approved INTEGER NOT NULL DEFAULT 0 CHECK(onboarding_approved IN (0,1))",
+    );
+  db.exec(`CREATE TABLE IF NOT EXISTS onboarding_submissions(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),url TEXT NOT NULL DEFAULT '',image BLOB,status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),feedback TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,reviewed_at INTEGER,reviewer_id INTEGER REFERENCES users(id));
+    CREATE INDEX IF NOT EXISTS onboarding_user ON onboarding_submissions(user_id,id);
+    CREATE TABLE IF NOT EXISTS promotion_asset(id INTEGER PRIMARY KEY CHECK(id=1),data BLOB NOT NULL);
+    INSERT OR IGNORE INTO schema_version VALUES(12);`);
 }
