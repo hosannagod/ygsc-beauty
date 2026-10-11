@@ -30,7 +30,7 @@ export function workspacePage(user: User, lang: Language = "ko") {
       : []),
     ...(user.role === "admin"
       ? [
-          ["/admin/users", "♧", t("계정·티어 관리")],
+          ["/admin/users", "♧", t("등급관리")],
           ["/admin/settings", "⚙", t("운영 정책")],
         ]
       : []),

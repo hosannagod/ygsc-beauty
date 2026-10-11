@@ -1,3 +1,5 @@
+import { hashPassword } from "./db.js";
+import { socialProfileUrl } from "./profile.js";
 import ExcelJS from "exceljs";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import { fail, recalculateTier, type DB } from "./workflow.js";
@@ -26,7 +28,14 @@ export async function readActivityWorkbook(buffer: Buffer) {
   }
   const groups = new Map<
     string,
-    { project: string; email: string; links: Set<string>; submitted: string }
+    {
+      project: string;
+      email: string;
+      name: string;
+      social: string;
+      links: Set<string>;
+      submitted: string;
+    }
   >();
   const issues: { sheet: string; row: number; reason: string }[] = [];
   let rows = 0;
@@ -42,7 +51,9 @@ export async function readActivityWorkbook(buffer: Buffer) {
       .eachCell((c, i) => headers.set(String(c.text ?? "").trim(), i));
     const emailCol = headers.get("이메일"),
       linkCol = headers.get("올린 링크"),
-      dateCol = headers.get("제출일시");
+      dateCol = headers.get("제출일시"),
+      nameCol = headers.get("인플루언서명"),
+      socialCol = headers.get("인스타그램/SNS");
     if (!emailCol || !linkCol)
       fail("이메일 또는 올린 링크 열을 찾을 수 없습니다.");
     for (let row = 2; row <= sheet.rowCount; row++) {
@@ -81,6 +92,8 @@ export async function readActivityWorkbook(buffer: Buffer) {
         groups.set(key, {
           project,
           email,
+          name: text(nameCol),
+          social: socialProfileUrl(text(socialCol)) ? text(socialCol) : "",
           links: new Set(),
           submitted: text(dateCol).slice(0, 120),
         });
@@ -94,40 +107,93 @@ export async function importActivities(
   buffer: Buffer,
   dryRun = true,
   actor?: number,
+  options = { createMissing: false, password: "0000" },
 ) {
   const parsed = await readActivityWorkbook(buffer);
+  if (
+    options.createMissing &&
+    (typeof options.password !== "string" ||
+      options.password.length < 4 ||
+      options.password.length > 128)
+  )
+    fail("임시 비밀번호는 4~128자로 입력해 주세요.");
   const matched: ((typeof parsed.groups)[number] & { user: number })[] = [];
   const unmatched: { project: string; email: string }[] = [];
+  const fresh = new Map<string, (typeof parsed.groups)[number]>();
   for (const group of parsed.groups) {
     const user = db
-      .prepare("SELECT id FROM users WHERE email=? AND role='influencer'")
+      .prepare("SELECT id,role FROM users WHERE email=?")
       .get(group.email) as any;
-    if (!user) {
-      unmatched.push({ project: group.project, email: group.email });
-      continue;
-    }
-    matched.push({ ...group, user: user.id });
+    if (user?.role === "influencer") matched.push({ ...group, user: user.id });
+    else if (
+      !user &&
+      options.createMissing &&
+      group.name.length >= 2 &&
+      group.name.length <= 60
+    )
+      fresh.set(group.email, group);
+    else unmatched.push({ project: group.project, email: group.email });
   }
-  const ready = matched.filter(
-    (g) =>
-      !db
-        .prepare(
-          "SELECT id FROM historical_activities WHERE user_id=? AND project_key=?",
-        )
-        .get(g.user, g.project),
+  for (let i = unmatched.length - 1; i >= 0; i--)
+    if (fresh.has(unmatched[i].email)) unmatched.splice(i, 1);
+  const freshActivities = parsed.groups.filter((g) =>
+    fresh.has(g.email),
   ).length;
+  const ready =
+    matched.filter(
+      (g) =>
+        !db
+          .prepare(
+            "SELECT id FROM historical_activities WHERE user_id=? AND project_key=?",
+          )
+          .get(g.user, g.project),
+    ).length + freshActivities;
   const summary = {
     projects: archiveProjects,
     source_rows: parsed.rows,
     participations: parsed.groups.length,
     ready,
-    existing: matched.length - ready,
+    existing: matched.length - (ready - freshActivities),
     unmatched,
     issues: parsed.issues,
+    new_accounts: [...fresh.values()].map((g) => ({
+      name: g.name,
+      email: g.email,
+    })),
+    accounts_created: 0,
   };
   if (dryRun) return { ...summary, imported: 0 };
+  const hashes = [...fresh.values()].map((g) => ({
+    g,
+    hash: hashPassword(options.password),
+  }));
   return db.transaction(() => {
-    let imported = 0;
+    let imported = 0,
+      accountsCreated = 0;
+    for (const { g, hash } of hashes) {
+      const existing = db
+        .prepare("SELECT id,role FROM users WHERE email=?")
+        .get(g.email) as any;
+      if (existing && existing.role !== "influencer")
+        fail("기존 계정의 역할은 변경할 수 없습니다.", 409);
+      const user =
+        existing?.id ||
+        Number(
+          db
+            .prepare(
+              "INSERT INTO users(email,name,role,password_hash,must_change_password) VALUES(?,?,'influencer',?,1)",
+            )
+            .run(g.email, g.name, hash).lastInsertRowid,
+        );
+      if (!existing) {
+        accountsCreated++;
+        db.prepare(
+          "UPDATE influencer_profiles SET social_url=?,import_review_required=1 WHERE user_id=?",
+        ).run(g.social, user);
+      }
+      for (const group of parsed.groups.filter((row) => row.email === g.email))
+        matched.push({ ...group, user });
+    }
     const affected = new Set<number>();
     for (const g of matched) {
       const old = db
@@ -169,9 +235,13 @@ export async function importActivities(
       ).run(
         actor,
         "activity_import",
-        JSON.stringify({ imported, unmatched: unmatched.length }),
+        JSON.stringify({
+          imported,
+          accounts_created: accountsCreated,
+          unmatched: unmatched.length,
+        }),
         Date.now(),
       );
-    return { ...summary, imported };
+    return { ...summary, imported, accounts_created: accountsCreated };
   })();
 }

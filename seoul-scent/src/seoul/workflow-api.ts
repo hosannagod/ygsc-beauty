@@ -1,3 +1,4 @@
+import { finalizeSelection } from "./selection.js";
 import { registerOnboarding, campaignEligible } from "./onboarding.js";
 import { tierLabel } from "./tier.js";
 import { importActivities, historicalActivities } from "./activity-import.js";
@@ -165,6 +166,10 @@ export function registerWorkflow(
           Buffer.from(b.file, "base64"),
           b.dry_run !== false,
           u.id,
+          {
+            createMissing: b.create_missing_accounts === true,
+            password: b.initial_password ?? "0000",
+          },
         ),
       );
     }),
@@ -174,6 +179,19 @@ export function registerWorkflow(
     if (c.get("user")) sweepDeadlines(db);
     await next();
   });
+  app.get(
+    "/api/work/grade-guide",
+    wrap((c) => {
+      current(c);
+      return c.json(
+        db
+          .prepare(
+            "SELECT tier2_count AS silver,tier3_count AS gold,tier4_count AS platinum FROM workflow_settings WHERE id=1",
+          )
+          .get(),
+      );
+    }),
+  );
   app.get(
     "/api/work/profile",
     wrap((c) => {
@@ -511,7 +529,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
               )
               .all(campaign.id);
       return c.json({
@@ -540,6 +558,14 @@ export function registerWorkflow(
           "X-Content-Type-Options": "nosniff",
         },
       });
+    }),
+  );
+  app.post(
+    "/api/work/campaigns/:id/selection",
+    wrap(async (c) => {
+      const u = current(c),
+        b = await body(c);
+      return c.json(finalizeSelection(db, u, id(c), b.application_ids));
     }),
   );
   app.post(
@@ -1000,7 +1026,7 @@ export function registerWorkflow(
         b.tier2_views > b.tier3_views ||
         b.tier3_views > b.tier4_views
       )
-        fail("티어 기준은 단계가 높아질수록 같거나 증가해야 합니다.");
+        fail("등급 기준은 단계가 높아질수록 같거나 증가해야 합니다.");
       db.transaction(() => {
         db.prepare(
           `UPDATE workflow_settings SET ${keys.map((k) => k + "=?").join(",")} WHERE id=1`,
@@ -1172,7 +1198,7 @@ export function registerWorkflow(
         { header: "최종 SNS URL", key: "final_url", width: 50 },
         { header: "Best", key: "best", width: 10 },
         { header: "확인 조회수", key: "views", width: 15 },
-        { header: "티어", key: "tier", width: 15 },
+        { header: "등급", key: "tier", width: 15 },
         { header: "동의 버전", key: "consent_version", width: 25 },
       ];
       sheet.addRows(

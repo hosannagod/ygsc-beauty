@@ -119,3 +119,77 @@ test("history import is admin only and requires all four project sheets", async 
     db.close();
   }
 });
+
+test("history can create missing accounts with forced initial password change while preserving existing roles", async () => {
+  const db = openDb(":memory:");
+  try {
+    const b = new ExcelJS.Workbook();
+    for (const project of archiveProjects) {
+      const s = b.addWorksheet(project);
+      s.addRow([
+        "이메일",
+        "올린 링크",
+        "제출일시",
+        "인플루언서명",
+        "인스타그램/SNS",
+      ]);
+      s.addRow([
+        "new@example.com",
+        "https://instagram.com/p/content",
+        "",
+        "New Creator",
+        "https://instagram.com/new",
+      ]);
+      s.addRow([
+        "brand@example.com",
+        "https://instagram.com/p/brand",
+        "",
+        "Brand",
+        "",
+      ]);
+    }
+    db.prepare(
+      "INSERT INTO users(email,name,role,password_hash) VALUES('brand@example.com','Brand','brand','untouched')",
+    ).run();
+    const file = Buffer.from(await b.xlsx.writeBuffer()),
+      options = { createMissing: true, password: "0000" };
+    const preview = await importActivities(db, file, true, undefined, options);
+    assert.equal(preview.new_accounts.length, 1);
+    assert.equal(preview.ready, 4);
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) n FROM users").get() as any).n,
+      1,
+    );
+    const result = await importActivities(db, file, false, undefined, options);
+    assert.equal(result.accounts_created, 1);
+    assert.equal(result.imported, 4);
+    assert.equal(result.unmatched.length, 4);
+    const user = db
+      .prepare("SELECT * FROM users WHERE email='new@example.com'")
+      .get() as any;
+    assert.equal(user.must_change_password, 1);
+    const { verifyPassword } = await import("../src/seoul/db.js");
+    assert.ok(verifyPassword("0000", user.password_hash));
+    const p = db
+      .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+      .get(user.id) as any;
+    assert.equal(p.completed_count, 4);
+    assert.equal(p.import_review_required, 1);
+    assert.equal(p.social_url, "https://instagram.com/new");
+    const second = await importActivities(db, file, false, undefined, options);
+    assert.equal(second.accounts_created, 0);
+    assert.equal(second.imported, 0);
+    assert.equal(
+      (
+        db
+          .prepare(
+            "SELECT password_hash FROM users WHERE email='brand@example.com'",
+          )
+          .get() as any
+      ).password_hash,
+      "untouched",
+    );
+  } finally {
+    db.close();
+  }
+});

@@ -51,6 +51,16 @@
     count === 0 && !approved
       ? t("기본")
       : [t("브론즈"), t("실버"), t("골드"), t("플래티넘")][tier] || t("기본");
+  let gradeRules = { silver: 10, gold: 50, platinum: 100 };
+  let infoIndex = 0;
+  const gradeInfo = () => {
+    const id = "grade-help-" + ++infoIndex;
+    return `<span class="info-wrap"><button class="info-icon" type="button" aria-label="${t("등급 기준 안내")}" aria-describedby="${id}" popovertarget="${id}">i</button><span id="${id}" class="info-tooltip" popover role="tooltip">${t("브론즈: 홍보 승인 또는 완료 1회")}. ${t("실버")} ${gradeRules.silver} · ${t("골드")} ${gradeRules.gold} · ${t("플래티넘")} ${gradeRules.platinum}${t("회 이상")}. ${t("동일 프로젝트는 1회로 계산하며 홍보 인증은 횟수에 포함하지 않습니다.")}</span></span>`;
+  };
+  const participationInfo = () => {
+    const id = "participation-help-" + ++infoIndex;
+    return `<span class="info-wrap"><button class="info-icon" type="button" aria-label="${t("참여 횟수 안내")}" aria-describedby="${id}" popovertarget="${id}">i</button><span id="${id}" class="info-tooltip" popover role="tooltip">${t("완료 횟수에는 기존 프로젝트 이력이 포함됩니다. 진행 중은 선정 후 아직 완료하지 않은 캠페인입니다. 지원만 한 캠페인과 홍보 인증은 제외합니다.")}</span></span>`;
+  };
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const money = (n) =>
@@ -260,7 +270,7 @@
         ) +
         kpi(t("누적 완료"), profile.completed_count) +
         kpi(
-          t("현재 티어"),
+          t("현재 등급") + gradeInfo(),
           tierName(
             profile.tier,
             profile.completed_count,
@@ -698,6 +708,21 @@
           ><button data-tab="completed">완료</button
           ><button data-tab="no_show">노쇼</button>
         </div>
+        <form class="panel" data-task="final-selection" data-id="${id}">
+          <h3>최종 선정</h3>
+          <p class="note left">
+            지원자를 선택한 뒤 최종 선정을 눌러 주세요. 선택만으로는 안내 메일이
+            발송되지 않습니다.
+          </p>
+          <div class="button-row">
+            <button class="secondary" type="button" data-select-all>
+              미선정 지원자 전체 선택</button
+            ><button class="secondary" type="button" data-clear-selection>
+              선택 해제</button
+            ><span id="selection-count" aria-live="polite"></span>
+          </div>
+          ${submit(t("최종 선정"))}
+        </form>
         <div id="applicants-table" class="panel table-wrap"></div>
         <section class="panel">
           <h3>배송 엑셀</h3>
@@ -750,6 +775,63 @@
                 : t('<p class="muted">종료된 캠페인입니다.</p>')
           }
         </section>`;
+      const draftKey = "seoul-selection:" + id;
+      let saved = [];
+      try {
+        saved = JSON.parse(sessionStorage.getItem(draftKey) || "[]");
+      } catch {}
+      const chosen = new Set(
+        Array.isArray(saved)
+          ? saved.filter((n) =>
+              applications.some((a) => a.id === n && a.status === "applied"),
+            )
+          : [],
+      );
+      const updateSelection = () => {
+        sessionStorage.setItem(draftKey, JSON.stringify([...chosen]));
+        const form = document.querySelector('[data-task="final-selection"]');
+        form.dataset.applicationIds = JSON.stringify([...chosen]);
+        form.dataset.names = JSON.stringify(
+          applications
+            .filter((a) => chosen.has(a.id))
+            .map((a) => a.influencer_name),
+        );
+        document.querySelector("#selection-count").textContent =
+          t("선택") +
+          ": " +
+          chosen.size +
+          " / " +
+          t("남은 정원") +
+          ": " +
+          Math.max(0, c.capacity - selected);
+        form.querySelector("button[type=submit]").disabled = !chosen.size;
+        document
+          .querySelectorAll("[data-select-applicant]")
+          .forEach(
+            (input) =>
+              (input.checked = chosen.has(
+                Number(input.dataset.selectApplicant),
+              )),
+          );
+      };
+      root.querySelector("[data-select-all]").onclick = () => {
+        applications
+          .filter((a) => a.status === "applied")
+          .forEach((a) => chosen.add(a.id));
+        updateSelection();
+      };
+      root.querySelector("[data-clear-selection]").onclick = () => {
+        chosen.clear();
+        updateSelection();
+      };
+      document.querySelector("#applicants-table").onchange = (event) => {
+        const input = event.target;
+        if (!input.matches("[data-select-applicant]")) return;
+        const n = Number(input.dataset.selectApplicant);
+        if (input.checked) chosen.add(n);
+        else chosen.delete(n);
+        updateSelection();
+      };
       function table(tab) {
         let rows = applications.filter(
           (a) =>
@@ -772,8 +854,10 @@
           ? html`<table>
               <thead>
                 <tr>
+                  <th>선택</th>
                   <th>인플루언서</th>
-                  <th>팔로워 · 티어</th>
+                  <th>${t("팔로워 · 등급")}${gradeInfo()}</th>
+                  <th>${t("참여 횟수")}${participationInfo()}</th>
                   <th>상태</th>
                   <th>활동</th>
                 </tr>
@@ -784,12 +868,21 @@
                     (a) =>
                       html`<tr>
                         <td>
+                          ${a.status === "applied" ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
+                        </td>
+                        <td>
                           <strong>${esc(a.influencer_name)}</strong
                           ><small>${esc(a.influencer_email)}</small>
                         </td>
                         <td>
                           ${money(a.followers)} ·
                           ${tierName(a.tier, a.completed_count, a.onboarding_approved)}
+                        </td>
+                        <td>
+                          ${t("완료")} ${a.completed_count}${t("회")}<small
+                            >${t("진행 중")}
+                            ${a.active_count || 0}${t("건")}</small
+                          >
                         </td>
                         <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
                         <td>
@@ -806,6 +899,7 @@
               t("해당 단계의 참여자가 없습니다"),
               t("다른 탭에서 진행 현황을 확인해 주세요."),
             );
+        updateSelection();
       }
       document.querySelectorAll("[data-tab]").forEach(
         (button) =>
@@ -921,7 +1015,7 @@
         );
     } else {
       if (a.status === "applied")
-        actions = `<div class="review-actions">${actionForm(a, "select", "", t("참여자로 선정"), t("이 인플루언서를 참여자로 선정할까요?"))}${actionForm(a, "reject", textarea("note", t("반려 사유 (선택)"), 'maxlength="1000"'), t("지원 반려"), t("이 지원을 반려할까요?"))}</div>`;
+        actions = `<div class="review-actions"><p class="note left">${t("캠페인 지원자 목록에서 선택한 뒤 최종 선정해 주세요.")}</p><a class="primary" href="/campaigns/${a.campaign_id}">${t("최종 선정하러 가기")}</a>${actionForm(a, "reject", textarea("note", t("반려 사유 (선택)"), 'maxlength="1000"'), t("지원 반려"), t("이 지원을 반려할까요?"))}</div>`;
       if (["selected", "shipping"].includes(a.status))
         actions = !a.address
           ? t(
@@ -964,7 +1058,7 @@
             ),
           t("활동 완료 처리"),
           t(
-            "이 활동을 완료하고 참여 횟수·티어에 반영할까요? 완료 처리는 한 번만 가능합니다.",
+            "이 활동을 완료하고 참여 횟수·등급에 반영할까요? 완료 처리는 한 번만 가능합니다.",
           ),
         );
       if (
@@ -992,12 +1086,12 @@
             >최종 마감 <strong>${esc(a.final_date)}</strong></span
           >
         </div>
-        ${a.status === "no_show" ? t('<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 티어 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
+        ${a.status === "no_show" ? t('<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
         <div class="detail-grid">
           <div>
             <section class="panel">
               <h2>제출 콘텐츠</h2>
-              ${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+              ${influencer ? "" : `<p>${t("참여 횟수")}${participationInfo()} · ${t("완료")} ${a.completed_count}${t("회")} · ${t("진행 중")} ${a.active_count || 0}${t("건")}</p>`}${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
             </section>
             <section class="panel">
               <h3>배송 정보</h3>
@@ -1087,7 +1181,7 @@
         `<a class="secondary" href="/account">${t("계정 정보 수정")}</a>`,
       ) +
       html`<section class="kpi-grid">
-          ${kpi(t("현재 티어"), tierName(p.tier, p.completed_count, p.onboarding_approved))}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
+          ${kpi(t("현재 등급") + gradeInfo(), tierName(p.tier, p.completed_count, p.onboarding_approved))}${kpi(t("완료 캠페인"), p.completed_count)}${kpi(t("누적 조회수"), money(p.total_views))}${kpi(t("노쇼"), p.no_show_count)}
         </section>
         ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
         ${promotionPanel(p, onboarding)} ${historyCards(history)}
@@ -1160,7 +1254,7 @@
       api("/admin/onboarding"),
     ]);
     root.innerHTML =
-      heading(t("계정·티어 관리"), t("참여 이력과 노쇼 제재를 확인하세요.")) +
+      heading(t("등급관리"), t("참여 이력과 노쇼 제재를 확인하세요.")) +
       t(
         '<div class="toolbar"><input id="user-search" aria-label="계정 검색" placeholder="이름·이메일 검색"></div><div class="panel table-wrap" id="user-results"></div>',
       );
@@ -1174,7 +1268,7 @@
           <tr>
             <th>계정</th>
             <th>역할</th>
-            <th>티어 · 완료</th>
+            <th>${t("등급 · 완료")}${gradeInfo()}</th>
             <th>노쇼 · 제한</th>
             <th>이력</th>
           </tr>
@@ -1198,7 +1292,7 @@
     );
     root.insertAdjacentHTML(
       "beforeend",
-      `<form class="panel editor" data-task="activity-import"><h2>${t("기존 프로젝트 이력 등록")}</h2><p>${t("4개 프로젝트 원본 엑셀을 등록합니다. 프로젝트당 완료 횟수는 1회만 반영하며 기존 회원 이메일로 연결합니다.")}</p><label>${t("프로젝트 이력 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>${submit(t("검토 후 등록"))}<div id="activity-import-result"></div></form>`,
+      `<form class="panel editor" data-task="activity-import"><h2>${t("기존 프로젝트 이력 등록")}</h2><p>${t("4개 프로젝트 원본 엑셀을 등록합니다. 프로젝트당 완료 횟수는 1회만 반영하며 기존 회원 이메일로 연결합니다.")}</p><label>${t("프로젝트 이력 엑셀 파일")}<input name="file" type="file" accept=".xlsx" required></label>${input("initial_password", t("신규 계정 임시 비밀번호"), "password", 'minlength="4" maxlength="128"', "0000")}<label class="check"><input type="checkbox" name="create_missing_accounts" checked><span>${t("계정이 없는 이메일은 파일의 이름으로 신규 등록합니다. 첫 로그인 시 비밀번호 변경이 필수입니다.")}</span></label>${submit(t("검토 후 등록"))}<div id="activity-import-result"></div></form>`,
     );
     root.insertAdjacentHTML(
       "beforeend",
@@ -1216,22 +1310,22 @@
       api("/admin/audit"),
     ]);
     root.innerHTML =
-      heading(t("운영 정책"), t("노쇼와 티어 자동 갱신의 기준을 설정하세요.")) +
+      heading(t("운영 정책"), t("노쇼와 등급 자동 갱신의 기준을 설정하세요.")) +
       html`<form
           class="panel editor"
           data-task="settings"
-          data-confirm="운영 정책을 변경하고 전체 인플루언서의 티어를 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."
+          data-confirm="운영 정책을 변경하고 전체 인플루언서의 등급를 재계산할까요? 기존 노쇼 이력과 이미 발생한 지원 제한은 유지됩니다."
         >
           <h2>노쇼 제재</h2>
           <div class="form-grid">
-            ${input("penalty_days", t("신규 지원 제한 일수"), "number", 'required min="1" max="365"', s.penalty_days)}${input("demotion", t("노쇼당 티어 강등 단계"), "number", 'required min="1" max="2"', s.demotion)}${input("blacklist_after", t("영구 제한 누적 노쇼 횟수"), "number", 'required min="1" max="10"', s.blacklist_after)}
+            ${input("penalty_days", t("신규 지원 제한 일수"), "number", 'required min="1" max="365"', s.penalty_days)}${input("demotion", t("노쇼당 등급 강등 단계"), "number", 'required min="1" max="2"', s.demotion)}${input("blacklist_after", t("영구 제한 누적 노쇼 횟수"), "number", 'required min="1" max="10"', s.blacklist_after)}
           </div>
           <p class="note left">
             제출 시각은 서버 시간으로 판단합니다. 검수 대기·최종 제출 완료인
             참여자는 브랜드 검수 지연만으로 노쇼 처리하지 않습니다. 수정 요청은
             별도 재제출 마감일을 사용합니다.
           </p>
-          <h2>티어 기준</h2>
+          <h2>${t("등급 기준")}${gradeInfo()}</h2>
           <p class="muted">
             홍보 인증 승인 또는 완료 캠페인 1개 이상이면 브론즈입니다. 신규
             가입자는 기본 등급이며 홍보 인증은 완료 횟수에 포함하지 않습니다.
@@ -1268,6 +1362,8 @@
         ),
       );
     try {
+      if (document.body.dataset.mustChange !== "1" && path !== "/account")
+        gradeRules = await api("/grade-guide");
       if (path.startsWith("/dashboard")) await dashboard();
       else if (path === "/campaigns/new") campaignForm();
       else if (/^\/campaigns\/\d+$/.test(path))
@@ -1356,6 +1452,26 @@
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
+        case "final-selection": {
+          const ids = JSON.parse(form.dataset.applicationIds || "[]");
+          if (!ids.length) throw new Error(t("선정할 지원자를 선택해 주세요."));
+          if (
+            !(await confirmAction(
+              t("선택한 인원을 최종 선정하고 안내 메일을 발송할까요?") +
+                "\n" +
+                ids.length +
+                t("명") +
+                " · " +
+                JSON.parse(form.dataset.names).join(", "),
+            ))
+          )
+            return;
+          await api(`/campaigns/${form.dataset.id}/selection`, "POST", {
+            application_ids: ids,
+          });
+          sessionStorage.removeItem("seoul-selection:" + form.dataset.id);
+          break;
+        }
         case "onboarding":
         case "promotion-image": {
           const proof = form.querySelector("[name=proof_image]").files[0];
@@ -1399,6 +1515,7 @@
           const payload = {
             file: encoded,
             initial_password: data.initial_password,
+            create_missing_accounts: activity && data.create_missing_accounts,
             dry_run: true,
           };
           const preview = await api(endpoint, "POST", payload);
@@ -1406,8 +1523,8 @@
             activity ? "#activity-import-result" : "#influencer-import-result",
           );
           const summary = (r) =>
-            `${activity ? t("신규 완료 이력") : t("등록 대상")}: ${r.ready} · ${t("등록 완료")}: ${r.imported} · ${activity ? t("기존 이력") : t("기존 계정")}: ${r.existing}${activity ? " · " + t("계정 매칭 필요") + ": " + r.unmatched.length : ""} · ${t("검토 필요")}: ${r.issues.length}`;
-          result.innerHTML = `<p>${esc(summary(preview))}</p>${activity ? preview.unmatched.map((r) => `<p>${esc(r.project)} · ${esc(r.email)} (${t("계정 매칭 필요")})</p>`).join("") : ""}${preview.issues.map((issue) => `<p>${issue.sheet ? esc(issue.sheet) + " · " : ""}${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
+            `${activity ? t("신규 완료 이력") : t("등록 대상")}: ${r.ready} · ${t("등록 완료")}: ${r.imported} · ${activity ? t("기존 이력") : t("기존 계정")}: ${r.existing}${activity ? " · " + t("계정 매칭 필요") + ": " + r.unmatched.length : ""} · ${t("검토 필요")}: ${r.issues.length}${activity ? " · " + t("신규 계정") + ": " + r.new_accounts.length : ""}`;
+          result.innerHTML = `<p>${esc(summary(preview))}</p>${activity ? preview.new_accounts.map((r) => `<p>${t("신규 계정")}: ${esc(r.name)} · ${esc(r.email)}</p>`).join("") : ""}${activity ? preview.unmatched.map((r) => `<p>${esc(r.project)} · ${esc(r.email)} (${t("계정 매칭 필요")})</p>`).join("") : ""}${preview.issues.map((issue) => `<p>${issue.sheet ? esc(issue.sheet) + " · " : ""}${t("엑셀 행")}: ${issue.row} · ${esc(t(issue.reason))}</p>`).join("")}`;
           if (!preview.ready && !(activity && preview.existing)) return;
           if (
             !(await confirmAction(
@@ -1529,7 +1646,7 @@
           class="panel editor"
           data-task="release"
           data-id="${button.dataset.release}"
-          data-confirm="이 인플루언서의 지원 제한을 해제할까요? 노쇼 이력과 티어 강등 기록은 유지됩니다."
+          data-confirm="이 인플루언서의 지원 제한을 해제할까요? 노쇼 이력과 등급 강등 기록은 유지됩니다."
         >
           <h2>지원 제한 검토</h2>
           ${textarea("note", t("해제 사유"), 'required minlength="5" maxlength="1000" rows="3"')}

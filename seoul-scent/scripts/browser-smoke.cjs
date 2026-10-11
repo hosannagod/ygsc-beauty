@@ -290,8 +290,22 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.waitForURL(/\/applications\/\d+$/);
     const appId = influencer.url().split("/").pop();
     await brand.goto(base + "/applications/" + appId);
-    await brand.getByRole("button", { name: "참여자로 선정" }).click();
+    await brand.getByRole("link", { name: "최종 선정하러 가기" }).click();
+    await brand.locator("[data-select-applicant]").check();
+    const pendingSelection = await (
+      await brand.request.get(base + "/api/work/campaigns/" + campaignId)
+    ).json();
+    assert.equal(
+      pendingSelection.applications.filter((a) => a.status === "selected")
+        .length,
+      0,
+    );
+    await brand
+      .getByRole("button", { name: "최종 선정", exact: false })
+      .click();
     await brand.locator("#confirm-accept").click();
+    await brand.getByText("선정됨", { exact: true }).first().waitFor();
+    await brand.goto(base + "/applications/" + appId);
     await influencer.goto(base + "/applications/" + appId);
     await influencer.locator("[name=recipient_name]").fill("서울 크리에이터");
     await influencer.locator("[name=postal_code]").fill("06234");
@@ -459,7 +473,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .getByRole("heading", { name: "전체 캠페인", exact: true })
       .waitFor();
     await admin.screenshot({ path: tmp + "/dashboard.png", fullPage: true });
-    await admin.getByRole("link", { name: "계정·티어 관리" }).click();
+    await admin.getByRole("link", { name: "등급관리" }).click();
     await admin.getByRole("button", { name: "이력 보기" }).click();
     await admin.getByRole("heading", { name: "참여 이력" }).waitFor();
     await admin.getByRole("link", { name: "운영 정책" }).click();
@@ -546,9 +560,14 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.waitForURL(/\/applications\/\d+$/);
     const directApp = influencer.url().split("/").pop();
     await brand.goto(base + "/applications/" + directApp);
-    await brand.getByRole("button", { name: "참여자로 선정" }).click();
+    await brand.getByRole("link", { name: "최종 선정하러 가기" }).click();
+    await brand.locator("[data-select-applicant]").check();
+    await brand
+      .getByRole("button", { name: "최종 선정", exact: false })
+      .click();
     await brand.locator("#confirm-accept").click();
     await brand.getByText("선정됨", { exact: true }).first().waitFor();
+    await brand.goto(base + "/applications/" + directApp);
     await influencer.reload();
     await influencer.locator("[name=recipient_name]").fill("테스트 수령인");
     await influencer.locator("[name=postal_code]").fill("01234");
@@ -718,6 +737,87 @@ const { spawn, spawnSync } = require("node:child_process"),
     assert.equal(importedProfile.profile.completed_count, 4);
     assert.equal(importedProfile.history.length, 4);
     assert.equal(importedProfile.history[0].links.length, 2);
+    const batchResponse = await brand.request.post(
+      base + "/api/work/campaigns",
+      {
+        data: {
+          title: "다중 선정 테스트",
+          product: "Test product",
+          description: "Test product description",
+          guidelines: "Test filming guidelines",
+          capacity: 2,
+          pay_type: "gifted",
+          compensation: 0,
+          recruit_date: future(2),
+          draft_date: future(5),
+          final_date: future(10),
+        },
+      },
+    );
+    assert.equal(batchResponse.status(), 201);
+    const batchCampaign = (await batchResponse.json()).id;
+    for (const page of [influencer, importedPage])
+      assert.equal(
+        (
+          await page.request.post(
+            base + `/api/work/campaigns/${batchCampaign}/apply`,
+            {
+              data: {
+                secondary_use_consent: true,
+                original_delivery_consent: true,
+              },
+            },
+          )
+        ).status(),
+        201,
+      );
+    await brand.goto(base + "/campaigns/" + batchCampaign);
+    await brand.getByRole("button", { name: "등급 기준 안내" }).click();
+    await brand
+      .getByRole("tooltip")
+      .getByText(/브론즈: 홍보 승인 또는 완료 1회/)
+      .waitFor();
+    await brand.keyboard.press("Escape");
+    await brand.getByRole("button", { name: "참여 횟수 안내" }).click();
+    await brand
+      .getByRole("tooltip")
+      .getByText(/완료 횟수에는 기존 프로젝트 이력이 포함됩니다/)
+      .waitFor();
+    await brand.keyboard.press("Escape");
+    await brand
+      .getByRole("button", { name: "미선정 지원자 전체 선택" })
+      .click();
+    assert.equal(
+      await brand.locator("[data-select-applicant]:checked").count(),
+      2,
+    );
+    await brand.reload();
+    await brand.locator("[data-select-applicant]:checked").last().waitFor();
+    assert.equal(
+      await brand.locator("[data-select-applicant]:checked").count(),
+      2,
+    );
+    assert.equal(
+      (
+        await (
+          await brand.request.get(base + "/api/work/campaigns/" + batchCampaign)
+        ).json()
+      ).applications.filter((a) => a.status === "selected").length,
+      0,
+    );
+    await brand
+      .getByRole("button", { name: "최종 선정", exact: false })
+      .click();
+    await brand.locator("#confirm-accept").click();
+    await brand.getByText("선정됨", { exact: true }).last().waitFor();
+    assert.equal(
+      (
+        await (
+          await brand.request.get(base + "/api/work/campaigns/" + batchCampaign)
+        ).json()
+      ).applications.filter((a) => a.status === "selected").length,
+      2,
+    );
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },
