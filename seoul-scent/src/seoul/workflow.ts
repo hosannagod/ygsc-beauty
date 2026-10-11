@@ -152,8 +152,8 @@ export function event(
 export function applicationFor(db: DB, id: number, user: User) {
   const row = db
     .prepare(
-      `SELECT a.*, c.review_required,c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
-    u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.social_url,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count
+      `SELECT a.*, c.deleted_at AS campaign_deleted_at,c.review_required,c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
+    u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.social_url,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count
     FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id
     JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.id=?`,
     )
@@ -173,7 +173,8 @@ export function campaignFor(db: DB, id: number, user: User, manage = false) {
       "SELECT c.*, u.name AS brand_name FROM campaigns c JOIN users u ON u.id=c.brand_id WHERE c.id=?",
     )
     .get(id) as any;
-  if (!row || (row.is_draft && user.role === "influencer")) fail("캠페인을 찾을 수 없습니다.", 404);
+  if (!row || row.deleted_at || (row.is_draft && user.role === "influencer"))
+    fail("캠페인을 찾을 수 없습니다.", 404);
   if (
     manage &&
     user.role !== "admin" &&
@@ -207,7 +208,7 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
     const rows = db
       .prepare(
         `SELECT a.*,c.title,c.brand_id,c.review_required,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
-      WHERE c.is_draft=0 AND c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
+      WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
       )
       .all() as any[];
     let penalized = 0;
@@ -270,7 +271,7 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
       penalized++;
     }
     db.prepare(
-      "UPDATE campaigns SET status='closed' WHERE status='recruiting' AND recruit_due<=?",
+      "UPDATE campaigns SET status='closed' WHERE deleted_at=0 AND is_draft=0 AND status='recruiting' AND recruit_due<=?",
     ).run(now);
     return { penalized };
   })();

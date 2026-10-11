@@ -899,6 +899,46 @@ const { spawn, spawnSync } = require("node:child_process"),
       ).applications.filter((a) => a.status === "selected").length,
       2,
     );
+    assert.equal(await brand.locator("[data-delete-campaign]").count(), 0);
+    await admin.goto(base + "/campaigns/" + batchCampaign);
+    await admin
+      .locator('[data-task="campaign-capacity"] [name=capacity]')
+      .fill("8");
+    await admin.getByRole("button", { name: "선정 정원 저장" }).click();
+    await admin.locator("#toast").getByText("저장되었습니다.").waitFor();
+    assert.equal(
+      (
+        await (
+          await admin.request.get(base + "/api/work/campaigns/" + batchCampaign)
+        ).json()
+      ).campaign.capacity,
+      8,
+    );
+    await admin
+      .getByRole("button", { name: "캠페인 삭제", exact: true })
+      .click();
+    await admin.locator("#confirm-cancel").click();
+    assert.equal(
+      (
+        await admin.request.get(base + "/api/work/campaigns/" + batchCampaign)
+      ).status(),
+      200,
+    );
+    await admin
+      .getByRole("button", { name: "캠페인 삭제", exact: true })
+      .click();
+    await admin.locator("#confirm-accept").click();
+    await admin.waitForURL("**/campaigns");
+    assert.equal(
+      (
+        await admin.request.get(base + "/api/work/campaigns/" + batchCampaign)
+      ).status(),
+      404,
+    );
+    const visibleCampaigns = (
+      await (await admin.request.get(base + "/api/work/campaigns")).json()
+    ).campaigns;
+    assert.ok(!visibleCampaigns.some((c) => c.id === batchCampaign));
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },

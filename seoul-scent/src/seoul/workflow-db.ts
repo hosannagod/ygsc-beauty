@@ -81,6 +81,11 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     const cols = db.prepare("PRAGMA table_info(campaigns)").all() as {
       name: string;
     }[];
+    if (!cols.some((c) => c.name === "deleted_at"))
+      db.exec(
+        "ALTER TABLE campaigns ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0",
+      );
+    db.exec("INSERT OR IGNORE INTO schema_version VALUES(14)");
     if (!cols.some((c) => c.name === "is_draft"))
       db.exec(
         "ALTER TABLE campaigns ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0 CHECK(is_draft IN (0,1))",

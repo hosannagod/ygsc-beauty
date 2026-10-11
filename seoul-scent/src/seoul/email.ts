@@ -39,7 +39,7 @@ export function queueSelectionEmail(
   const row = db
     .prepare(
       `SELECT u.email,u.name,c.title,c.title_en FROM applications a
-    JOIN users u ON u.id=a.influencer_id JOIN campaigns c ON c.id=a.campaign_id WHERE a.id=?`,
+    JOIN users u ON u.id=a.influencer_id JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0 AND a.id=?`,
     )
     .get(applicationId) as any;
   if (!row) throw new Error("Selection recipient not found");
@@ -145,6 +145,9 @@ export function emailWorker(
         db.prepare(
           "UPDATE email_outbox SET status='pending' WHERE status='sending' AND last_attempt<?",
         ).run(now - 15 * 60_000);
+        db.prepare(
+          "UPDATE email_outbox SET status='failed',last_error='campaign_deleted' WHERE status='pending' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at>0)",
+        ).run();
         const recent = db
           .prepare(
             "SELECT COUNT(*) AS n FROM email_attempts WHERE created_at>?",
@@ -153,7 +156,7 @@ export function emailWorker(
         if (recent.n >= emailConfig(env).dailyLimit) return null;
         const row = db
           .prepare(
-            "SELECT * FROM email_outbox WHERE status='pending' AND next_attempt<=? ORDER BY id LIMIT 1",
+            "SELECT * FROM email_outbox WHERE status='pending' AND next_attempt<=? AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0) ORDER BY id LIMIT 1",
           )
           .get(now) as any;
         if (!row) return null;

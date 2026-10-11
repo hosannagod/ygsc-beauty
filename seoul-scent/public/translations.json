@@ -581,5 +581,14 @@
   "고화질 원본 제공에 동의합니다.": "I agree to provide high-resolution original files.",
   "추가 동의 저장": "Save additional consent",
   "선정 전에 추가 동의가 필요합니다.": "Additional consent is required before selection.",
-  "추가 동의 필요": "Additional consent needed"
+  "추가 동의 필요": "Additional consent needed",
+  "정원 편집": "Edit capacity",
+  "선정 정원": "Selection capacity",
+  "선정 정원 저장": "Save selection capacity",
+  "캠페인 삭제": "Delete campaign",
+  "관리자 캠페인 관리": "Admin campaign management",
+  "일정과 가이드라인을 변경하지 않고 정원만 수정합니다. 이미 선정된 인원보다 작게 줄일 수 없습니다.": "Change capacity without changing the schedule or guidelines. Capacity cannot be lower than the number already selected.",
+  "이 캠페인을 삭제할까요? 목록에서 제외하고 진행을 중단합니다. 기존 참여 이력과 완료 횟수는 보존됩니다.": "Delete this campaign? It will be removed from the list and further activity will stop. Participation history and completion counts will be preserved.",
+  "캠페인이 삭제되었습니다.": "Campaign deleted.",
+  "관리자가 삭제한 캠페인입니다. 참여 이력만 확인할 수 있습니다.": "This campaign was deleted by an administrator. Participation history is available for reference."
 }

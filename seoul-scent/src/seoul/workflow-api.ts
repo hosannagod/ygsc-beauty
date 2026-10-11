@@ -151,6 +151,7 @@ export function registerWorkflow(
         a = applicationFor(db, id(c), u),
         b = await body(c);
       if (
+        a.campaign_deleted_at ||
         a.status !== "applied" ||
         !a.consent_version.startsWith("external-form-v2")
       )
@@ -294,10 +295,10 @@ export function registerWorkflow(
       const u = current(c);
       const where =
         u.role === "brand"
-          ? "WHERE c.brand_id=?"
+          ? "WHERE c.deleted_at=0 AND c.brand_id=?"
           : u.role === "influencer"
-            ? "WHERE c.is_draft=0"
-            : "";
+            ? "WHERE c.deleted_at=0 AND c.is_draft=0"
+            : "WHERE c.deleted_at=0";
       const query = db.prepare(`SELECT c.*,u.name AS brand_name,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id) AS applicant_count,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id AND a.status NOT IN ('applied','rejected')) AS selected_count,
@@ -306,6 +307,65 @@ export function registerWorkflow(
       return c.json({
         campaigns: u.role === "brand" ? query.all(u.id) : query.all(),
       });
+    }),
+  );
+  app.put(
+    "/api/work/campaigns/:id/capacity",
+    wrap(async (c) => {
+      const u = role(c, "admin"),
+        b = await body(c);
+      db.transaction(() => {
+        const campaign = campaignFor(db, id(c), u, true);
+        const capacity = integer(b.capacity, "선정 정원", 1, 500);
+        const selected = (
+          db
+            .prepare(
+              "SELECT count(*) n FROM applications WHERE campaign_id=? AND status NOT IN ('applied','rejected')",
+            )
+            .get(campaign.id) as any
+        ).n;
+        if (capacity < selected)
+          fail(
+            "선정 정원은 이미 선정된 인원보다 작게 설정할 수 없습니다.",
+            409,
+          );
+        db.prepare("UPDATE campaigns SET capacity=? WHERE id=?").run(
+          capacity,
+          campaign.id,
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_capacity',?,?)",
+        ).run(
+          u.id,
+          JSON.stringify({
+            campaign_id: campaign.id,
+            previous: campaign.capacity,
+            capacity,
+          }),
+          Date.now(),
+        );
+      })();
+      return c.json({ success: true });
+    }),
+  );
+  app.delete(
+    "/api/work/campaigns/:id",
+    wrap((c) => {
+      const u = role(c, "admin");
+      db.transaction(() => {
+        const campaign = campaignFor(db, id(c), u, true);
+        db.prepare("UPDATE campaigns SET deleted_at=? WHERE id=?").run(
+          Date.now(),
+          campaign.id,
+        );
+        db.prepare(
+          "UPDATE email_outbox SET status='failed',last_error='campaign_deleted' WHERE application_id IN (SELECT id FROM applications WHERE campaign_id=?) AND status='pending'",
+        ).run(campaign.id);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_delete',?,?)",
+        ).run(u.id, JSON.stringify({ campaign_id: campaign.id }), Date.now());
+      })();
+      return c.json({ success: true });
     }),
   );
   app.post(
@@ -598,7 +658,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY a.id DESC`,
               )
               .all(campaign.id);
       return c.json({
@@ -753,7 +813,7 @@ export function registerWorkflow(
       return c.json({
         applications: db
           .prepare(
-            `SELECT a.*,c.review_required,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE a.influencer_id=? ORDER BY a.id DESC`,
+            `SELECT a.*,c.review_required,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE c.deleted_at=0 AND a.influencer_id=? ORDER BY a.id DESC`,
           )
           .all(u.id),
       });
@@ -784,6 +844,8 @@ export function registerWorkflow(
         b = await body(c);
       db.transaction(() => {
         const a = applicationFor(db, id(c), u);
+        if (a.campaign_deleted_at)
+          fail("삭제된 캠페인은 진행할 수 없습니다.", 409);
         const brand =
           u.role === "admin" || (u.role === "brand" && u.id === a.brand_id);
         const influencer = u.role === "influencer" && u.id === a.influencer_id;
@@ -1018,7 +1080,7 @@ export function registerWorkflow(
       db.transaction(() => {
         const result = db
           .prepare(
-            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed'",
+            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0)",
           )
           .run(Date.now(), id(c));
         if (!result.changes) fail("실패한 메일만 재시도할 수 있습니다.", 409);
@@ -1139,7 +1201,7 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing WHERE ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({

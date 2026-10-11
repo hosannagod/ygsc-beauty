@@ -224,8 +224,12 @@ export async function importSecondProject(
       }
       const key = `ilovepick-second-project:${b.username}`;
       let campaign = db
-        .prepare("SELECT id,brand_id FROM campaigns WHERE import_key=?")
+        .prepare(
+          "SELECT id,brand_id,deleted_at FROM campaigns WHERE import_key=?",
+        )
         .get(key) as any;
+      if (campaign?.deleted_at)
+        fail("삭제된 프로젝트는 다시 등록할 수 없습니다.", 409);
       if (campaign && campaign.brand_id !== brand.id)
         fail("기존 캠페인의 브랜드 소유자가 일치하지 않습니다.", 409);
       if (!campaign) {

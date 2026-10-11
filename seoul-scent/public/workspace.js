@@ -233,6 +233,7 @@
         ><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a>
       </div>
       ${role !== "influencer" ? html`<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}
+      ${role === "admin" ? `<div class="button-row"><a class="secondary" href="/campaigns/${c.id}#capacity-editor">${t("정원 편집")}</a><button class="secondary" data-delete-campaign="${c.id}">${t("캠페인 삭제")}</button></div>` : ""}
     </article>`;
   const applicationCard = (a) =>
     html`<article class="campaign-card">
@@ -575,6 +576,8 @@
             ><span>한국 시간 · 당일 자정 마감</span>
           </div>
         </section>`;
+    if (role === "admin")
+      root.innerHTML += `<section class="panel" id="capacity-editor"><h2>${t("관리자 캠페인 관리")}</h2><form class="editor" data-task="campaign-capacity" data-id="${id}">${input("capacity", t("선정 정원"), "number", 'required min="1" max="500"', c.capacity)}<p class="note left">${t("일정과 가이드라인을 변경하지 않고 정원만 수정합니다. 이미 선정된 인원보다 작게 줄일 수 없습니다.")}</p>${submit(t("선정 정원 저장"))}</form><button class="secondary" data-delete-campaign="${id}">${t("캠페인 삭제")}</button></section>`;
     if (c._translationUnavailable)
       root.innerHTML +=
         '<div class="warning">English translation is temporarily unavailable for some content. The original is shown. Please try again later or ask the brand to add English content.</div>';
@@ -1104,6 +1107,8 @@
       a.status === "revision_requested" && a.revision_due
         ? date(a.revision_due - 1)
         : esc(a.draft_date);
+    if (a.campaign_deleted_at)
+      actions = `<p class="warning">${t("관리자가 삭제한 캠페인입니다. 참여 이력만 확인할 수 있습니다.")}</p>`;
     root.innerHTML =
       heading(
         esc(a.title),
@@ -1638,6 +1643,9 @@
         case "import-consent":
           await api(`/applications/${form.dataset.id}/consent`, "POST", data);
           break;
+        case "campaign-capacity":
+          await api(`/campaigns/${form.dataset.id}/capacity`, "PUT", data);
+          break;
         case "campaign-details":
           await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);
           break;
@@ -1679,6 +1687,23 @@
     const button = event.target.closest("button");
     if (!button) return;
     try {
+      if (button.dataset.deleteCampaign) {
+        if (
+          !(await confirmAction(
+            t(
+              "이 캠페인을 삭제할까요? 목록에서 제외하고 진행을 중단합니다. 기존 참여 이력과 완료 횟수는 보존됩니다.",
+            ),
+          ))
+        )
+          return;
+        button.disabled = true;
+        await api(`/campaigns/${button.dataset.deleteCampaign}`, "DELETE", {});
+        toast(t("캠페인이 삭제되었습니다."));
+        if (location.pathname.startsWith("/campaigns/"))
+          location.assign("/campaigns");
+        else await render();
+        return;
+      }
       if (button.dataset.campaignAction) {
         if (
           !(await confirmAction(
