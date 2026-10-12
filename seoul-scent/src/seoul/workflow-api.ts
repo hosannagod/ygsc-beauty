@@ -25,7 +25,7 @@ import { shippingTrackingUrl } from "./shipping-tracking.js";
 import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
-import { verifyPassword, type User } from "./db.js";
+import { hashPassword, verifyPassword, type User } from "./db.js";
 import ExcelJS from "exceljs";
 import { readFile, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -1387,6 +1387,57 @@ export function registerWorkflow(
             'attachment; filename="content-links-with-followers.xlsx"',
           "Cache-Control": "no-store",
         },
+      });
+    }),
+  );
+  app.post(
+    "/api/work/admin/users/:id/reset-password",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      const user = db
+        .prepare("SELECT id,email,username,role FROM users WHERE id=?")
+        .get(target) as any;
+      if (!user || user.role !== "influencer")
+        fail("인플루언서를 찾을 수 없습니다.", 404);
+      if (b.confirm_email !== user.email)
+        fail("초기화할 계정의 이메일을 확인해 주세요.", 409);
+      const temporary = text(b.temporary_password, "임시 비밀번호", 4, 128);
+      const hash = hashPassword(temporary);
+      const revoked = db.transaction(() => {
+        db.prepare(
+          "UPDATE users SET password_hash=?,must_change_password=1 WHERE id=?",
+        ).run(hash, target);
+        const sessions = db
+          .prepare("DELETE FROM sessions WHERE user_id=?")
+          .run(target).changes;
+        for (const key of [
+          user.email,
+          user.username,
+          `login:${target}`,
+          `account:${target}`,
+        ])
+          if (key)
+            db.prepare("DELETE FROM login_attempts WHERE email=?").run(key);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          target,
+          "password_reset",
+          JSON.stringify({
+            must_change_password: true,
+            sessions_revoked: sessions,
+          }),
+          Date.now(),
+        );
+        return sessions;
+      })();
+      return c.json({
+        success: true,
+        must_change_password: true,
+        sessions_revoked: revoked,
       });
     }),
   );
