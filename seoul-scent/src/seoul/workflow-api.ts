@@ -25,7 +25,7 @@ import { shippingTrackingUrl } from "./shipping-tracking.js";
 import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
-import type { User } from "./db.js";
+import { verifyPassword, type User } from "./db.js";
 import ExcelJS from "exceljs";
 import { readFile, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -1387,6 +1387,53 @@ export function registerWorkflow(
             'attachment; filename="content-links-with-followers.xlsx"',
           "Cache-Control": "no-store",
         },
+      });
+    }),
+  );
+  app.get(
+    "/api/work/admin/users/:id/login-status",
+    wrap((c) => {
+      role(c, "admin");
+      const user = db
+        .prepare(
+          "SELECT id,email,username,role,must_change_password,password_hash FROM users WHERE id=?",
+        )
+        .get(id(c)) as any;
+      if (!user) fail("계정을 찾을 수 없습니다.", 404);
+      const loginKey = user.username ? `login:${user.id}` : user.email;
+      const login = db
+        .prepare(
+          "SELECT failures,locked_until FROM login_attempts WHERE email=?",
+        )
+        .get(loginKey) as any;
+      const account = db
+        .prepare(
+          "SELECT failures,locked_until FROM login_attempts WHERE email=?",
+        )
+        .get(`account:${user.id}`) as any;
+      const now = Date.now();
+      return c.json({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        must_change_password: !!user.must_change_password,
+        uses_initial_password: verifyPassword("0000", user.password_hash),
+        login_failures: login?.failures || 0,
+        login_locked: (login?.locked_until || 0) > now,
+        login_locked_until: login?.locked_until || 0,
+        retry_after_seconds: Math.max(
+          0,
+          Math.ceil(((login?.locked_until || 0) - now) / 1000),
+        ),
+        account_change_failures: account?.failures || 0,
+        account_change_locked: (account?.locked_until || 0) > now,
+        active_sessions: (
+          db
+            .prepare(
+              "SELECT COUNT(*) n FROM sessions WHERE user_id=? AND expires_at>?",
+            )
+            .get(user.id, now) as any
+        ).n,
       });
     }),
   );
