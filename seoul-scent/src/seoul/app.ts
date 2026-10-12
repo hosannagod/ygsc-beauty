@@ -17,6 +17,7 @@ export function createApp(
   db: ReturnType<typeof openDb>,
   production = false,
   publicOrigin?: string,
+  allowedOrigins: readonly string[] = [],
 ) {
   const app = new Hono<{ Variables: { user: User | null } }>();
   app.use(
@@ -40,7 +41,12 @@ export function createApp(
       const origin = c.req.header("Origin");
       const requestOrigin = new URL(c.req.url);
       if (production) requestOrigin.protocol = "https:";
-      if (origin && origin !== (publicOrigin || requestOrigin.origin))
+      if (
+        origin &&
+        ![publicOrigin || requestOrigin.origin, ...allowedOrigins].includes(
+          origin,
+        )
+      )
         return c.json({ error: "허용되지 않은 요청입니다." }, 403);
       if (c.req.header("Sec-Fetch-Site") === "cross-site")
         return c.json({ error: "허용되지 않은 요청입니다." }, 403);

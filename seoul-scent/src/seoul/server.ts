@@ -11,7 +11,18 @@ const publicOrigin = process.env.APP_ORIGIN
   : undefined;
 if (publicOrigin && production && !publicOrigin.startsWith("https://"))
   throw new Error("APP_ORIGIN must use HTTPS in production");
-const app = createApp(db, production, publicOrigin);
+const app = createApp(
+  db,
+  production,
+  publicOrigin,
+  production
+    ? [
+        "https://www.seoulscent.kr",
+        "https://seoulscent.kr",
+        "https://seoul-scent.onrender.com",
+      ]
+    : [],
+);
 app.get(
   "/assets/*",
   serveStatic({

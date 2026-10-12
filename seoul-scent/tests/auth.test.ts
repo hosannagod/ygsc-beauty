@@ -425,3 +425,56 @@ test("role-specific signup stores contact fields and initializes influencer phon
     db.close();
   }
 });
+
+test("explicit production domain aliases allow login and logout without weakening cross-site checks", async () => {
+  const db = openDb(":memory:");
+  try {
+    db.prepare(
+      "INSERT INTO users(email,name,role,password_hash) VALUES('domain@test.com','Domain Admin','admin',?)",
+    ).run(hashPassword(password));
+    const aliases = [
+      "https://www.seoulscent.kr",
+      "https://seoulscent.kr",
+      "https://seoul-scent.onrender.com",
+    ];
+    const app = createApp(db, true, aliases[2], aliases);
+    const login = (origin: string, site = "same-origin") =>
+      app.request("http://internal:3000/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: origin,
+          "Sec-Fetch-Site": site,
+        },
+        body: JSON.stringify({ email: "domain@test.com", password }),
+      });
+    for (const origin of aliases) {
+      const response = await login(origin);
+      assert.equal(response.status, 200);
+      const cookie = response.headers.get("set-cookie")!;
+      assert.match(cookie, /Secure/);
+      assert.equal(
+        (
+          await app.request("http://internal:3000/api/logout", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: origin,
+              Cookie: cookie.split(";")[0],
+            },
+            body: "{}",
+          })
+        ).status,
+        200,
+      );
+    }
+    assert.equal(
+      (await login("https://www.seoulscent.kr.evil.example")).status,
+      403,
+    );
+    assert.equal((await login("https://evil.example")).status, 403);
+    assert.equal((await login(aliases[0], "cross-site")).status, 403);
+  } finally {
+    db.close();
+  }
+});
