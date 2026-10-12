@@ -23,7 +23,9 @@ import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
 import type { User } from "./db.js";
 import ExcelJS from "exceljs";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile, rename, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   type DB,
   WorkflowError,
@@ -1306,6 +1308,81 @@ export function registerWorkflow(
       }),
     );
   }
+  const contentReportPath = () => {
+    if (db.name === ":memory:")
+      fail("보고서 저장에는 영구 저장소가 필요합니다.", 409);
+    return join(dirname(db.name), "admin-reports", "content-followers.xlsx");
+  };
+  app.put(
+    "/api/work/admin/reports/content-followers",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        b = await body(c);
+      if (
+        typeof b.file !== "string" ||
+        b.file.length > 2_800_000 ||
+        !/^[A-Za-z0-9+/]+=*$/.test(b.file)
+      )
+        fail("2MB 이하 XLSX 보고서를 선택해 주세요.");
+      const buffer = Buffer.from(b.file, "base64");
+      validateWorkbookArchive(buffer);
+      const book = new ExcelJS.Workbook();
+      try {
+        await book.xlsx.load(buffer as any);
+      } catch {
+        fail("엑셀 파일을 읽을 수 없습니다.");
+      }
+      if (
+        !book.getWorksheet("개별 안내 명단") ||
+        !book.getWorksheet("인원·팔로워 요약")
+      )
+        fail("개별 안내 명단과 인원·팔로워 요약 시트를 포함해 주세요.");
+      const path = contentReportPath(),
+        temporary = path + "." + randomUUID();
+      await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+      try {
+        await writeFile(temporary, buffer, { flag: "wx", mode: 0o600 });
+        await rename(temporary, path);
+      } finally {
+        await unlink(temporary).catch(() => {});
+      }
+      db.prepare(
+        "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,?,?,?)",
+      ).run(
+        actor.id,
+        "content_followers_report",
+        JSON.stringify({ bytes: buffer.length }),
+        Date.now(),
+      );
+      return c.json({
+        success: true,
+        url: "/api/work/admin/reports/content-followers.xlsx",
+      });
+    }),
+  );
+  app.get(
+    "/api/work/admin/reports/content-followers.xlsx",
+    wrap(async (c) => {
+      role(c, "admin");
+      let file: Buffer;
+      try {
+        file = await readFile(contentReportPath());
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          fail("보고서가 아직 등록되지 않았습니다.", 404);
+        throw error;
+      }
+      return new Response(file as any, {
+        headers: {
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition":
+            'attachment; filename="content-links-with-followers.xlsx"',
+          "Cache-Control": "no-store",
+        },
+      });
+    }),
+  );
   app.get(
     "/api/work/admin/audit",
     wrap((c) => {
