@@ -116,6 +116,14 @@ export function mergeInfluencers(
       Math.max(...profiles.map((p) => p.onboarding_approved)),
       targetId,
     );
+    db.prepare(
+      "UPDATE influencer_profiles SET nationality=? WHERE user_id=?",
+    ).run(
+      primary.nationality ||
+        profiles.find((p) => p.nationality)?.nationality ||
+        "",
+      targetId,
+    );
     const mergedProfile = db
       .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
       .get(targetId) as any;

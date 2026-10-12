@@ -885,6 +885,7 @@
                 <tr>
                   <th>선택</th>
                   <th>인플루언서</th>
+                  <th>${t("국적")}</th>
                   <th>${t("SNS 계정")}</th>
                   <th>${t("팔로워 · 등급")}${gradeInfo()}</th>
                   <th>${t("참여 횟수")}${participationInfo()}</th>
@@ -904,6 +905,7 @@
                           <strong>${esc(a.influencer_name)}</strong
                           ><small>${esc(a.influencer_email)}</small>
                         </td>
+                        <td>${esc(t(a.nationality || "미등록"))}</td>
                         <td class="applicant-social">
                           ${socialAccountLink(a.social_url)}
                         </td>
@@ -1134,7 +1136,7 @@
           <div>
             <section class="panel">
               <h2>제출 콘텐츠</h2>
-              ${influencer ? "" : `<p>${t("참여 횟수")}${participationInfo()} · ${t("완료")} ${a.completed_count}${t("회")} · ${t("진행 중")} ${a.active_count || 0}${t("건")}</p>`}${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+              ${influencer ? "" : `<p>${t("참여 횟수")}${participationInfo()} · ${t("완료")} ${a.completed_count}${t("회")} · ${t("진행 중")} ${a.active_count || 0}${t("건")}</p>`}${!influencer ? `<p>${t("국적")}: ${esc(t(a.nationality || "미등록"))}</p>` : ""}${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
             </section>
             <section class="panel">
               <h3>배송 정보</h3>
@@ -1220,7 +1222,7 @@
     root.innerHTML =
       heading(
         t("내 프로필"),
-        t("브랜드에 전달할 연락처와 SNS 정보를 입력해 주세요."),
+        t("브랜드에 전달할 국적·연락처·SNS 정보를 입력해 주세요."),
         `<a class="secondary" href="/account">${t("계정 정보 수정")}</a>`,
       ) +
       html`<section class="kpi-grid">
@@ -1239,7 +1241,7 @@
           <p class="note left">
             ${t("지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.")}
           </p>
-          ${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", t("대표 SNS 프로필 링크"), "url", 'required maxlength="500"', p.social_url)}${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', p.followers)}
+          ${input("nationality", t("국적"), "text", 'maxlength="80"', p.nationality || "")}${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", t("대표 SNS 프로필 링크"), "url", 'required maxlength="500"', p.social_url)}${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', p.followers)}
           <p class="note left">
             배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지
             해당 캠페인의 배송지를 수정할 수 있습니다.
@@ -1313,7 +1315,7 @@
       ) +
       `<section class="kpi-grid" id="user-stats">${stats()}</section>` +
       `<div class="button-row"><a class="secondary" href="#user-results">${t("인플루언서 목록")}</a><a class="secondary" href="#promotion-admin">${t("홍보 인증 관리")}</a><a class="secondary" href="#admin-imports">${t("회원·이력 엑셀 등록")}</a><a class="secondary" href="/api/work/admin/influencers.xlsx">${t("전체 명단 XLSX 다운로드")}</a><a class="secondary" href="/api/work/admin/brand-introduction.pdf">${t("브랜드 소개서 PDF")}</a><a class="secondary" href="/api/work/admin/brand-introduction.pptx">${t("브랜드 소개서 PPT")}</a><a class="secondary" href="/api/work/admin/reports/content-followers.xlsx">${t("콘텐츠 링크·팔로워 XLSX")}</a></div>` +
-      `<div class="toolbar"><input id="user-search" aria-label="${t("인플루언서 검색")}" placeholder="${t("이름·이메일·연락처 검색")}"><select id="user-role" aria-label="${t("계정 유형")} "><option value="influencer">${t("전체 인플루언서")}</option><option value="brand">${t("브랜드")}</option><option value="admin">${t("운영사")}</option><option value="all">${t("전체 계정")}</option></select><select id="user-grade" aria-label="${t("등급 필터")}"><option value="all">${t("전체 등급")}</option>${["basic", "bronze", "silver", "gold", "platinum"].map((value, i) => `<option value="${value}">${[t("기본"), t("브론즈"), t("실버"), t("골드"), t("플래티넘")][i]}</option>`).join("")}</select><select id="user-status" aria-label="${t("상태 필터")}"><option value="all">${t("전체 상태")}</option><option value="pending">${t("홍보 인증 검토 대기")}</option><option value="restricted">${t("지원 제한 중")}</option></select></div><div class="section-heading"><p id="user-count" class="muted" aria-live="polite"></p><button class="secondary" data-toggle-users aria-expanded="true" aria-controls="user-results">${t("목록 접기")}</button></div><div class="panel table-wrap" id="user-results"></div>`;
+      `<div class="toolbar"><input id="user-search" aria-label="${t("인플루언서 검색")}" placeholder="${t("이름·이메일·연락처·국적 검색")}"><select id="user-role" aria-label="${t("계정 유형")} "><option value="influencer">${t("전체 인플루언서")}</option><option value="brand">${t("브랜드")}</option><option value="admin">${t("운영사")}</option><option value="all">${t("전체 계정")}</option></select><select id="user-grade" aria-label="${t("등급 필터")}"><option value="all">${t("전체 등급")}</option>${["basic", "bronze", "silver", "gold", "platinum"].map((value, i) => `<option value="${value}">${[t("기본"), t("브론즈"), t("실버"), t("골드"), t("플래티넘")][i]}</option>`).join("")}</select><select id="user-status" aria-label="${t("상태 필터")}"><option value="all">${t("전체 상태")}</option><option value="pending">${t("홍보 인증 검토 대기")}</option><option value="restricted">${t("지원 제한 중")}</option></select></div><div class="section-heading"><p id="user-count" class="muted" aria-live="polite"></p><button class="secondary" data-toggle-users aria-expanded="true" aria-controls="user-results">${t("목록 접기")}</button></div><div class="panel table-wrap" id="user-results"></div>`;
     const render = () => {
       document.querySelector("#user-stats").innerHTML = stats();
       const q = document
@@ -1339,7 +1341,7 @@
               onboarding.submissions.some(
                 (s) => s.user_id === u.id && s.status === "pending",
               ))) &&
-          [u.name, u.email, u.username, u.phone, u.social_url].some((v) =>
+          [u.name, u.email, u.username, u.phone, u.social_url, u.nationality].some((v) =>
             String(v || "")
               .toLowerCase()
               .includes(q),
@@ -1352,6 +1354,7 @@
         <thead>
           <tr>
             <th>계정</th>
+            <th>${t("국적")}</th>
             <th>${t("연락처 · SNS")}</th>
             <th>역할</th>
             <th>${t("등급 · 완료")}${gradeInfo()}</th>
@@ -1360,7 +1363,7 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(t(u.nationality || (u.role === "influencer" ? "미등록" : "—")))}</td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
@@ -1814,6 +1817,9 @@
                 <dd>${esc(person.email)}</dd>
               </div>
               <div>
+                <dt>${t("국적")}</dt><dd>${esc(t(person.nationality || "미등록"))}</dd>
+              </div>
+              <div>
                 <dt>${t("연락처")}</dt>
                 <dd>${esc(person.phone || "—")}</dd>
               </div>
@@ -1857,6 +1863,7 @@
                 data-id="${person.id}"
               >
                 ${input("name", t("성함"), "text", 'required minlength="2" maxlength="60"', person.name)}
+                ${input("nationality", t("국적"), "text", 'maxlength="80"', person.nationality || "")}
                 ${input("phone", t("연락처"), "tel", 'maxlength="30"', person.phone || "")}
                 ${input("social_url", t("대표 SNS 프로필 링크"), "url", 'maxlength="500" placeholder="https://www.instagram.com/account"', person.social_url || "")}
                 ${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', person.followers)}

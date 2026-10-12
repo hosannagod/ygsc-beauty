@@ -227,4 +227,14 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     CREATE INDEX IF NOT EXISTS onboarding_user ON onboarding_submissions(user_id,id);
     CREATE TABLE IF NOT EXISTS promotion_asset(id INTEGER PRIMARY KEY CHECK(id=1),data BLOB NOT NULL);
     INSERT OR IGNORE INTO schema_version VALUES(12);`);
+  if (
+    !(
+      db.prepare("PRAGMA table_info(influencer_profiles)").all() as {
+        name: string;
+      }[]
+    ).some((c) => c.name === "nationality")
+  )
+    db.exec(
+      "ALTER TABLE influencer_profiles ADD COLUMN nationality TEXT NOT NULL DEFAULT ''",
+    );
 }

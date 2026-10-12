@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { hashPassword } from "./db.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
-import { socialProfileUrl } from "./profile.js";
+import { socialProfileUrl, nationalityValue } from "./profile.js";
 import { fail, type DB } from "./workflow.js";
 export async function readInfluencerWorkbook(buffer: Buffer) {
   validateWorkbookArchive(buffer);
@@ -33,6 +33,13 @@ export async function readInfluencerWorkbook(buffer: Buffer) {
   const cols = {
     name: column(["Name / 이름", "성함", "이름", "name"]),
     email: column(["Email / 이메일", "이메일", "email"]),
+    nationality: column([
+      "국적 (Nationality)",
+      "Nationality / 국적",
+      "국적",
+      "nationality",
+    ]),
+    nationalityAlternate: column(["Nationality / 국적"]),
     phone: column(["연락처(Contact number)", "연락처", "phone"]),
     social: column(["Profile URL / 채널 링크", "SNS 프로필 URL", "social_url"]),
     followers: column([
@@ -87,6 +94,9 @@ export async function readInfluencerWorkbook(buffer: Buffer) {
       phone,
       social,
       followers: followers <= 100_000_000 ? followers : 0,
+      nationality: nationalityValue(
+        cell(cols.nationality) || cell(cols.nationalityAlternate),
+      ),
       needs_profile: !phone || !social || !match,
     });
   }
@@ -134,11 +144,12 @@ export async function importInfluencers(
         )
         .run(r.email, r.name, r.phone, hash);
       db.prepare(
-        "UPDATE influencer_profiles SET phone=?,social_url=?,followers=?,import_review_required=? WHERE user_id=?",
+        "UPDATE influencer_profiles SET phone=?,social_url=?,followers=?,nationality=?,import_review_required=? WHERE user_id=?",
       ).run(
         r.phone,
         r.social,
         r.followers,
+        r.nationality,
         r.needs_profile ? 1 : 0,
         result.lastInsertRowid,
       );

@@ -50,12 +50,12 @@ test("roster XLSX is admin-only, exports live follower totals and preserves phon
     await book.xlsx.load(Buffer.from(await response.arrayBuffer()) as any);
     const roster = book.getWorksheet("전체 명단")!;
     assert.equal(roster.rowCount, 3);
-    assert.equal(roster.getCell("C2").value, "01012345678");
-    assert.equal(roster.getCell("E2").value, 12300);
-    assert.equal(roster.getCell("F2").value, "브론즈");
+    assert.equal(roster.getCell("D2").value, "01012345678");
+    assert.equal(roster.getCell("F2").value, 12300);
+    assert.equal(roster.getCell("G2").value, "브론즈");
     assert.equal(book.getWorksheet("팔로워 확인 필요")!.rowCount, 2);
     assert.equal(book.getWorksheet("요약")!.getCell("B6").value, 12300);
-    assert.equal(roster.columns.length, 8);
+    assert.equal(roster.columns.length, 9);
     db.prepare(
       "UPDATE influencer_profiles SET followers=12400 WHERE user_id=3",
     ).run();

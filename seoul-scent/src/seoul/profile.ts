@@ -1,3 +1,4 @@
+import { fail, text } from "./workflow.js";
 export function socialProfileUrl(value: unknown): boolean {
   if (typeof value !== "string" || value.length > 500) return false;
   try {
@@ -22,4 +23,11 @@ export function profileComplete(profile: any): boolean {
     profile.followers >= 0 &&
     profile.followers <= 100_000_000
   );
+}
+
+export function nationalityValue(value: unknown): string {
+  const result = text(value, "국적", 0, 80);
+  if (/[\u0000-\u001f\u007f]/.test(result))
+    fail("국적에 줄바꿈이나 제어 문자를 사용할 수 없습니다.");
+  return result;
 }

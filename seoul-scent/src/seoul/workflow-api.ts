@@ -6,7 +6,11 @@ import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
 import { mergeInfluencers } from "./influencer-merge.js";
 import { queueSelectionEmail, emailStatus } from "./email.js";
-import { profileComplete, socialProfileUrl } from "./profile.js";
+import {
+  profileComplete,
+  socialProfileUrl,
+  nationalityValue,
+} from "./profile.js";
 import {
   certificatePage,
   issueCertificate,
@@ -284,10 +288,12 @@ export function registerWorkflow(
       if (!socialProfileUrl(social))
         fail("올바른 HTTP/HTTPS SNS 프로필 링크를 입력해 주세요.");
       const followers = integer(b.followers, "팔로워 수", 0, 100_000_000);
+      const nationality =
+        b.nationality === undefined ? null : nationalityValue(b.nationality);
       db.transaction(() => {
         db.prepare(
-          "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=?,import_review_required=0 WHERE user_id=?",
-        ).run(phone, address ?? null, social, followers, u.id);
+          "UPDATE influencer_profiles SET phone=?,address=COALESCE(?,address),social_url=?,followers=?,nationality=COALESCE(?,nationality),import_review_required=0 WHERE user_id=?",
+        ).run(phone, address ?? null, social, followers, nationality, u.id);
         db.prepare("UPDATE users SET phone=? WHERE id=?").run(phone, u.id);
       })();
       return c.json({ success: true });
@@ -679,7 +685,7 @@ export function registerWorkflow(
               .all(campaign.id, u.id)
           : db
               .prepare(
-                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY p.completed_count DESC,a.id ASC`,
+                `SELECT a.*,u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.no_show_count,p.social_url,p.nationality,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.campaign_id=? ORDER BY p.completed_count DESC,a.id ASC`,
               )
               .all(campaign.id);
       return c.json({
@@ -1197,7 +1203,7 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({
@@ -1219,7 +1225,7 @@ export function registerWorkflow(
       role(c, "admin");
       const rows = db
         .prepare(
-          `SELECT u.id,u.name,u.email,p.phone,p.social_url,p.followers,p.tier,p.completed_count,p.onboarding_approved
+          `SELECT u.id,u.name,u.email,p.phone,p.nationality,p.social_url,p.followers,p.tier,p.completed_count,p.onboarding_approved
          FROM users u JOIN influencer_profiles p ON p.user_id=u.id
          WHERE u.role='influencer' ORDER BY p.followers DESC,u.id ASC`,
         )
@@ -1244,6 +1250,7 @@ export function registerWorkflow(
       const columns = [
         { header: "이름", key: "name", width: 28 },
         { header: "이메일", key: "email", width: 38 },
+        { header: "국적", key: "nationality", width: 22 },
         { header: "연락처", key: "phone", width: 22 },
         { header: "SNS 링크", key: "social_url", width: 65 },
         { header: "팔로워 수", key: "followers", width: 18 },
@@ -1269,7 +1276,7 @@ export function registerWorkflow(
         sheet.columns = columns;
         sheet.addRows(data);
         sheet.views = [{ state: "frozen", ySplit: 1 }];
-        sheet.autoFilter = { from: "A1", to: "H1" };
+        sheet.autoFilter = { from: "A1", to: "I1" };
         sheet.getColumn("phone").numFmt = "@";
         sheet.getColumn("followers").numFmt = "#,##0";
       }
@@ -1623,6 +1630,10 @@ export function registerWorkflow(
           fail("연락처 형식을 확인해 주세요.");
         if (social && !socialProfileUrl(social))
           fail("올바른 HTTP/HTTPS SNS 프로필 링크를 입력해 주세요.");
+        const nationality =
+          b.nationality === undefined
+            ? profile.nationality
+            : nationalityValue(b.nationality);
         const reviewed = profileComplete({
           ...profile,
           phone,
@@ -1636,12 +1647,18 @@ export function registerWorkflow(
           target,
         );
         db.prepare(
-          "UPDATE influencer_profiles SET phone=?,social_url=?,followers=?,import_review_required=? WHERE user_id=?",
+          "UPDATE influencer_profiles SET phone=?,social_url=?,followers=?,nationality=?,import_review_required=? WHERE user_id=?",
         ).run(
           phone,
           social,
           followers,
-          reviewed ? 0 : profile.import_review_required,
+          nationality,
+          reviewed &&
+            ["phone", "social_url", "followers"].some((field) =>
+              Object.hasOwn(b, field),
+            )
+            ? 0
+            : profile.import_review_required,
           target,
         );
         db.prepare(
@@ -1651,9 +1668,13 @@ export function registerWorkflow(
           target,
           "profile_edit",
           JSON.stringify({
-            fields: ["name", "phone", "social_url", "followers"].filter(
-              (field) => Object.hasOwn(b, field),
-            ),
+            fields: [
+              "name",
+              "phone",
+              "social_url",
+              "followers",
+              "nationality",
+            ].filter((field) => Object.hasOwn(b, field)),
           }),
           Date.now(),
         );
