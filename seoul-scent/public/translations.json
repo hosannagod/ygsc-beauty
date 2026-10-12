@@ -603,5 +603,7 @@
   "삭제할 계정의 이름과 이메일을 확인해 주세요.": "Confirm the name and email of the account to remove.",
   "선정 또는 활동 이력이 있는 계정은 삭제할 수 없습니다.": "Accounts with selection or activity history cannot be removed.",
   "변경 전 이메일을 확인해 주세요.": "Confirm the current email before changing it.",
-  "전체 명단 XLSX 다운로드": "Download full influencer roster (XLSX)"
+  "전체 명단 XLSX 다운로드": "Download full influencer roster (XLSX)",
+  "브랜드 소개서 PDF": "Brand introduction (PDF)",
+  "브랜드 소개서 PPT": "Brand introduction (PPT)"
 }

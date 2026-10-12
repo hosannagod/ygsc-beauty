@@ -23,6 +23,7 @@ import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
 import type { User } from "./db.js";
 import ExcelJS from "exceljs";
+import { readFile } from "node:fs/promises";
 import {
   type DB,
   WorkflowError,
@@ -1285,6 +1286,26 @@ export function registerWorkflow(
       });
     }),
   );
+  for (const extension of ["pdf", "pptx"] as const) {
+    app.get(
+      `/api/work/admin/brand-introduction.${extension}`,
+      wrap(async (c) => {
+        role(c, "admin");
+        const filename = `seoul-scent-brand-introduction.${extension}`;
+        const file = await readFile(`./documents/${filename}`);
+        return new Response(file as any, {
+          headers: {
+            "Content-Type":
+              extension === "pdf"
+                ? "application/pdf"
+                : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "Content-Disposition": `${extension === "pdf" && c.req.query("view") === "1" ? "inline" : "attachment"}; filename="${filename}"`,
+            "Cache-Control": "no-store",
+          },
+        });
+      }),
+    );
+  }
   app.get(
     "/api/work/admin/audit",
     wrap((c) => {
