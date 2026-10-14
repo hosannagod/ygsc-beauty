@@ -155,9 +155,14 @@ export function registerWorkflow(
   app.post(
     "/api/work/applications/:id/consent",
     wrap(async (c) => {
-      const u = role(c, "influencer"),
+      const u = current(c),
         a = applicationFor(db, id(c), u),
         b = await body(c);
+      if (!["influencer", "admin"].includes(u.role))
+        fail("접근 권한이 없습니다.", 403);
+      const admin = u.role === "admin";
+      if (admin && b.confirm_email !== a.influencer_email)
+        fail("동의를 처리할 계정의 이메일을 확인해 주세요.", 409);
       if (
         a.campaign_deleted_at ||
         !["applied", "selected"].includes(a.status) ||
@@ -171,14 +176,30 @@ export function registerWorkflow(
         fail("필수 동의 항목을 모두 확인해 주세요.");
       db.transaction(() => {
         db.prepare(
-          "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1,consent_at=?,consent_version='secondary-use-v2',updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        ).run(Date.now(), a.id);
+          "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1,consent_at=?,consent_version=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        ).run(
+          Date.now(),
+          admin ? "secondary-use-v2-admin-recorded" : "secondary-use-v2",
+          a.id,
+        );
+        if (admin)
+          db.prepare(
+            "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+          ).run(
+            u.id,
+            a.influencer_id,
+            "application_consent_recorded",
+            `application:${a.id}; administrator request`,
+            Date.now(),
+          );
         event(
           db,
           a,
           u.id,
           a.status,
-          "2차 활용 및 고화질 원본 제공 추가 동의 완료",
+          admin
+            ? "운영사 요청으로 2차 활용 및 고화질 원본 제공 동의 완료 처리"
+            : "2차 활용 및 고화질 원본 제공 추가 동의 완료",
         );
       })();
       return c.json({ success: true });

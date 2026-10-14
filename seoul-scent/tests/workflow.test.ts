@@ -276,6 +276,104 @@ test("admin address corrections require identity confirmation and preserve pendi
     f.db.close();
   }
 });
+test("admin consent recording identifies the account and records the administrator without changing selection or grade", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create(),
+      a = await f.apply(id);
+    assert.equal(
+      (
+        await f.req("brand", `/applications/${a}/action`, "POST", {
+          action: "select",
+        })
+      ).status,
+      200,
+    );
+    f.db
+      .prepare(
+        "UPDATE applications SET consent_version='external-form-v2-original-pending',original_delivery_consent=0 WHERE id=?",
+      )
+      .run(a);
+    const path = `/applications/${a}/consent`,
+      data = {
+        confirm_email: "influencer@test.com",
+        secondary_use_consent: true,
+        original_delivery_consent: true,
+      };
+    assert.equal((await f.req("brand", path, "POST", data)).status, 403);
+    assert.equal((await f.req("other", path, "POST", data)).status, 403);
+    assert.equal(
+      (
+        await f.req("admin", path, "POST", {
+          ...data,
+          confirm_email: "wrong@test.com",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.req("admin", path, "POST", {
+          ...data,
+          original_delivery_consent: false,
+        })
+      ).status,
+      400,
+    );
+    const profile = f.db
+      .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+      .get(f.ids.influencer);
+    assert.equal((await f.req("admin", path, "POST", data)).status, 200);
+    const row = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(a) as any;
+    assert.equal(row.secondary_use_consent, 1);
+    assert.equal(row.original_delivery_consent, 1);
+    assert.equal(row.consent_version, "secondary-use-v2-admin-recorded");
+    assert.equal(row.status, "selected");
+    assert.deepEqual(
+      f.db
+        .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
+        .get(f.ids.influencer),
+      profile,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare(
+            "SELECT actor_id FROM application_events WHERE application_id=? ORDER BY id DESC LIMIT 1",
+          )
+          .get(a) as any
+      ).actor_id,
+      f.ids.admin,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare(
+            "SELECT COUNT(*) n FROM admin_audit WHERE action='application_consent_recorded' AND target_user_id=?",
+          )
+          .get(f.ids.influencer) as any
+      ).n,
+      1,
+    );
+    assert.equal(
+      (
+        await f.req("influencer", `/applications/${a}/action`, "POST", {
+          action: "address",
+          recipient_name: "테스트 수령인",
+          phone: "01012345678",
+          postal_code: "01234",
+          address: "서울시 테스트로 123",
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await f.req("admin", path, "POST", data)).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("certificates require completed activity and protect ownership with stable escaped snapshots", async () => {
   const f = await fixture();
   try {
