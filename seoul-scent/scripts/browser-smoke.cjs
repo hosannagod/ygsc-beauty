@@ -398,6 +398,15 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.locator("[name=address_detail]").fill("101호");
     await influencer.getByRole("button", { name: "배송지 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
+    await influencer.getByText("배송지 수정", { exact: true }).click();
+    assert.equal(await influencer.locator("[name=address_detail]").inputValue(), "101호");
+    await influencer.locator("[name=address_detail]").fill("202호");
+    const savedAddress = influencer.waitForResponse(r => r.url().endsWith(`/applications/${appId}/action`) && r.request().method() === "POST");
+    await influencer.getByRole("button", { name: "배송지 저장" }).click();
+    assert.equal((await savedAddress).status(), 200);
+    await influencer.reload();
+    await influencer.getByText("배송지 수정", { exact: true }).click();
+    assert.equal(await influencer.locator("[name=address_detail]").inputValue(), "202호");
     await brand.reload();
     await brand.locator("[name=carrier]").waitFor();
     await brand.goto(base + "/campaigns/" + campaignId);
@@ -421,6 +430,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer
       .getByRole("link", { name: "배송 조회", exact: false })
       .waitFor();
+    assert.equal(await influencer.locator('form[data-action="address"]').count(), 0);
     assert.equal(
       await influencer
         .getByRole("link", { name: "배송 조회", exact: false })

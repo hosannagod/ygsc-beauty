@@ -975,7 +975,7 @@
   async function applicationDetail(id) {
     const { application: a, events } = await api(`/applications/${id}`);
     const influencer = role === "influencer";
-    let actions = "";
+    let actions = "", shippingAddressForm = "";
     if (influencer) {
       if (
         ["applied", "selected"].includes(a.status) &&
@@ -986,7 +986,7 @@
         a.status === "selected" &&
         !a.consent_version.startsWith("external-form-v2")
       )
-        actions = actionForm(
+        shippingAddressForm = actionForm(
           a,
           "address",
           input(
@@ -1163,6 +1163,7 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
+              ${shippingAddressForm ? `<details ${a.address ? "" : "open"}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}</summary><p class="note left">${t("등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
               <p class="note left">
                 ${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}
               </p>
