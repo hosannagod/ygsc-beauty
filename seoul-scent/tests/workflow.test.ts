@@ -116,6 +116,89 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("campaign guide documents support link-only content, safe URLs and partial edits", async () => {
+  const f = await fixture();
+  try {
+    const url = "https://docs.google.com/document/d/guide/edit?usp=sharing";
+    const id = await f.create({ guidelines: "", guidelines_url: url });
+    const detail = async () =>
+      (await (await f.req("influencer", `/campaigns/${id}`)).json()) as any;
+    assert.equal((await detail()).campaign.guidelines_url, url);
+    assert.equal((await detail()).campaign.guidelines, "");
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          title: "가이드 문서 캠페인",
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await detail()).campaign.guidelines_url, url);
+    for (const invalid of [
+      "javascript:alert(1)",
+      "https://secret:password@example.com",
+      "invalid-url",
+    ]) {
+      assert.equal(
+        (
+          await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+            guidelines_url: invalid,
+          })
+        ).status,
+        400,
+      );
+      assert.equal((await detail()).campaign.guidelines_url, url);
+    }
+    assert.equal(
+      (
+        await f.req("otherbrand", `/campaigns/${id}/details`, "PUT", {
+          guidelines_url: "https://example.com/other",
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          guidelines_url: "",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          guidelines: campaign.guidelines,
+          guidelines_url: "",
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await detail()).campaign.guidelines, campaign.guidelines);
+    assert.equal((await detail()).campaign.guidelines_url, "");
+    const legacyId = await f.create();
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT guidelines_url FROM campaigns WHERE id=?")
+          .get(legacyId) as any
+      ).guidelines_url,
+      "",
+    );
+    assert.equal(
+      (
+        await f.req("brand", "/campaigns", "POST", {
+          ...campaign,
+          guidelines: "",
+          guidelines_url: "",
+        })
+      ).status,
+      400,
+    );
+  } finally {
+    f.db.close();
+  }
+});
 test("certificates require completed activity and protect ownership with stable escaped snapshots", async () => {
   const f = await fixture();
   try {
@@ -1020,7 +1103,7 @@ test("existing campaigns migrate once without losing applications or schedule da
     const id = await f.create(),
       application = await f.apply(id);
     f.db.exec(
-      "ALTER TABLE campaigns DROP COLUMN product_url; ALTER TABLE campaigns DROP COLUMN recruit_start_date; ALTER TABLE campaigns DROP COLUMN recruit_start; ALTER TABLE campaigns DROP COLUMN review_required;",
+      "ALTER TABLE campaigns DROP COLUMN product_url; ALTER TABLE campaigns DROP COLUMN guidelines_url; ALTER TABLE campaigns DROP COLUMN recruit_start_date; ALTER TABLE campaigns DROP COLUMN recruit_start; ALTER TABLE campaigns DROP COLUMN review_required;",
     );
     f.db
       .prepare("UPDATE campaigns SET created_at=? WHERE id=?")
@@ -1047,13 +1130,15 @@ test("existing campaigns migrate once without losing applications or schedule da
     assert.equal(row.recruit_start_date, "2026-01-02");
     assert.equal(row.recruit_start, Date.parse("2026-01-01T15:00:00Z"));
     assert.equal(row.product_url, "");
+    assert.equal(row.guidelines_url, "");
     assert.equal(row.review_required, 1);
     f.db
-      .prepare("UPDATE campaigns SET product_url=? WHERE id=?")
-      .run("https://example.com/preserved", id);
+      .prepare("UPDATE campaigns SET product_url=?,guidelines_url=? WHERE id=?")
+      .run("https://example.com/preserved", "https://docs.google.com/document/d/preserved", id);
     initializeWorkflow(f.db);
     row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
     assert.equal(row.product_url, "https://example.com/preserved");
+    assert.equal(row.guidelines_url, "https://docs.google.com/document/d/preserved");
     assert.ok(
       f.db.prepare("SELECT id FROM applications WHERE id=?").get(application),
     );

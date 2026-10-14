@@ -46,15 +46,15 @@ export function deadline(value: unknown) {
     fail("유효하지 않은 날짜입니다.");
   return date.getTime() + 15 * 3600_000; // next day 00:00 Asia/Seoul
 }
-export function productLink(value: unknown) {
+export function productLink(value: unknown, label = "제품·브랜드 링크") {
   const raw =
-    value === undefined ? "" : text(value, "제품·브랜드 링크", 0, 2000);
+    value === undefined ? "" : text(value, label, 0, 2000);
   if (!raw) return "";
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    return fail("제품·브랜드 링크는 올바른 웹 주소를 입력해 주세요.");
+    return fail(`${label}는 올바른 웹 주소를 입력해 주세요.`);
   }
   if (
     !["http:", "https:"].includes(url.protocol) ||
@@ -62,7 +62,7 @@ export function productLink(value: unknown) {
     url.password
   )
     fail(
-      "제품·브랜드 링크는 인증 정보가 없는 HTTP 또는 HTTPS 주소를 입력해 주세요.",
+      `${label}는 인증 정보가 없는 HTTP 또는 HTTPS 주소를 입력해 주세요.`,
     );
   return url.href;
 }

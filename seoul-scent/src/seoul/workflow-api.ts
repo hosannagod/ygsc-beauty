@@ -386,7 +386,9 @@ export function registerWorkflow(
       const title = text(b.title, "캠페인명", 2, 100),
         product = text(b.product, "제품", 2, 200),
         description = text(b.description, "제품 소개", 10, 4000),
-        guidelines = text(b.guidelines, "가이드라인", 10, 6000);
+        guidelines = text(b.guidelines ?? "", "가이드라인", 0, 6000);
+      const guidelinesUrl = productLink(b.guidelines_url, "콘텐츠 가이드 링크");
+      if (!guidelinesUrl) text(guidelines, "가이드라인", 10, 6000);
       const capacity = integer(b.capacity, "모집 인원", 1, 500),
         compensation = integer(b.compensation, "보상 금액", 0, 100_000_000);
       if (!["paid", "gifted"].includes(b.pay_type))
@@ -432,7 +434,7 @@ export function registerWorkflow(
       const campaignId = db.transaction(() => {
         const result = db
           .prepare(
-            `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required,guidelines_url) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           )
           .run(
             u.id,
@@ -453,6 +455,7 @@ export function registerWorkflow(
             startDate,
             start,
             review ? 1 : 0,
+            guidelinesUrl,
           );
         for (const field of englishFields)
           db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(
@@ -495,7 +498,7 @@ export function registerWorkflow(
           guidelines = text(
             b.guidelines ?? campaign.guidelines,
             "가이드라인",
-            10,
+            0,
             6000,
           ),
           capacity = integer(
@@ -512,6 +515,11 @@ export function registerWorkflow(
             "모집 인원은 이미 선정된 인원보다 작게 설정할 수 없습니다.",
             409,
           );
+        const guidelinesUrl = productLink(
+          b.guidelines_url ?? campaign.guidelines_url,
+          "콘텐츠 가이드 링크",
+        );
+        if (!guidelinesUrl) text(guidelines, "가이드라인", 10, 6000);
         const url = productLink(b.product_url ?? campaign.product_url),
           payType = b.pay_type ?? campaign.pay_type,
           compensation = integer(
@@ -583,7 +591,7 @@ export function registerWorkflow(
             fail("초안 마감 < 최종 마감 순서로 설정해 주세요.");
         }
         db.prepare(
-          "UPDATE campaigns SET title=?,product=?,description=?,guidelines=?,capacity=?,pay_type=?,compensation=?,product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=?,draft_date=?,draft_due=?,final_date=?,final_due=?,review_required=? WHERE id=?",
+          "UPDATE campaigns SET title=?,product=?,description=?,guidelines=?,capacity=?,pay_type=?,compensation=?,product_url=?,recruit_start_date=?,recruit_start=?,recruit_date=?,recruit_due=?,draft_date=?,draft_due=?,final_date=?,final_due=?,review_required=?,guidelines_url=? WHERE id=?",
         ).run(
           title,
           product,
@@ -602,6 +610,7 @@ export function registerWorkflow(
           finalDate,
           final,
           review ? 1 : 0,
+          guidelinesUrl,
           campaign.id,
         );
         if (b.publish === true) {
@@ -654,6 +663,7 @@ export function registerWorkflow(
           product !== campaign.product ||
           description !== campaign.description ||
           guidelines !== campaign.guidelines ||
+          guidelinesUrl !== campaign.guidelines_url ||
           url !== campaign.product_url ||
           capacity !== campaign.capacity
         ) {

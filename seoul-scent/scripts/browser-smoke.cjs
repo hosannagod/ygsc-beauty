@@ -82,7 +82,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .locator("[name=product_url]")
       .fill("https://example.com/product");
     await brand
-      .locator("[name=description]")
+      .locator("textarea[name=description]")
       .fill("서울의 향기를 담은 신제품 향수입니다.");
     await brand
       .locator("[name=guidelines]")
@@ -621,11 +621,11 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.locator("[name=title]").fill("초안 검수 없는 캠페인");
     await brand.locator("[name=product]").fill("테스트 제품");
     await brand
-      .locator("[name=description]")
+      .locator("textarea[name=description]")
       .fill("초안 검수가 필요 없는 제품의 소개입니다.");
     await brand
-      .locator("[name=guidelines]")
-      .fill("제품을 사용한 후 최종 SNS 콘텐츠를 게시해 주세요.");
+      .locator("[name=guidelines_url]")
+      .fill("https://docs.google.com/document/d/test-guide/edit");
     await brand
       .getByText("English campaign content (optional)", { exact: true })
       .click();
@@ -647,6 +647,31 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const directCampaign = brand.url().split("/").pop();
     await influencer.goto(base + "/campaigns/" + directCampaign);
+    const guideLink = influencer.getByRole("link", {
+      name: "콘텐츠 가이드 문서 열기",
+    });
+    assert.equal(
+      await guideLink.getAttribute("href"),
+      "https://docs.google.com/document/d/test-guide/edit",
+    );
+    assert.equal(await guideLink.getAttribute("target"), "_blank");
+    await brand.getByText("캠페인 편집", { exact: true }).click();
+    assert.equal(
+      await brand.locator("[name=guidelines_url]").inputValue(),
+      "https://docs.google.com/document/d/test-guide/edit",
+    );
+    await brand
+      .locator("[name=guidelines_url]")
+      .fill("https://example.com/updated-guide");
+    await brand.getByRole("button", { name: "캠페인 수정 저장" }).click();
+    await brand.waitForFunction(() => document.querySelector('a[href="https://example.com/updated-guide"]'));
+    await influencer.reload();
+    assert.equal(
+      await influencer
+        .getByRole("link", { name: "콘텐츠 가이드 문서 열기" })
+        .getAttribute("href"),
+      "https://example.com/updated-guide",
+    );
     await influencer.locator("[name=secondary_use_consent]").check();
     await influencer.locator("[name=original_delivery_consent]").check();
     await influencer

@@ -109,6 +109,7 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       .all() as { name: string }[];
     for (const [name, definition] of [
       ["product_url", "TEXT NOT NULL DEFAULT ''"],
+      ["guidelines_url", "TEXT NOT NULL DEFAULT ''"],
       ["recruit_start_date", "TEXT NOT NULL DEFAULT ''"],
       ["recruit_start", "INTEGER NOT NULL DEFAULT 0"],
     ]) {

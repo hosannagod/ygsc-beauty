@@ -523,7 +523,10 @@
       ) +
       html`<form class="panel editor" data-task="campaign">
         <h2>제품과 협업 정보</h2>
-        ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"')}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"')}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"')}
+        ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"')}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"')}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", t("콘텐츠 가이드라인"), 'maxlength="6000" rows="5"')}${input("guidelines_url", t("콘텐츠 가이드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://docs.google.com/document/d/..."')}
+        <p class="note left">
+          ${t("텍스트 또는 가이드 링크를 입력해 주세요. 문서 공유 권한은 참여자가 볼 수 있도록 설정해 주세요.")}
+        </p>
         <div class="form-grid">
           ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', "10")}<label
             >보상 유형<select name="pay_type">
@@ -579,7 +582,8 @@
           <p class="preline">${linkedText(c.description)}</p>
           ${c.product_url ? `<p>${link(c.product_url, t("제품·브랜드 사이트 보기"))}</p>` : ""}
           <h3>콘텐츠 가이드라인</h3>
-          <p class="preline">${linkedText(c.guidelines)}</p>
+          ${c.guidelines ? `<p class="preline">${linkedText(c.guidelines)}</p>` : ""}
+          ${c.guidelines_url ? `<p>${link(c.guidelines_url, t("콘텐츠 가이드 문서 열기"))}</p>` : ""}
           <div class="deadline-strip">
             <span>모집 시작 <strong>${esc(c.recruit_start_date)}</strong></span
             ><span>모집 마감 <strong>${esc(c.recruit_date)}</strong></span
@@ -665,7 +669,10 @@
             <summary>캠페인 편집</summary>
             <form class="editor" data-task="campaign-details" data-id="${id}">
               ${c.is_draft ? `<div class="warning">${t("비공개 초안입니다. 모집 인원과 일정·가이드라인을 설정한 후 공개해 주세요.")}</div><label class="check"><input type="checkbox" name="publish"><span>${t("저장 후 캠페인 공개")}</span></label>` : ""}
-              ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', (c._original || c).title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', (c._original || c).product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', (c._original || c).description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'required minlength="10" maxlength="6000" rows="5"', (c._original || c).guidelines)}
+              ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', (c._original || c).title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', (c._original || c).product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', (c._original || c).description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'maxlength="6000" rows="5"', (c._original || c).guidelines)}${input("guidelines_url", t("콘텐츠 가이드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://docs.google.com/document/d/..."', c.guidelines_url)}
+              <p class="note left">
+                ${t("텍스트 또는 가이드 링크를 입력해 주세요. 문서 공유 권한은 참여자가 볼 수 있도록 설정해 주세요.")}
+              </p>
               <div class="form-grid">
                 ${input("capacity", t("모집 인원"), "number", 'required min="1" max="500"', c.capacity)}<label
                   >보상 유형<select name="pay_type" ${locked ? "disabled" : ""}>
@@ -1341,7 +1348,14 @@
               onboarding.submissions.some(
                 (s) => s.user_id === u.id && s.status === "pending",
               ))) &&
-          [u.name, u.email, u.username, u.phone, u.social_url, u.nationality].some((v) =>
+          [
+            u.name,
+            u.email,
+            u.username,
+            u.phone,
+            u.social_url,
+            u.nationality,
+          ].some((v) =>
             String(v || "")
               .toLowerCase()
               .includes(q),
@@ -1817,7 +1831,8 @@
                 <dd>${esc(person.email)}</dd>
               </div>
               <div>
-                <dt>${t("국적")}</dt><dd>${esc(t(person.nationality || "미등록"))}</dd>
+                <dt>${t("국적")}</dt>
+                <dd>${esc(t(person.nationality || "미등록"))}</dd>
               </div>
               <div>
                 <dt>${t("연락처")}</dt>

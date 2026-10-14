@@ -665,5 +665,8 @@
   "조지아": "Georgia",
   "우크라이나": "Ukraine",
   "이스라엘": "Israel",
-  "태국": "Thailand"
+  "태국": "Thailand",
+  "콘텐츠 가이드 링크 (선택)": "Content guide link (optional)",
+  "콘텐츠 가이드 문서 열기": "Open content guide document",
+  "텍스트 또는 가이드 링크를 입력해 주세요. 문서 공유 권한은 참여자가 볼 수 있도록 설정해 주세요.": "Enter guidelines text or a guide link. Set document sharing permissions so participants can view it."
 }
