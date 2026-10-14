@@ -600,6 +600,10 @@ nav {
   font-size: 21px;
   margin: 0;
 }
+.application-group-heading h3 {
+  font-size: 18px;
+  margin: 0;
+}
 .section-heading > a {
   font-size: 12px;
   color: #7c8b75;

@@ -1,6 +1,6 @@
 const { chromium } = require("playwright");
 const { spawn, spawnSync } = require("node:child_process"),
-  { mkdtempSync, rmSync } = require("node:fs"),
+  { mkdtempSync, rmSync, mkdirSync } = require("node:fs"),
   { tmpdir } = require("node:os"),
   { randomBytes } = require("node:crypto"),
   assert = require("node:assert/strict");
@@ -392,6 +392,23 @@ const { spawn, spawnSync } = require("node:child_process"),
       .click();
     await influencer.waitForURL(/\/applications\/\d+$/);
     const appId = influencer.url().split("/").pop();
+    await influencer.goto(base + "/applications");
+    await influencer.getByRole("heading", { name: "지원 완료 1" }).waitFor();
+    if (process.env.PREVIEW_DIR) {
+      mkdirSync(process.env.PREVIEW_DIR, { recursive: true });
+      await influencer.screenshot({ path: process.env.PREVIEW_DIR + "/applied.png", fullPage: true });
+    }
+    assert.equal(
+      await influencer.locator(".application-group-heading").count(),
+      2,
+    );
+    assert.equal(
+      await influencer
+        .locator(".application-group-heading")
+        .first()
+        .innerText(),
+      "지원 완료 1",
+    );
     await brand.goto(base + "/applications/" + appId);
     await brand.getByRole("link", { name: "최종 선정하러 가기" }).click();
     await brand.locator("[data-select-applicant]").check();
@@ -408,6 +425,18 @@ const { spawn, spawnSync } = require("node:child_process"),
       .click();
     await brand.locator("#confirm-accept").click();
     await brand.getByText("선정됨", { exact: true }).first().waitFor();
+    await influencer.goto(base + "/applications");
+    await influencer.getByRole("heading", { name: "선정 1" }).waitFor();
+    if (process.env.PREVIEW_DIR)
+      await influencer.screenshot({ path: process.env.PREVIEW_DIR + "/selected.png", fullPage: true });
+    assert.equal(
+      await influencer.locator(".application-group-heading").count(),
+      2,
+    );
+    assert.equal(
+      await influencer.locator(".application-group-heading").nth(1).innerText(),
+      "선정 1",
+    );
     await brand.goto(base + "/applications/" + appId);
     await influencer.goto(base + "/applications/" + appId);
     assert.equal(

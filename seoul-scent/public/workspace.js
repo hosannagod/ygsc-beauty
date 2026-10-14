@@ -265,6 +265,27 @@
         →</a
       >
     </article>`;
+  function applicationSections(applications, preview = false) {
+    const groups = [
+      [
+        "지원 완료",
+        applications.filter((a) => ["applied", "rejected"].includes(a.status)),
+      ],
+      [
+        "선정",
+        applications.filter((a) => !["applied", "rejected"].includes(a.status)),
+      ],
+    ];
+    return groups
+      .map(
+        ([title, items], index) =>
+          `<div class="section-heading application-group-heading"><h3>${t(title)} <span class="muted">${items.length}</span></h3></div>` +
+          (items.length
+            ? `<section class="campaign-grid">${(preview ? items.slice(0, 4) : items).map(applicationCard).join("")}</section>`
+            : `<p class="muted">${t(index === 0 ? "선정 대기 중인 지원이 없습니다." : "아직 선정된 캠페인이 없습니다.")}</p>`),
+      )
+      .join("");
+  }
   const kpi = (label, value) =>
     `<article class="kpi"><span>${label}</span><strong>${value}</strong></article>`;
   async function dashboard() {
@@ -279,9 +300,11 @@
       ]);
       stats =
         kpi(
-          t("참여 중"),
+          t("진행 중"),
           applications.filter(
-            (a) => !["completed", "rejected", "no_show"].includes(a.status),
+            (a) =>
+              a.status !== "applied" &&
+              !["completed", "rejected", "no_show"].includes(a.status),
           ).length,
         ) +
         kpi(t("누적 완료"), profile.completed_count) +
@@ -299,7 +322,7 @@
           <h2>내 캠페인</h2>
           <a href="/applications">전체 보기 →</a>
         </div>
-        ${applications.length ? `<section class="campaign-grid">${applications.slice(0, 4).map(applicationCard).join("")}</section>` : empty(t("아직 참여 중인 캠페인이 없어요"), t("관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요."))}
+        ${applications.length ? applicationSections(applications, true) : empty(t("아직 참여 중인 캠페인이 없어요"), t("관심 있는 캠페인을 찾아 첫 협업을 시작해 보세요."))}
         <div class="section-heading">
           <h2>모집 중인 캠페인</h2>
           <a href="/campaigns">전체 보기 →</a>
@@ -963,7 +986,7 @@
         t("현재 단계의 작업과 브랜드 피드백을 확인하세요."),
       ) +
       (applications.length
-        ? `<section class="campaign-grid">${applications.map(applicationCard).join("")}</section>`
+        ? applicationSections(applications)
         : empty(
             t("참여 중인 캠페인이 없습니다"),
             t("캠페인 찾기에서 첫 협업을 시작해 주세요."),

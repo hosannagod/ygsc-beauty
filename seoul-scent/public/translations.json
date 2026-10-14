@@ -678,5 +678,7 @@
   "배송 연락처": "Shipping phone",
   "기본 배송지 저장": "Save default shipping address",
   "선정된 캠페인에서 기본 배송지를 불러옵니다. 실제 배송지는 참여 내역에서 확인하고 저장해 주세요.": "Your default address is loaded in selected campaigns. Confirm and save the address on each application before shipping.",
-  "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요.": "Your default address has been loaded. Save it to use it for this campaign."
+  "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요.": "Your default address has been loaded. Save it to use it for this campaign.",
+  "아직 선정된 캠페인이 없습니다.": "No campaigns have selected you yet.",
+  "선정 대기 중인 지원이 없습니다.": "No applications are awaiting selection."
 }
