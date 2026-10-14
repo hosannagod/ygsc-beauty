@@ -909,9 +909,13 @@ export function registerWorkflow(
                 : "지원이 반려되었습니다.";
             break;
           case "address": {
-            if (!influencer) fail("접근 권한이 없습니다.", 403);
+            const admin = u.role === "admin";
+            if (!influencer && !admin) fail("접근 권한이 없습니다.", 403);
+            if (admin && b.confirm_email !== a.influencer_email)
+              fail("배송지를 변경할 계정의 이메일을 확인해 주세요.", 409);
             requireState(["selected"]);
             if (
+              !admin &&
               a.consent_version.startsWith("external-form-v2") &&
               (!a.secondary_use_consent || !a.original_delivery_consent)
             )
@@ -929,7 +933,19 @@ export function registerWorkflow(
             db.prepare(
               "UPDATE applications SET recipient_name=?,phone=?,postal_code=?,address=?,address_detail=?,shipping_address_at=? WHERE id=?",
             ).run(recipient, phone, postal, address, detail, Date.now(), a.id);
-            note = "배송지가 등록되었습니다.";
+            note = admin
+              ? "운영사가 배송지를 수정했습니다."
+              : "배송지가 등록되었습니다.";
+            if (admin)
+              db.prepare(
+                "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+              ).run(
+                u.id,
+                a.influencer_id,
+                "shipping_address_edit",
+                `application:${a.id}`,
+                Date.now(),
+              );
             break;
           }
           case "ship": {

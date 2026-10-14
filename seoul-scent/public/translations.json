@@ -671,5 +671,6 @@
   "텍스트 또는 가이드 링크를 입력해 주세요. 문서 공유 권한은 참여자가 볼 수 있도록 설정해 주세요.": "Enter guidelines text or a guide link. Set document sharing permissions so participants can view it.",
   "배송지 수정": "Edit shipping address",
   "배송지 등록": "Register shipping address",
-  "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.": "Review or edit your shipping address and save it again. You can edit it until a tracking number is registered."
+  "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.": "Review or edit your shipping address and save it again. You can edit it until a tracking number is registered.",
+  "운영사가 배송지를 수정했습니다.": "The administrator updated the shipping address."
 }

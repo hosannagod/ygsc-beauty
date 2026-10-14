@@ -199,6 +199,83 @@ test("campaign guide documents support link-only content, safe URLs and partial 
     f.db.close();
   }
 });
+test("admin address corrections require identity confirmation and preserve pending consent", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create(),
+      a = await f.apply(id);
+    assert.equal(
+      (
+        await f.req("brand", `/applications/${a}/action`, "POST", {
+          action: "select",
+        })
+      ).status,
+      200,
+    );
+    f.db
+      .prepare(
+        "UPDATE applications SET consent_version='external-form-v2-original-pending',original_delivery_consent=0 WHERE id=?",
+      )
+      .run(a);
+    const address = {
+      action: "address",
+      confirm_email: "influencer@test.com",
+      recipient_name: "테스트 수령인",
+      phone: "01012345678",
+      postal_code: "46282",
+      address: "부산광역시 금정구 장전동 158-24",
+      address_detail: "모림원룸 302호",
+    };
+    const path = `/applications/${a}/action`;
+    assert.equal((await f.req("brand", path, "POST", address)).status, 403);
+    assert.equal(
+      (
+        await f.req("admin", path, "POST", {
+          ...address,
+          confirm_email: "wrong@test.com",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("influencer", path, "POST", address)).status,
+      409,
+    );
+    assert.equal((await f.req("admin", path, "POST", address)).status, 200);
+    const row = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(a) as any;
+    assert.equal(row.address, address.address);
+    assert.equal(row.address_detail, address.address_detail);
+    assert.equal(row.postal_code, address.postal_code);
+    assert.equal(row.original_delivery_consent, 0);
+    assert.equal(row.status, "selected");
+    assert.equal(
+      (
+        await f.req("brand", path, "POST", {
+          action: "ship",
+          carrier: "CJ대한통운",
+          tracking_number: "123456789",
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare(
+            "SELECT COUNT(*) n FROM admin_audit WHERE action='shipping_address_edit' AND target_user_id=?",
+          )
+          .get(f.ids.influencer) as any
+      ).n,
+      1,
+    );
+    f.db.prepare("UPDATE applications SET status='shipping' WHERE id=?").run(a);
+    assert.equal((await f.req("admin", path, "POST", address)).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("certificates require completed activity and protect ownership with stable escaped snapshots", async () => {
   const f = await fixture();
   try {
@@ -1134,11 +1211,18 @@ test("existing campaigns migrate once without losing applications or schedule da
     assert.equal(row.review_required, 1);
     f.db
       .prepare("UPDATE campaigns SET product_url=?,guidelines_url=? WHERE id=?")
-      .run("https://example.com/preserved", "https://docs.google.com/document/d/preserved", id);
+      .run(
+        "https://example.com/preserved",
+        "https://docs.google.com/document/d/preserved",
+        id,
+      );
     initializeWorkflow(f.db);
     row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
     assert.equal(row.product_url, "https://example.com/preserved");
-    assert.equal(row.guidelines_url, "https://docs.google.com/document/d/preserved");
+    assert.equal(
+      row.guidelines_url,
+      "https://docs.google.com/document/d/preserved",
+    );
     assert.ok(
       f.db.prepare("SELECT id FROM applications WHERE id=?").get(application),
     );
