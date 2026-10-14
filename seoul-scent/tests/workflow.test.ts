@@ -374,6 +374,71 @@ test("admin consent recording identifies the account and records the administrat
     f.db.close();
   }
 });
+test("default shipping address is owned by the influencer and does not overwrite campaign delivery", async () => {
+  const f = await fixture();
+  try {
+    const data = {
+      recipient_name: "테스트 수령인",
+      shipping_phone: "01012345678",
+      postal_code: "46282",
+      address: "부산광역시 금정구 장전동 158-24",
+      address_detail: "모림원룸 302호",
+    };
+    assert.equal(
+      (await f.req("brand", "/profile/shipping", "PUT", data)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await f.req("influencer", "/profile/shipping", "PUT", {
+          ...data,
+          postal_code: "!!",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (await f.req("influencer", "/profile/shipping", "PUT", data)).status,
+      200,
+    );
+    const profile = (await (
+      await f.req("influencer", "/profile")
+    ).json()) as any;
+    for (const key of Object.keys(data))
+      assert.equal(profile.profile[key], (data as any)[key]);
+    const id = await f.create(),
+      appId = await f.apply(id);
+    const before = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(appId) as any;
+    assert.notEqual(before.address, data.address);
+    assert.equal(before.postal_code, "");
+    assert.equal(
+      (
+        await f.req("brand", `/applications/${appId}/action`, "POST", {
+          action: "select",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await f.req("influencer", "/profile/shipping", "PUT", {
+          ...data,
+          address: "서울특별시 강남구 테스트로 123",
+        })
+      ).status,
+      200,
+    );
+    const after = f.db
+      .prepare("SELECT * FROM applications WHERE id=?")
+      .get(appId) as any;
+    assert.equal(after.address, before.address);
+    assert.equal(after.postal_code, before.postal_code);
+  } finally {
+    f.db.close();
+  }
+});
 test("certificates require completed activity and protect ownership with stable escaped snapshots", async () => {
   const f = await fixture();
   try {

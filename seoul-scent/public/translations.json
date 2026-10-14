@@ -673,5 +673,10 @@
   "배송지 등록": "Register shipping address",
   "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.": "Review or edit your shipping address and save it again. You can edit it until a tracking number is registered.",
   "운영사가 배송지를 수정했습니다.": "The administrator updated the shipping address.",
-  "운영사 요청으로 2차 활용 및 고화질 원본 제공 동의 완료 처리": "Consent to secondary use and high-quality originals recorded at the administrator’s request."
+  "운영사 요청으로 2차 활용 및 고화질 원본 제공 동의 완료 처리": "Consent to secondary use and high-quality originals recorded at the administrator’s request.",
+  "기본 배송지": "Default shipping address",
+  "배송 연락처": "Shipping phone",
+  "기본 배송지 저장": "Save default shipping address",
+  "선정된 캠페인에서 기본 배송지를 불러옵니다. 실제 배송지는 참여 내역에서 확인하고 저장해 주세요.": "Your default address is loaded in selected campaigns. Confirm and save the address on each application before shipping.",
+  "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요.": "Your default address has been loaded. Save it to use it for this campaign."
 }

@@ -238,4 +238,17 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     db.exec(
       "ALTER TABLE influencer_profiles ADD COLUMN nationality TEXT NOT NULL DEFAULT ''",
     );
+  const profileColumns = db
+    .prepare("PRAGMA table_info(influencer_profiles)")
+    .all() as { name: string }[];
+  for (const column of [
+    "recipient_name",
+    "shipping_phone",
+    "postal_code",
+    "address_detail",
+  ])
+    if (!profileColumns.some((c) => c.name === column))
+      db.exec(
+        `ALTER TABLE influencer_profiles ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`,
+      );
 }

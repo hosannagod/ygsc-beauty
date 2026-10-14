@@ -973,9 +973,18 @@
     return `<form class="action-form" data-task="action" data-id="${a.id}" data-action="${action}" ${confirm ? `data-confirm="${esc(confirm)}"` : ""}>${fields}${submit(label)}</form>`;
   }
   async function applicationDetail(id) {
-    const { application: a, events } = await api(`/applications/${id}`);
     const influencer = role === "influencer";
-    let actions = "", shippingAddressForm = "";
+    const [{ application: a, events }, savedProfile] = await Promise.all([
+      api(`/applications/${id}`),
+      influencer ? api("/profile") : Promise.resolve(null),
+    ]);
+    const defaultShipping =
+      savedProfile?.profile?.postal_code && savedProfile?.profile?.address
+        ? savedProfile.profile
+        : null;
+    const useSavedShipping = !a.shipping_address_at && defaultShipping;
+    let actions = "",
+      shippingAddressForm = "";
     if (influencer) {
       if (
         ["applied", "selected"].includes(a.status) &&
@@ -994,35 +1003,41 @@
             t("수령인"),
             "text",
             'required minlength="2" maxlength="60"',
-            a.recipient_name || a.influencer_name,
+            useSavedShipping
+              ? defaultShipping.recipient_name || a.influencer_name
+              : a.recipient_name || a.influencer_name,
           ) +
             input(
               "phone",
               t("연락처"),
               "tel",
               'required minlength="8" maxlength="30"',
-              a.phone,
+              useSavedShipping
+                ? defaultShipping.shipping_phone || a.phone
+                : a.phone,
             ) +
             input(
               "postal_code",
               t("우편번호"),
               "text",
               'required minlength="3" maxlength="12"',
-              a.postal_code,
+              useSavedShipping ? defaultShipping.postal_code : a.postal_code,
             ) +
             input(
               "address",
               t("주소"),
               "text",
               'required minlength="5" maxlength="200"',
-              a.address,
+              useSavedShipping ? defaultShipping.address : a.address,
             ) +
             input(
               "address_detail",
               t("상세주소 (선택)"),
               "text",
               'maxlength="150"',
-              a.address_detail,
+              useSavedShipping
+                ? defaultShipping.address_detail
+                : a.address_detail,
             ),
           t("배송지 저장"),
         );
@@ -1163,7 +1178,7 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
-              ${shippingAddressForm ? `<details ${a.address ? "" : "open"}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}</summary><p class="note left">${t("등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
+              ${shippingAddressForm ? `<details ${a.address ? "" : "open"}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}</summary><p class="note left">${t(useSavedShipping ? "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요." : "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
               <p class="note left">
                 ${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}
               </p>
@@ -1221,12 +1236,15 @@
       ? `<section class="panel"><h2>${t("기존 프로젝트 이력")}</h2>${history.map((a) => `<div class="alert-row"><div><strong>${esc(a.title)}</strong><p>${t("완료")}${a.submitted_at ? " · " + esc(a.submitted_at) : ""}</p>${a.links.map((url) => link(url, t("콘텐츠 링크"))).join("<br>")}</div></div>`).join("")}</section>`
       : "";
   async function profile() {
-    const [{ profile: p, history }, certificate, onboarding] =
-      await Promise.all([
-        api("/profile"),
-        api("/certificate"),
-        api("/onboarding"),
-      ]);
+    const [
+      { profile: p, history, user_name: userName },
+      certificate,
+      onboarding,
+    ] = await Promise.all([
+      api("/profile"),
+      api("/certificate"),
+      api("/onboarding"),
+    ]);
     root.innerHTML =
       heading(
         t("내 프로필"),
@@ -1250,11 +1268,15 @@
             ${t("지원 전에 SNS 계정과 팔로워 정보를 저장해 주세요. SNS 계정의 소유 여부는 브랜드가 선정 시 확인합니다.")}
           </p>
           ${input("nationality", t("국적"), "text", 'maxlength="80"', p.nationality || "")}${input("phone", t("연락처"), "tel", 'required minlength="8" maxlength="30"', p.phone)}${input("social_url", t("대표 SNS 프로필 링크"), "url", 'required maxlength="500"', p.social_url)}${input("followers", t("현재 팔로워 수"), "number", 'required min="0" max="100000000"', p.followers)}
-          <p class="note left">
-            배송지는 선정된 캠페인의 참여 내역에서 입력합니다. 송장 등록 전까지
-            해당 캠페인의 배송지를 수정할 수 있습니다.
-          </p>
           ${submit(t("프로필 저장"))}
+        </form>
+        <form class="panel editor" data-task="profile-shipping">
+          <h2>${t("기본 배송지")}</h2>
+          <p class="note left">
+            ${t("선정된 캠페인에서 기본 배송지를 불러옵니다. 실제 배송지는 참여 내역에서 확인하고 저장해 주세요.")}
+          </p>
+          ${input("recipient_name", t("수령인"), "text", 'required minlength="2" maxlength="60"', p.recipient_name || userName)}${input("shipping_phone", t("배송 연락처"), "tel", 'required minlength="8" maxlength="30"', p.shipping_phone || p.phone)}${input("postal_code", t("우편번호"), "text", 'required minlength="3" maxlength="12"', p.postal_code)}${input("address", t("주소"), "text", 'required minlength="5" maxlength="200"', p.address)}${input("address_detail", t("상세주소 (선택)"), "text", 'maxlength="150"', p.address_detail)}
+          ${submit(t("기본 배송지 저장"))}
         </form>`;
   }
   async function account() {
@@ -1693,6 +1715,9 @@
           return;
         case "profile":
           await api("/profile", "PUT", data);
+          break;
+        case "profile-shipping":
+          await api("/profile/shipping", "PUT", data);
           break;
         case "settings":
           await api("/admin/settings", "PUT", data);

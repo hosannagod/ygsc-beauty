@@ -68,6 +68,26 @@ const { spawn, spawnSync } = require("node:child_process"),
     }
     const brand = await signup("brand", "서울향기 브랜드"),
       influencer = await signup("influencer", "서울 크리에이터");
+    await influencer.goto(base + "/profile");
+    const shippingProfile = influencer.locator(
+      'form[data-task="profile-shipping"]',
+    );
+    await shippingProfile.locator('[name="postal_code"]').fill("46282");
+    await shippingProfile
+      .locator('[name="address"]')
+      .fill("부산광역시 금정구 장전동 158-24");
+    await shippingProfile
+      .locator('[name="address_detail"]')
+      .fill("모림원룸 302호");
+    await shippingProfile
+      .getByRole("button", { name: "기본 배송지 저장" })
+      .click();
+    await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
+    await influencer.reload();
+    assert.equal(
+      await shippingProfile.locator('[name="postal_code"]').inputValue(),
+      "46282",
+    );
     const future = (n) =>
       new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Seoul",
@@ -390,6 +410,14 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.getByText("선정됨", { exact: true }).first().waitFor();
     await brand.goto(base + "/applications/" + appId);
     await influencer.goto(base + "/applications/" + appId);
+    assert.equal(
+      await influencer.locator('[name="postal_code"]').inputValue(),
+      "46282",
+    );
+    assert.equal(
+      await influencer.locator('[name="address_detail"]').inputValue(),
+      "모림원룸 302호",
+    );
     await influencer.locator("[name=recipient_name]").fill("서울 크리에이터");
     await influencer.locator("[name=postal_code]").fill("06234");
     await influencer
@@ -399,14 +427,24 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.getByRole("button", { name: "배송지 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await influencer.getByText("배송지 수정", { exact: true }).click();
-    assert.equal(await influencer.locator("[name=address_detail]").inputValue(), "101호");
+    assert.equal(
+      await influencer.locator("[name=address_detail]").inputValue(),
+      "101호",
+    );
     await influencer.locator("[name=address_detail]").fill("202호");
-    const savedAddress = influencer.waitForResponse(r => r.url().endsWith(`/applications/${appId}/action`) && r.request().method() === "POST");
+    const savedAddress = influencer.waitForResponse(
+      (r) =>
+        r.url().endsWith(`/applications/${appId}/action`) &&
+        r.request().method() === "POST",
+    );
     await influencer.getByRole("button", { name: "배송지 저장" }).click();
     assert.equal((await savedAddress).status(), 200);
     await influencer.reload();
     await influencer.getByText("배송지 수정", { exact: true }).click();
-    assert.equal(await influencer.locator("[name=address_detail]").inputValue(), "202호");
+    assert.equal(
+      await influencer.locator("[name=address_detail]").inputValue(),
+      "202호",
+    );
     await brand.reload();
     await brand.locator("[name=carrier]").waitFor();
     await brand.goto(base + "/campaigns/" + campaignId);
@@ -430,7 +468,10 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer
       .getByRole("link", { name: "배송 조회", exact: false })
       .waitFor();
-    assert.equal(await influencer.locator('form[data-action="address"]').count(), 0);
+    assert.equal(
+      await influencer.locator('form[data-action="address"]').count(),
+      0,
+    );
     assert.equal(
       await influencer
         .getByRole("link", { name: "배송 조회", exact: false })
@@ -674,7 +715,9 @@ const { spawn, spawnSync } = require("node:child_process"),
       .locator("[name=guidelines_url]")
       .fill("https://example.com/updated-guide");
     await brand.getByRole("button", { name: "캠페인 수정 저장" }).click();
-    await brand.waitForFunction(() => document.querySelector('a[href="https://example.com/updated-guide"]'));
+    await brand.waitForFunction(() =>
+      document.querySelector('a[href="https://example.com/updated-guide"]'),
+    );
     await influencer.reload();
     assert.equal(
       await influencer

@@ -284,6 +284,7 @@ export function registerWorkflow(
         .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
         .get(u.id);
       return c.json({
+        user_name: u.name,
         profile: {
           ...(profile as any),
           complete: profileComplete(profile),
@@ -317,6 +318,27 @@ export function registerWorkflow(
         ).run(phone, address ?? null, social, followers, nationality, u.id);
         db.prepare("UPDATE users SET phone=? WHERE id=?").run(phone, u.id);
       })();
+      return c.json({ success: true });
+    }),
+  );
+  app.put(
+    "/api/work/profile/shipping",
+    wrap(async (c) => {
+      const u = role(c, "influencer"),
+        b = await body(c);
+      const recipient = text(b.recipient_name, "수령인", 2, 60),
+        phone = text(b.shipping_phone, "배송 연락처", 8, 30),
+        postal = text(b.postal_code, "우편번호", 3, 12),
+        address = text(b.address, "주소", 5, 200),
+        detail = text(b.address_detail ?? "", "상세주소", 0, 150);
+      if (
+        !/^[+0-9 ()-]{8,30}$/.test(phone) ||
+        !/^[A-Za-z0-9 -]{3,12}$/.test(postal)
+      )
+        fail("연락처·우편번호 형식을 확인해 주세요.");
+      db.prepare(
+        "UPDATE influencer_profiles SET recipient_name=?,shipping_phone=?,postal_code=?,address=?,address_detail=? WHERE user_id=?",
+      ).run(recipient, phone, postal, address, detail, u.id);
       return c.json({ success: true });
     }),
   );
