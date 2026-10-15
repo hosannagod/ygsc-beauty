@@ -1361,6 +1361,104 @@ export function registerWorkflow(
       );
     }),
   );
+  app.post(
+    "/api/work/admin/selection-preview",
+    wrap((c) => {
+      const actor = role(c, "admin");
+      const email = "preview.influencer@example.invalid";
+      if (db.prepare("SELECT id FROM users WHERE email=?").get(email))
+        fail("체험 계정이 이미 있습니다. 기존 계정을 확인해 주세요.", 409);
+      const password = randomBytes(18).toString("base64url");
+      const formatDate = (offset: number) =>
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(Date.now() + offset * 86400_000));
+      const recruitDate = formatDate(7);
+      const draftDate = formatDate(30);
+      const finalDate = formatDate(60);
+      const created = db.transaction(() => {
+        const userId = Number(
+          db
+            .prepare(
+              "INSERT INTO users(email,name,role,password_hash) VALUES(?,?,'influencer',?)",
+            )
+            .run(email, "선정 화면 체험용", hashPassword(password))
+            .lastInsertRowid,
+        );
+        db.prepare(
+          "UPDATE influencer_profiles SET recipient_name=?,shipping_phone=?,postal_code=?,address=? WHERE user_id=?",
+        ).run(
+          "체험용 수령인",
+          "01000000000",
+          "00000",
+          "서울특별시 예시구 향기로 10",
+          userId,
+        );
+        const campaignId = Number(
+          db
+            .prepare(
+              `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,status,is_draft,import_key,review_required)
+             VALUES(?,?,?,?,?,1,'gifted',?,?,?,?,?,?,'closed',1,?,1)`,
+            )
+            .run(
+              actor.id,
+              "[체험용] 선정 확인 화면",
+              "화면 체험용 제품 (실물 발송 없음)",
+              "인플루언서 선정 후 참여 확인 화면을 살펴보는 비공개 캠페인입니다. 실제 협찬이나 발송은 진행하지 않습니다.",
+              "화면 체험용입니다. 실제 주소나 개인정보를 입력하지 말고 예시 배송지와 확인 항목을 살펴보세요.",
+              recruitDate,
+              draftDate,
+              finalDate,
+              deadline(recruitDate),
+              deadline(draftDate),
+              deadline(finalDate),
+              "admin-selection-preview:v1",
+            ).lastInsertRowid,
+        );
+        const applicationId = Number(
+          db
+            .prepare(
+              `INSERT INTO applications(campaign_id,influencer_id,status,consent_at,consent_version,phone,address,secondary_use_consent,original_delivery_consent)
+             VALUES(?,?,'selected',?,'secondary-use-v2',?,'',1,1)`,
+            )
+            .run(campaignId, userId, Date.now(), "01000000000").lastInsertRowid,
+        );
+        event(
+          db,
+          { id: applicationId },
+          actor.id,
+          "selected",
+          "체험용 계정의 선정 화면입니다. 실제 배송이나 콘텐츠 제출은 진행하지 않습니다.",
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          userId,
+          "selection_preview_create",
+          JSON.stringify({
+            campaign_id: campaignId,
+            application_id: applicationId,
+          }),
+          Date.now(),
+        );
+        return { userId, campaignId, applicationId };
+      })();
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        {
+          email,
+          password,
+          application_id: created.applicationId,
+          campaign_id: created.campaignId,
+        },
+        201,
+      );
+    }),
+  );
   app.get(
     "/api/work/admin/influencers.xlsx",
     wrap(async (c) => {
