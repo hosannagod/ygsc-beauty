@@ -75,9 +75,21 @@
     try {
       const url = new URL(value);
       if (!["https:", "http:"].includes(url.protocol)) return "—";
+      const host = url.hostname.replace(/^www\./, "").toLowerCase();
+      const account = decodeURIComponent(
+        url.pathname.split("/").filter(Boolean)[0] || "",
+      );
       const label =
-        url.hostname.replace(/^www\./, "") + url.pathname.replace(/\/$/, "");
-      return link(url.href, label);
+        host === "instagram.com"
+          ? `Instagram ${account ? `@${account}` : ""}`
+          : host === "tiktok.com"
+            ? `TikTok ${account || ""}`
+            : host === "xiaohongshu.com" || host === "xhslink.cn"
+              ? t("샤오홍슈 프로필")
+              : host === "youtube.com" || host === "youtu.be"
+                ? `YouTube ${account || ""}`
+                : `${host}${url.pathname.replace(/\/$/, "")}`;
+      return `<a class="text-link" href="${esc(url.href)}" title="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(label.trim())} ↗</a>`;
     } catch {
       return "—";
     }
@@ -929,32 +941,45 @@
                   .map(
                     (a) =>
                       html`<tr>
-                        <td>
+                        <td data-label="${t("선택")}">
                           ${a.status === "applied" && (!c.is_draft || !!c.import_key) ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
                         </td>
-                        <td>
+                        <td data-label="${t("인플루언서")}">
                           <strong>${esc(a.influencer_name)}</strong
                           ><small>${esc(a.influencer_email)}</small>
                         </td>
-                        <td>${esc(t(a.nationality || "미등록"))}</td>
-                        <td class="applicant-social">
+                        <td data-label="${t("국적")}">
+                          ${esc(t(a.nationality || "미등록"))}
+                        </td>
+                        <td
+                          class="applicant-social"
+                          data-label="${t("SNS 계정")}"
+                        >
                           ${socialAccountLink(a.social_url)}
                         </td>
-                        <td>
+                        <td data-label="${t("팔로워 · 등급")}">
+                          <span class="applicant-card-label"
+                            >${t("팔로워 · 등급")}${gradeInfo()}</span
+                          >
                           ${money(a.followers)} ·
                           ${tierName(a.tier, a.completed_count, a.onboarding_approved)}
                         </td>
-                        <td>
+                        <td data-label="${t("참여 횟수")}">
+                          <span class="applicant-card-label"
+                            >${t("참여 횟수")}${participationInfo()}</span
+                          >
                           ${t("완료")} ${a.completed_count}${t("회")}<small
                             >${t("진행 중")}
                             ${a.active_count || 0}${t("건")}</small
                           >
                         </td>
-                        <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
-                        <td>
+                        <td data-label="${t("상태")}">
+                          ${badge(a.status)}${a.best ? " ★ Best" : ""}
+                        </td>
+                        <td data-label="${t("참여 확인")}">
                           ${a.status === "applied" || a.status === "rejected" ? "—" : a.participation_confirmed_at ? `${t("확인 완료")}<small>${datetime(a.participation_confirmed_at)}</small>` : a.status === "selected" ? t("확인 대기") : t("기존 진행 · 확인 기록 없음")}
                         </td>
-                        <td>
+                        <td data-label="${t("활동")}">
                           <a class="text-link" href="/applications/${a.id}"
                             >검토·관리 →</a
                           >

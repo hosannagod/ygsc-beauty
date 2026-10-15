@@ -436,6 +436,11 @@ const { spawn, spawnSync } = require("node:child_process"),
       .click();
     await brand.locator("#confirm-accept").click();
     await brand.getByText("선정됨", { exact: true }).first().waitFor();
+    if (process.env.PREVIEW_DIR)
+      await brand.screenshot({
+        path: process.env.PREVIEW_DIR + "/brand-participants.png",
+        fullPage: true,
+      });
     await influencer.goto(base + "/applications");
     await influencer.getByRole("heading", { name: "선정 1" }).waitFor();
     if (process.env.PREVIEW_DIR)
@@ -999,13 +1004,21 @@ const { spawn, spawnSync } = require("node:child_process"),
         201,
       );
     await brand.goto(base + "/campaigns/" + batchCampaign);
-    await brand.getByRole("button", { name: "등급 기준 안내" }).click();
+    await brand
+      .locator("#applicants-table tbody")
+      .getByRole("button", { name: "등급 기준 안내" })
+      .first()
+      .click();
     await brand
       .getByRole("tooltip")
       .getByText(/브론즈: 홍보 승인 또는 완료 1회/)
       .waitFor();
     await brand.keyboard.press("Escape");
-    await brand.getByRole("button", { name: "참여 횟수 안내" }).click();
+    await brand
+      .locator("#applicants-table tbody")
+      .getByRole("button", { name: "참여 횟수 안내" })
+      .first()
+      .click();
     await brand
       .getByRole("tooltip")
       .getByText(/완료 횟수에는 기존 프로젝트 이력이 포함됩니다/)
