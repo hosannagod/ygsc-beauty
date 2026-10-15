@@ -29,7 +29,7 @@ import { hashPassword, verifyPassword, type User } from "./db.js";
 import ExcelJS from "exceljs";
 import { readFile, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   type DB,
   WorkflowError,
@@ -1286,6 +1286,50 @@ export function registerWorkflow(
               u.blocked_until <= Date.now(),
           })),
       });
+    }),
+  );
+  app.post(
+    "/api/work/admin/users",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        b = await body(c);
+      const email = text(b.email, "이메일", 3, 254).toLowerCase();
+      const name = text(b.name, "이름", 2, 60);
+      if (!/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email))
+        fail("올바른 이메일 주소를 입력해 주세요.");
+      if (db.prepare("SELECT id FROM users WHERE lower(email)=?").get(email))
+        fail("이미 사용 중인 이메일입니다.", 409);
+      const temporaryPassword = randomBytes(24).toString("base64url");
+      const userId = db.transaction(() => {
+        const result = db
+          .prepare(
+            "INSERT INTO users(email,name,role,password_hash,must_change_password) VALUES(?,?,'admin',?,1)",
+          )
+          .run(email, name, hashPassword(temporaryPassword));
+        const id = Number(result.lastInsertRowid);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          id,
+          "admin_account_create",
+          JSON.stringify({ email, must_change_password: true }),
+          Date.now(),
+        );
+        return id;
+      })();
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        {
+          id: userId,
+          email,
+          name,
+          role: "admin",
+          must_change_password: true,
+          temporary_password: temporaryPassword,
+        },
+        201,
+      );
     }),
   );
   app.get(
