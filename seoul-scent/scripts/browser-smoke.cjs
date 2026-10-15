@@ -68,6 +68,14 @@ const { spawn, spawnSync } = require("node:child_process"),
     }
     const brand = await signup("brand", "서울향기 브랜드"),
       influencer = await signup("influencer", "서울 크리에이터");
+    const confirmParticipation = async () => {
+      for (const name of [
+        "participation_confirmed",
+        "guidelines_confirmed",
+        "deadline_confirmed",
+      ])
+        await influencer.locator(`[name="${name}"]`).check();
+    };
     await influencer.goto(base + "/profile");
     const shippingProfile = influencer.locator(
       'form[data-task="profile-shipping"]',
@@ -396,7 +404,10 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.getByRole("heading", { name: "지원 완료 1" }).waitFor();
     if (process.env.PREVIEW_DIR) {
       mkdirSync(process.env.PREVIEW_DIR, { recursive: true });
-      await influencer.screenshot({ path: process.env.PREVIEW_DIR + "/applied.png", fullPage: true });
+      await influencer.screenshot({
+        path: process.env.PREVIEW_DIR + "/applied.png",
+        fullPage: true,
+      });
     }
     assert.equal(
       await influencer.locator(".application-group-heading").count(),
@@ -428,7 +439,10 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.goto(base + "/applications");
     await influencer.getByRole("heading", { name: "선정 1" }).waitFor();
     if (process.env.PREVIEW_DIR)
-      await influencer.screenshot({ path: process.env.PREVIEW_DIR + "/selected.png", fullPage: true });
+      await influencer.screenshot({
+        path: process.env.PREVIEW_DIR + "/selected.png",
+        fullPage: true,
+      });
     assert.equal(
       await influencer.locator(".application-group-heading").count(),
       2,
@@ -453,6 +467,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       .locator("[name=address]")
       .fill("서울시 강남구 테스트로 123");
     await influencer.locator("[name=address_detail]").fill("101호");
+    await confirmParticipation();
     await influencer.getByRole("button", { name: "배송지 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await influencer.getByText("배송지 수정", { exact: true }).click();
@@ -461,6 +476,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       "101호",
     );
     await influencer.locator("[name=address_detail]").fill("202호");
+    await confirmParticipation();
     const savedAddress = influencer.waitForResponse(
       (r) =>
         r.url().endsWith(`/applications/${appId}/action`) &&
@@ -774,6 +790,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     await influencer.locator("[name=recipient_name]").fill("테스트 수령인");
     await influencer.locator("[name=postal_code]").fill("01234");
     await influencer.locator("[name=address]").fill("서울시 테스트로 123");
+    await confirmParticipation();
     await influencer.getByRole("button", { name: "배송지 저장" }).click();
     await influencer.locator("#toast").getByText("저장되었습니다.").waitFor();
     await brand.reload();

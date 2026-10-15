@@ -52,7 +52,7 @@ export function finalizeSelection(
     if (count + ids.length > campaign.capacity)
       fail("남은 모집 인원보다 많이 선택했습니다.", 409);
     const note =
-      "캠페인 참여자로 선정되었습니다. 참여 내역에서 필수 동의를 확인하고 배송지를 등록해 주세요.";
+      "캠페인 참여자로 선정되었습니다. 참여 내역에서 필수 동의와 캠페인 참여 의사를 확인하고 배송지를 등록해 주세요.";
     for (const a of applicants) {
       db.prepare(
         "UPDATE applications SET status='selected',updated_at=CURRENT_TIMESTAMP WHERE id=?",

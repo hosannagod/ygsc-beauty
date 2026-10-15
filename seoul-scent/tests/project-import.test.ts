@@ -318,6 +318,9 @@ test("project import creates only drafts, preserves existing members and is idem
             phone: "01012345678",
             postal_code: "12345",
             address: "Seoul address 123",
+            participation_confirmed: true,
+            guidelines_confirmed: true,
+            deadline_confirmed: true,
           }),
         })
       ).status,

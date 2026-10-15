@@ -45,7 +45,7 @@ export function queueSelectionEmail(
   if (!row) throw new Error("Selection recipient not found");
   const title = row.title_en || row.title;
   const subject = "[Seoul Scent] Campaign selection / 캠페인 선정 안내";
-  const body = `Hello ${row.name},\n\nYou have been selected for the campaign: ${title}.\nPlease sign in, confirm the required consent, and register your shipping address on your application page.\n\n안녕하세요, ${row.name}님.\n${row.title} 캠페인에 선정되었습니다.\n로그인 후 참여 내역에서 필수 동의를 확인하고 배송지를 등록해 주세요.\n\n`;
+  const body = `Hello ${row.name},\n\nYou have been selected for the campaign: ${title}.\nPlease sign in, confirm the required consent and your participation in this campaign, and register your shipping address on your application page.\n\n안녕하세요, ${row.name}님.\n${row.title} 캠페인에 선정되었습니다.\n로그인 후 참여 내역에서 필수 동의와 이번 캠페인 참여 의사를 확인하고 배송지를 등록해 주세요.\n\n`;
   db.prepare(
     `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
     VALUES(?,?,?,?,?,?,?)`,

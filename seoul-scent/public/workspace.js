@@ -920,6 +920,7 @@
                   <th>${t("팔로워 · 등급")}${gradeInfo()}</th>
                   <th>${t("참여 횟수")}${participationInfo()}</th>
                   <th>상태</th>
+                  <th>${t("참여 확인")}</th>
                   <th>활동</th>
                 </tr>
               </thead>
@@ -950,6 +951,9 @@
                           >
                         </td>
                         <td>${badge(a.status)}${a.best ? " ★ Best" : ""}</td>
+                        <td>
+                          ${a.status === "applied" || a.status === "rejected" ? "—" : a.participation_confirmed_at ? `${t("확인 완료")}<small>${datetime(a.participation_confirmed_at)}</small>` : a.status === "selected" ? t("확인 대기") : t("기존 진행 · 확인 기록 없음")}
+                        </td>
                         <td>
                           <a class="text-link" href="/applications/${a.id}"
                             >검토·관리 →</a
@@ -1061,7 +1065,8 @@
               useSavedShipping
                 ? defaultShipping.address_detail
                 : a.address_detail,
-            ),
+            ) +
+            `<div class="notice"><strong>${t("이번 캠페인 참여 확인")}</strong><p>${t("배송지를 확인한 뒤 아래 항목을 모두 체크해 주세요. 기존에 저장한 주소를 사용해도 이번 캠페인에 대한 확인이 필요합니다.")}</p>${a.guidelines ? `<p class="preline">${esc(a.guidelines)}</p>` : ""}${a.guidelines_url ? `<p>${link(a.guidelines_url, t("콘텐츠 가이드 문서 열기"))}</p>` : ""}<p>${t("최종 업로드 마감")}: ${esc(a.final_date)}</p></div><label class="check"><input type="checkbox" name="participation_confirmed" required><span>${t("이번 캠페인에 참여할 의사가 있습니다.")}</span></label><label class="check"><input type="checkbox" name="guidelines_confirmed" required><span>${t("콘텐츠 가이드를 확인했습니다.")}</span></label><label class="check"><input type="checkbox" name="deadline_confirmed" required><span>${t("안내된 기간 내 콘텐츠를 성실하게 업로드하겠습니다.")}</span></label>`,
           t("배송지 저장"),
         );
 
@@ -1201,13 +1206,17 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
-              ${shippingAddressForm ? `<details ${a.address ? "" : "open"}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}</summary><p class="note left">${t(useSavedShipping ? "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요." : "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
+              ${shippingAddressForm ? `<details ${!a.address || !a.participation_confirmed_at ? "open" : ""}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}${!a.participation_confirmed_at ? ` · ${t("참여 확인 필요")}` : ""}</summary><p class="note left">${t(useSavedShipping ? "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요." : "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
               <p class="note left">
                 ${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}
               </p>
             </section>
             <section class="panel">
               <h3>동의 기록</h3>
+              <p>
+                ${t("이번 캠페인 참여 확인")}:
+                ${a.participation_confirmed_at ? `${t("확인 완료")} · ${datetime(a.participation_confirmed_at)}` : a.status === "selected" ? t("확인 대기") : t("기존 진행 · 확인 기록 없음")}
+              </p>
               <p class="small muted">
                 2차 활용:
                 ${a.secondary_use_consent ? t("동의 완료") : t("미동의")}<br />고화질

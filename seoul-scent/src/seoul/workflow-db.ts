@@ -140,6 +140,7 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       ["postal_code", "TEXT NOT NULL DEFAULT ''"],
       ["address_detail", "TEXT NOT NULL DEFAULT ''"],
       ["shipping_address_at", "INTEGER NOT NULL DEFAULT 0"],
+      ["participation_confirmed_at", "INTEGER NOT NULL DEFAULT 0"],
       ["secondary_use_consent", "INTEGER NOT NULL DEFAULT 0"],
       ["original_delivery_consent", "INTEGER NOT NULL DEFAULT 0"],
     ];

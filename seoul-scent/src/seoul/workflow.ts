@@ -47,8 +47,7 @@ export function deadline(value: unknown) {
   return date.getTime() + 15 * 3600_000; // next day 00:00 Asia/Seoul
 }
 export function productLink(value: unknown, label = "제품·브랜드 링크") {
-  const raw =
-    value === undefined ? "" : text(value, label, 0, 2000);
+  const raw = value === undefined ? "" : text(value, label, 0, 2000);
   if (!raw) return "";
   let url: URL;
   try {
@@ -61,9 +60,7 @@ export function productLink(value: unknown, label = "제품·브랜드 링크") 
     url.username ||
     url.password
   )
-    fail(
-      `${label}는 인증 정보가 없는 HTTP 또는 HTTPS 주소를 입력해 주세요.`,
-    );
+    fail(`${label}는 인증 정보가 없는 HTTP 또는 HTTPS 주소를 입력해 주세요.`);
   return url.href;
 }
 export function recruitmentDates(
@@ -155,7 +152,7 @@ export function event(
 export function applicationFor(db: DB, id: number, user: User) {
   const row = db
     .prepare(
-      `SELECT a.*, c.deleted_at AS campaign_deleted_at,c.review_required,c.brand_id,c.title,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
+      `SELECT a.*, c.deleted_at AS campaign_deleted_at,c.review_required,c.brand_id,c.title,c.guidelines,c.guidelines_url,c.draft_due,c.final_due,c.draft_date,c.final_date,c.capacity,c.status AS campaign_status,
     u.name AS influencer_name,u.email AS influencer_email,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.social_url,p.nationality,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=a.influencer_id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count
     FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id
     JOIN influencer_profiles p ON p.user_id=a.influencer_id WHERE a.id=?`,

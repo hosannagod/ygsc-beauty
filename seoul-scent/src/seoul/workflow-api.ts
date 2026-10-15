@@ -656,6 +656,14 @@ export function registerWorkflow(
           guidelinesUrl,
           campaign.id,
         );
+        if (
+          guidelines !== campaign.guidelines ||
+          guidelinesUrl !== campaign.guidelines_url ||
+          finalDate !== campaign.final_date
+        )
+          db.prepare(
+            "UPDATE applications SET participation_confirmed_at=0 WHERE campaign_id=? AND status='selected'",
+          ).run(campaign.id);
         if (b.publish === true) {
           if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
           recruitmentDates(
@@ -963,6 +971,15 @@ export function registerWorkflow(
               (!a.secondary_use_consent || !a.original_delivery_consent)
             )
               fail("배송지 등록 전에 필수 동의를 확인해 주세요.", 409);
+            if (
+              !admin &&
+              (b.participation_confirmed !== true ||
+                b.guidelines_confirmed !== true ||
+                b.deadline_confirmed !== true)
+            )
+              fail(
+                "참여 의사, 콘텐츠 가이드, 기한 내 업로드를 모두 확인해 주세요.",
+              );
             const recipient = text(b.recipient_name, "수령인", 2, 60),
               phone = text(b.phone, "연락처", 8, 30),
               postal = text(b.postal_code, "우편번호", 3, 12),
@@ -974,8 +991,18 @@ export function registerWorkflow(
             )
               fail("연락처·우편번호 형식을 확인해 주세요.");
             db.prepare(
-              "UPDATE applications SET recipient_name=?,phone=?,postal_code=?,address=?,address_detail=?,shipping_address_at=? WHERE id=?",
-            ).run(recipient, phone, postal, address, detail, Date.now(), a.id);
+              "UPDATE applications SET recipient_name=?,phone=?,postal_code=?,address=?,address_detail=?,shipping_address_at=?,participation_confirmed_at=CASE WHEN ? THEN ? ELSE participation_confirmed_at END WHERE id=?",
+            ).run(
+              recipient,
+              phone,
+              postal,
+              address,
+              detail,
+              Date.now(),
+              !admin ? 1 : 0,
+              Date.now(),
+              a.id,
+            );
             note = admin
               ? "운영사가 배송지를 수정했습니다."
               : "배송지가 등록되었습니다.";
@@ -994,6 +1021,8 @@ export function registerWorkflow(
           case "ship": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
             requireState(["selected", "shipping"]);
+            if (a.status === "selected" && !a.participation_confirmed_at)
+              fail("인플루언서의 캠페인 참여 확인이 필요합니다.", 409);
             if (
               a.consent_version.startsWith("external-form-v2") &&
               (!a.secondary_use_consent || !a.original_delivery_consent)
@@ -1934,7 +1963,7 @@ export function registerWorkflow(
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number,a.recipient_name,a.postal_code,a.address_detail FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping') AND a.address!='' ORDER BY a.id",
+          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number,a.recipient_name,a.postal_code,a.address_detail FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping') AND a.address!='' AND (a.status='shipping' OR a.participation_confirmed_at>0) ORDER BY a.id",
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -2070,6 +2099,8 @@ export function registerWorkflow(
           fail(`${i}행: 발송 전에 필수 동의가 필요합니다.`, 409);
         if (!a.address || !a.phone)
           fail(`${i}행: 선정자의 배송지가 아직 등록되지 않았습니다.`);
+        if (a.status === "selected" && !a.participation_confirmed_at)
+          fail(`${i}행: 인플루언서의 캠페인 참여 확인이 필요합니다.`, 409);
         const carrier = text(value("carrier"), "택배사", 2, 40),
           tracking = text(value("tracking_number"), "송장번호", 5, 40);
         if (!/^[A-Za-z0-9-]+$/.test(tracking))

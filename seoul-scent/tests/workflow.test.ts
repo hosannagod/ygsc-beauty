@@ -109,6 +109,9 @@ async function fixture() {
         postal_code: "06234",
         address: "서울시 강남구 테스트로 123",
         address_detail: "101호",
+        participation_confirmed: true,
+        guidelines_confirmed: true,
+        deadline_confirmed: true,
       });
       assert.equal(address.status, 200);
     }
@@ -365,6 +368,9 @@ test("admin consent recording identifies the account and records the administrat
           phone: "01012345678",
           postal_code: "01234",
           address: "서울시 테스트로 123",
+          participation_confirmed: true,
+          guidelines_confirmed: true,
+          deadline_confirmed: true,
         })
       ).status,
       200,
@@ -1360,6 +1366,7 @@ test("existing campaigns migrate once without losing applications or schedule da
       "postal_code",
       "address_detail",
       "shipping_address_at",
+      "participation_confirmed_at",
       "secondary_use_consent",
       "original_delivery_consent",
     ])
@@ -1395,6 +1402,7 @@ test("existing campaigns migrate once without losing applications or schedule da
     assert.equal(migrated.address, "서울시 기존 주소 123");
     assert.equal(migrated.secondary_use_consent, 1);
     assert.equal(migrated.original_delivery_consent, 1);
+    assert.equal(migrated.participation_confirmed_at, 0);
     const brand = f.db
       .prepare("SELECT * FROM users WHERE id=?")
       .get(f.ids.brand) as any;
@@ -1440,6 +1448,9 @@ test("separate consents and address registration only after selection", async ()
       postal_code: "01234",
       address: "서울시 테스트로 123",
       address_detail: "101호",
+      participation_confirmed: true,
+      guidelines_confirmed: true,
+      deadline_confirmed: true,
     };
     assert.equal(
       (await f.req("influencer", `/applications/${a}/action`, "POST", address))
@@ -1492,6 +1503,81 @@ test("separate consents and address registration only after selection", async ()
       (await f.req("influencer", `/applications/${a}/action`, "POST", address))
         .status,
       409,
+    );
+  } finally {
+    f.db.close();
+  }
+});
+
+test("saved addresses do not count as campaign participation confirmation", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    assert.equal(
+      (
+        await f.req("brand", `/applications/${applicationId}/action`, "POST", {
+          action: "select",
+        })
+      ).status,
+      200,
+    );
+    f.db
+      .prepare(
+        "UPDATE applications SET recipient_name='기존 수령인',phone='01012345678',postal_code='01234',address='기존 배송지 123',shipping_address_at=? WHERE id=?",
+      )
+      .run(Date.now(), applicationId);
+    const path = `/applications/${applicationId}`;
+    for (const viewer of ["brand", "admin"]) {
+      const detail = (await (await f.req(viewer, path)).json()) as any;
+      assert.equal(detail.application.participation_confirmed_at, 0);
+      const list = (await (
+        await f.req(viewer, `/campaigns/${campaignId}`)
+      ).json()) as any;
+      assert.equal(list.applications[0].participation_confirmed_at, 0);
+    }
+    const ship = {
+      action: "ship",
+      carrier: "CJ대한통운",
+      tracking_number: "123456789",
+    };
+    assert.equal(
+      (await f.req("brand", `${path}/action`, "POST", ship)).status,
+      409,
+    );
+    const address = {
+      action: "address",
+      recipient_name: "기존 수령인",
+      phone: "01012345678",
+      postal_code: "01234",
+      address: "기존 배송지 123",
+      participation_confirmed: true,
+      guidelines_confirmed: true,
+      deadline_confirmed: true,
+    };
+    for (const field of [
+      "participation_confirmed",
+      "guidelines_confirmed",
+      "deadline_confirmed",
+    ])
+      assert.equal(
+        (
+          await f.req("influencer", `${path}/action`, "POST", {
+            ...address,
+            [field]: false,
+          })
+        ).status,
+        400,
+      );
+    assert.equal(
+      (await f.req("influencer", `${path}/action`, "POST", address)).status,
+      200,
+    );
+    const confirmed = (await (await f.req("brand", path)).json()) as any;
+    assert.ok(confirmed.application.participation_confirmed_at > 0);
+    assert.equal(
+      (await f.req("brand", `${path}/action`, "POST", ship)).status,
+      200,
     );
   } finally {
     f.db.close();
