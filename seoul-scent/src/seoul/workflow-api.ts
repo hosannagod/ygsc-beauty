@@ -1368,6 +1368,12 @@ export function registerWorkflow(
       const email = "preview.influencer@example.invalid";
       if (db.prepare("SELECT id FROM users WHERE email=?").get(email))
         fail("체험 계정이 이미 있습니다. 기존 계정을 확인해 주세요.", 409);
+      if (
+        db
+          .prepare("SELECT id FROM users WHERE email=? OR username=?")
+          .get("influtest", "influtest")
+      )
+        fail("체험용 아이디가 이미 사용 중입니다.", 409);
       const password = randomBytes(18).toString("base64url");
       const formatDate = (offset: number) =>
         new Intl.DateTimeFormat("en-CA", {
@@ -1383,7 +1389,7 @@ export function registerWorkflow(
         const userId = Number(
           db
             .prepare(
-              "INSERT INTO users(email,name,role,password_hash) VALUES(?,?,'influencer',?)",
+              "INSERT INTO users(email,name,role,password_hash,username) VALUES(?,?,'influencer',?,'influtest')",
             )
             .run(email, "선정 화면 체험용", hashPassword(password))
             .lastInsertRowid,
@@ -1457,6 +1463,52 @@ export function registerWorkflow(
         },
         201,
       );
+    }),
+  );
+  app.put(
+    "/api/work/admin/selection-preview/username",
+    wrap((c) => {
+      const actor = role(c, "admin");
+      const user = db
+        .prepare(
+          `SELECT u.id,u.username FROM users u
+         JOIN applications a ON a.influencer_id=u.id
+         JOIN campaigns c ON c.id=a.campaign_id
+         WHERE u.email='preview.influencer@example.invalid'
+           AND u.role='influencer' AND c.import_key='admin-selection-preview:v1'`,
+        )
+        .get() as { id: number; username: string | null } | undefined;
+      if (!user) return fail("체험 계정을 찾을 수 없습니다.", 404);
+      if (user.username === "influtest")
+        return c.json({ username: "influtest" });
+      if (
+        db
+          .prepare(
+            "SELECT id FROM users WHERE (email=? OR username=?) AND id!=?",
+          )
+          .get("influtest", "influtest", user.id)
+      )
+        fail("체험용 아이디가 이미 사용 중입니다.", 409);
+      db.transaction(() => {
+        db.prepare("UPDATE users SET username='influtest' WHERE id=?").run(
+          user.id,
+        );
+        db.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);
+        db.prepare("DELETE FROM login_attempts WHERE email IN (?,?)").run(
+          "influtest",
+          `login:${user.id}`,
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+        ).run(
+          actor.id,
+          user.id,
+          "selection_preview_username",
+          "influtest",
+          Date.now(),
+        );
+      })();
+      return c.json({ username: "influtest" });
     }),
   );
   app.get(

@@ -42,6 +42,7 @@ test("admin can create a private selected-state preview without sending mail or 
       .prepare("SELECT * FROM users WHERE email=?")
       .get(created.email) as any;
     assert.equal(user.role, "influencer");
+    assert.equal(user.username, "influtest");
     assert.ok(verifyPassword(created.password, user.password_hash));
     const campaign = db
       .prepare("SELECT * FROM campaigns WHERE id=?")
@@ -77,6 +78,33 @@ test("admin can create a private selected-state preview without sending mail or 
     assert.equal(profile.profile.postal_code, "00000");
     const catalog = (await (await request("/campaigns")).json()) as any;
     assert.equal(catalog.campaigns.length, 0);
+    db.prepare("UPDATE users SET username=NULL WHERE id=?").run(user.id);
+    const rename = (cookie = "") =>
+      app.request("/api/work/admin/selection-preview/username", {
+        method: "PUT",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: "{}",
+      });
+    assert.equal((await rename()).status, 401);
+    assert.equal((await rename(brandCookie)).status, 403);
+    assert.equal((await rename(adminCookie)).status, 200);
+    assert.equal((await rename(adminCookie)).status, 200);
+    assert.equal(
+      (db.prepare("SELECT username FROM users WHERE id=?").get(user.id) as any)
+        .username,
+      "influtest",
+    );
+    assert.equal((await login("influtest", created.password)).status, 200);
+    assert.equal(
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) n FROM admin_audit WHERE action='selection_preview_username'",
+          )
+          .get() as any
+      ).n,
+      1,
+    );
   } finally {
     db.close();
   }
