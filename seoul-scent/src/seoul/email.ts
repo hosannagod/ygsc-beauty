@@ -45,7 +45,37 @@ export function queueSelectionEmail(
   if (!row) throw new Error("Selection recipient not found");
   const title = row.title_en || row.title;
   const subject = "[Seoul Scent] Campaign selection / 캠페인 선정 안내";
-  const body = `Hello ${row.name},\n\nYou have been selected for the campaign: ${title}.\nPlease sign in and open My Campaigns → Selected Campaigns. Check or update your shipping address for this campaign, complete any required consent, check the boxes confirming your participation, that you have read the content guide, and that you will upload by the deadline, then save. Even if you have already entered an address, you must confirm it for this campaign before your product can be shipped.\n\n안녕하세요, ${row.name}님.\n${row.title} 캠페인에 선정되었습니다.\n로그인 후 내 캠페인 → 선정된 캠페인에서 이번 캠페인의 배송지를 확인하거나 수정해 주세요. 필수 동의를 완료하고 참여 의사·콘텐츠 가이드 확인·기한 내 업로드 약속 항목을 모두 체크한 뒤 저장해 주세요. 기존에 배송지를 등록하셨더라도 이번 캠페인에서 다시 확인해야 제품 발송이 가능합니다.\n\n`;
+  const body = `English
+
+Hello ${row.name},
+
+You have been selected for the campaign: ${title}.
+
+Please sign in and open My Campaigns → Selected Campaigns.
+- Check or update your shipping address for this campaign.
+- Complete any required consent.
+- Check the boxes confirming your participation, that you have read the content guide, and that you will upload by the deadline.
+
+Save your confirmation after checking all items.
+
+Even if you have already entered an address, you must confirm it for this campaign before your product can be shipped.
+
+--------------------
+
+한국어
+
+안녕하세요, ${row.name}님.
+
+${row.title} 캠페인에 선정되었습니다.
+
+로그인 후 내 캠페인 → 선정된 캠페인에서 아래 항목을 확인하고 저장해 주세요.
+- 이번 캠페인의 배송지를 확인하거나 수정해 주세요.
+- 필수 동의를 완료해 주세요.
+- 참여 의사·콘텐츠 가이드 확인·기한 내 업로드 약속 항목을 모두 체크해 주세요.
+
+기존에 배송지를 등록하셨더라도 이번 캠페인에서 다시 확인해야 제품 발송이 가능합니다.
+
+`;
   db.prepare(
     `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
     VALUES(?,?,?,?,?,?,?)`,
