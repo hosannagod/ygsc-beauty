@@ -67,6 +67,9 @@ test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping
     assert.equal(body.replyTo.email, "reply@gmail.com");
     assert.match(body.textContent, /Test campaign/);
     assert.match(body.textContent, /테스트 캠페인/);
+    assert.match(body.textContent, /check the boxes confirming your participation/);
+    assert.match(body.textContent, /기존에 배송지를 등록하셨더라도 이번 캠페인에서 다시 확인해야/);
+    assert.match(body.textContent, /콘텐츠 가이드 확인·기한 내 업로드 약속/);
     assert.match(
       body.textContent,
       /https:\/\/seoul-scent.onrender.com\/applications\/1/,
