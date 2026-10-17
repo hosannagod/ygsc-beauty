@@ -608,6 +608,18 @@ nav {
   font-size: 12px;
   color: #7c8b75;
 }
+.participation-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin: -6px 0 16px;
+  font-size: 13px;
+}
+.participation-counts strong {
+  color: #294e3a;
+  font-size: 16px;
+}
 .empty {
   padding: 45px 20px;
   background: white;

@@ -750,9 +750,17 @@
           </details>
         </section>`;
       }
-      const selected = applications.filter(
+      const selectedApplications = applications.filter(
           (a) => !["applied", "rejected"].includes(a.status),
+        ),
+        selected = selectedApplications.length,
+        confirmed = selectedApplications.filter(
+          (a) => !!a.participation_confirmed_at,
         ).length,
+        awaitingConfirmation = selectedApplications.filter(
+          (a) => a.status === "selected" && !a.participation_confirmed_at,
+        ).length,
+        withoutConfirmationRecord = selected - confirmed - awaitingConfirmation,
         review = applications.filter((a) =>
           ["draft_submitted", "final_submitted"].includes(a.status),
         ).length;
@@ -761,6 +769,12 @@
           <span class="muted"
             >선정 ${selected}/${c.capacity} · 검수 대기 ${review}</span
           >
+        </div>
+        <div class="participation-counts" aria-label="${t("참여 확인")}">
+          <span class="muted">${t("참여 확인")}</span>
+          <span>${t("확인 완료")} <strong>${confirmed}</strong></span>
+          <span>${t("확인 대기")} <strong>${awaitingConfirmation}</strong></span>
+          ${withoutConfirmationRecord ? `<span>${t("기존 진행 · 확인 기록 없음")} <strong>${withoutConfirmationRecord}</strong></span>` : ""}
         </div>
         <div class="tabs" role="group" aria-label="참여자 단계">
           <button data-tab="all" class="active">전체</button
