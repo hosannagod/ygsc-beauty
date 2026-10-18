@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb, hashPassword, verifyPassword } from "../src/seoul/db.js";
 import { createApp } from "../src/seoul/app.js";
-test("admin reset requires exact influencer identity, revokes sessions/locks and forces a new password without altering profile or history", async () => {
+test("admin reset requires exact account identity, revokes sessions/locks and forces a new password without altering profile or history", async () => {
   const db = openDb(":memory:");
   try {
     const password = "Strong-password-123!",
@@ -55,6 +55,8 @@ test("admin reset requires exact influencer identity, revokes sessions/locks and
       ).status,
       409,
     );
+    const brandLogin = await login("brand@test.com"),
+      brandCookie = brandLogin.headers.get("set-cookie")!.split(";")[0];
     assert.equal(
       (
         await put(
@@ -63,8 +65,15 @@ test("admin reset requires exact influencer identity, revokes sessions/locks and
           "/api/work/admin/users/2/reset-password",
         )
       ).status,
-      404,
+      200,
     );
+    assert.equal(
+      (await app.request("/api/me", { headers: { Cookie: brandCookie } })).status,
+      401,
+    );
+    const brand = db.prepare("SELECT * FROM users WHERE id=2").get() as any;
+    assert.equal(brand.must_change_password, 1);
+    assert.ok(verifyPassword("0000", brand.password_hash));
     for (const key of ["influencer@test.com", "login:3", "account:3"])
       db.prepare("INSERT INTO login_attempts VALUES(?,5,?)").run(
         key,

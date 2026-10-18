@@ -1692,8 +1692,8 @@ export function registerWorkflow(
       const user = db
         .prepare("SELECT id,email,username,role FROM users WHERE id=?")
         .get(target) as any;
-      if (!user || user.role !== "influencer")
-        fail("인플루언서를 찾을 수 없습니다.", 404);
+      if (!user || !["influencer", "brand"].includes(user.role))
+        fail("초기화할 계정을 찾을 수 없습니다.", 404);
       if (b.confirm_email !== user.email)
         fail("초기화할 계정의 이메일을 확인해 주세요.", 409);
       const temporary = text(b.temporary_password, "임시 비밀번호", 4, 128);
