@@ -39,7 +39,7 @@ test("admin can remove unconfirmed selections and block deleted emails from rejo
         headers: { Cookie: cookie, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    const emails = ["selected@test.com", "applied@test.com"];
+    const emails = ["selected@test.com", "applied@test.com", "missing@test.com"];
     const preview = await call({ emails });
     assert.equal(preview.status, 200);
     assert.deepEqual(
@@ -63,7 +63,7 @@ test("admin can remove unconfirmed selections and block deleted emails from rejo
     assert.equal((await response.json() as any).applications_removed, 2);
     assert.equal(
       (db.prepare("SELECT COUNT(*) n FROM blocked_emails").get() as any).n,
-      2,
+      3,
     );
     assert.equal(
       (db.prepare("SELECT COUNT(*) n FROM applications").get() as any).n,
@@ -80,6 +80,11 @@ test("admin can remove unconfirmed selections and block deleted emails from rejo
     assert.throws(() =>
       db.prepare(
         "INSERT INTO users(email,name,role,password_hash) VALUES('selected@test.com','Blocked','influencer','x')",
+      ).run(),
+    );
+    assert.throws(() =>
+      db.prepare(
+        "INSERT INTO users(email,name,role,password_hash) VALUES('missing@test.com','Blocked','influencer','x')",
       ).run(),
     );
     const register = await app.request("/api/register", {

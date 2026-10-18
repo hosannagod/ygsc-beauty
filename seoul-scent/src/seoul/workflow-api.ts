@@ -1881,8 +1881,9 @@ export function registerWorkflow(
             const user = db
               .prepare("SELECT id,name,email,role FROM users WHERE email=?")
               .get(email) as any;
-            if (!user || user.role !== "influencer")
-              fail(`계정을 찾을 수 없습니다: ${email}`, 404);
+            if (!user) return { email, user: null, applications: [] as any[] };
+            if (user.role !== "influencer")
+              fail(`인플루언서 계정이 아닙니다: ${email}`, 409);
             const profile = db
               .prepare(
                 "SELECT completed_count FROM influencer_profiles WHERE user_id=?",
@@ -1914,10 +1915,11 @@ export function registerWorkflow(
               ).get(user.id)
             )
               fail(`메일 발송이 진행 중입니다: ${email}`, 409);
-            return { user, applications };
+            return { email, user, applications };
           });
           const summary = {
-            accounts: accounts.length,
+            accounts: accounts.filter((a: any) => a.user).length,
+            blocked_emails: b.emails.length,
             applications_removed: accounts.reduce(
               (sum: number, a: any) => sum + a.applications.length,
               0,
@@ -1933,10 +1935,11 @@ export function registerWorkflow(
             deleted: !dryRun,
           };
           if (dryRun) return summary;
-          for (const { user, applications } of accounts) {
+          for (const { email, user, applications } of accounts) {
             db.prepare(
-              "INSERT INTO blocked_emails(email,created_at,actor_id) VALUES(?,?,?)",
-            ).run(user.email, Date.now(), actor.id);
+              "INSERT OR IGNORE INTO blocked_emails(email,created_at,actor_id) VALUES(?,?,?)",
+            ).run(email, Date.now(), actor.id);
+            if (!user) continue;
             for (const application of applications) {
               db.prepare(
                 "DELETE FROM email_attempts WHERE email_id IN (SELECT id FROM email_outbox WHERE application_id=?)",
