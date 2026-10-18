@@ -116,6 +116,12 @@ export async function importInfluencers(
   )
     fail("임시 비밀번호는 4~128자로 입력해 주세요.");
   const parsed = await readInfluencerWorkbook(buffer);
+  if (
+    parsed.rows.some((r) =>
+      db.prepare("SELECT 1 FROM blocked_emails WHERE email=?").get(r.email),
+    )
+  )
+    fail("차단된 이메일이 포함되어 있어 명단을 가져올 수 없습니다.", 409);
   const existing = parsed.rows.filter((r) =>
     db.prepare("SELECT id FROM users WHERE email=?").get(r.email),
   );

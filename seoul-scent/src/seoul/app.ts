@@ -265,6 +265,8 @@ export function createApp(
       .get(email, user.id);
     if (duplicate)
       return c.json({ error: "이미 사용 중인 이메일입니다." }, 409);
+    if (db.prepare("SELECT 1 FROM blocked_emails WHERE email=?").get(email))
+      return c.json({ error: "사용할 수 없는 이메일입니다." }, 403);
     const nextName = user.role === "brand" ? brandName : name;
     db.transaction(() => {
       db.prepare(
@@ -344,6 +346,8 @@ export function createApp(
       );
     if (db.prepare("SELECT id FROM users WHERE email=?").get(email))
       return c.json({ error: "이미 사용 중인 이메일입니다." }, 409);
+    if (db.prepare("SELECT 1 FROM blocked_emails WHERE email=?").get(email))
+      return c.json({ error: "가입할 수 없는 이메일입니다." }, 403);
     const user = db.transaction(() => {
       const result = db
         .prepare(

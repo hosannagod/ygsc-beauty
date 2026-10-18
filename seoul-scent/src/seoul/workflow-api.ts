@@ -1854,6 +1854,132 @@ export function registerWorkflow(
       );
     }),
   );
+  app.post(
+    "/api/work/admin/influencers/blacklist-delete",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        b = await body(c);
+      if (
+        !Array.isArray(b.emails) ||
+        b.emails.length < 1 ||
+        b.emails.length > 100 ||
+        b.emails.some(
+          (email: unknown) =>
+            typeof email !== "string" ||
+            !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email) ||
+            email !== email.toLowerCase(),
+        ) ||
+        new Set(b.emails).size !== b.emails.length
+      )
+        fail("중복 없는 인플루언서 이메일을 1~100개 입력해 주세요.");
+      const dryRun = b.dry_run !== false;
+      if (!dryRun && b.confirm_delete !== true)
+        fail("삭제 확인 값이 필요합니다.");
+      return c.json(
+        db.transaction(() => {
+          const accounts = b.emails.map((email: string) => {
+            const user = db
+              .prepare("SELECT id,name,email,role FROM users WHERE email=?")
+              .get(email) as any;
+            if (!user || user.role !== "influencer")
+              fail(`계정을 찾을 수 없습니다: ${email}`, 404);
+            const profile = db
+              .prepare(
+                "SELECT completed_count FROM influencer_profiles WHERE user_id=?",
+              )
+              .get(user.id) as any;
+            const history = db
+              .prepare(
+                "SELECT 1 FROM historical_activities WHERE user_id=? UNION ALL SELECT 1 FROM activity_certificates WHERE user_id=? LIMIT 1",
+              )
+              .get(user.id, user.id);
+            const applications = db
+              .prepare("SELECT id,status,participation_confirmed_at,shipping_address_at,tracking_number FROM applications WHERE influencer_id=?")
+              .all(user.id) as any[];
+            if (
+              profile.completed_count ||
+              history ||
+              applications.some(
+                (a) =>
+                  !["applied", "rejected", "selected"].includes(a.status) ||
+                  a.participation_confirmed_at ||
+                  a.shipping_address_at ||
+                  a.tracking_number,
+              )
+            )
+              fail(`활동 또는 배송 진행 이력이 있어 삭제할 수 없습니다: ${email}`, 409);
+            if (
+              db.prepare(
+                "SELECT 1 FROM email_outbox WHERE status='sending' AND application_id IN (SELECT id FROM applications WHERE influencer_id=?) LIMIT 1",
+              ).get(user.id)
+            )
+              fail(`메일 발송이 진행 중입니다: ${email}`, 409);
+            return { user, applications };
+          });
+          const summary = {
+            accounts: accounts.length,
+            applications_removed: accounts.reduce(
+              (sum: number, a: any) => sum + a.applications.length,
+              0,
+            ),
+            selected_removed: accounts.reduce(
+              (sum: number, a: any) =>
+                sum +
+                a.applications.filter((app: any) => app.status === "selected")
+                  .length,
+              0,
+            ),
+            emails: b.emails,
+            deleted: !dryRun,
+          };
+          if (dryRun) return summary;
+          for (const { user, applications } of accounts) {
+            db.prepare(
+              "INSERT INTO blocked_emails(email,created_at,actor_id) VALUES(?,?,?)",
+            ).run(user.email, Date.now(), actor.id);
+            for (const application of applications) {
+              db.prepare(
+                "DELETE FROM email_attempts WHERE email_id IN (SELECT id FROM email_outbox WHERE application_id=?)",
+              ).run(application.id);
+              db.prepare("DELETE FROM email_outbox WHERE application_id=?").run(
+                application.id,
+              );
+              db.prepare("DELETE FROM application_events WHERE application_id=?").run(
+                application.id,
+              );
+            }
+            db.prepare("DELETE FROM applications WHERE influencer_id=?").run(
+              user.id,
+            );
+            db.prepare("DELETE FROM notifications WHERE user_id=?").run(
+              user.id,
+            );
+            db.prepare("DELETE FROM onboarding_submissions WHERE user_id=?").run(
+              user.id,
+            );
+            db.prepare("UPDATE onboarding_submissions SET reviewer_id=NULL WHERE reviewer_id=?").run(
+              user.id,
+            );
+            db.prepare("UPDATE application_events SET actor_id=NULL WHERE actor_id=?").run(
+              user.id,
+            );
+            db.prepare("UPDATE admin_audit SET target_user_id=NULL WHERE target_user_id=?").run(
+              user.id,
+            );
+            db.prepare("DELETE FROM login_attempts WHERE email IN (?,?)").run(
+              user.email,
+              `login:${user.id}`,
+            );
+            db.prepare("DELETE FROM users WHERE id=?").run(user.id);
+          }
+          db.prepare(
+            "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'blacklist_delete',?,?)",
+          ).run(actor.id, JSON.stringify(summary), Date.now());
+          return summary;
+        })(),
+      );
+    }),
+  );
   app.delete(
     "/api/work/admin/users/:id",
     wrap(async (c) => {

@@ -41,6 +41,15 @@ export function openDb(path: string) {
     CREATE TABLE IF NOT EXISTS login_attempts (
       email TEXT PRIMARY KEY, failures INTEGER NOT NULL, locked_until INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS blocked_emails (
+      email TEXT PRIMARY KEY, created_at INTEGER NOT NULL, actor_id INTEGER NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS users_blocked_email_insert BEFORE INSERT ON users
+    WHEN EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(NEW.email))
+    BEGIN SELECT RAISE(ABORT, 'blocked_email'); END;
+    CREATE TRIGGER IF NOT EXISTS users_blocked_email_update BEFORE UPDATE OF email ON users
+    WHEN EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(NEW.email))
+    BEGIN SELECT RAISE(ABORT, 'blocked_email'); END;
     CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
     INSERT OR IGNORE INTO schema_version VALUES (1);
   `);

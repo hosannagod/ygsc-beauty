@@ -153,6 +153,10 @@ export async function importSecondProject(
   }
   let newPeople = 0;
   for (const person of parsed.people) {
+    if (
+      db.prepare("SELECT 1 FROM blocked_emails WHERE email=?").get(person.email)
+    )
+      fail("차단된 이메일이 포함되어 있어 신청 명단을 가져올 수 없습니다.", 409);
     const existing = db
       .prepare("SELECT role FROM users WHERE email=?")
       .get(person.email) as any;
