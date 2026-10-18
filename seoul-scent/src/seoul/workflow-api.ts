@@ -616,9 +616,9 @@ export function registerWorkflow(
           draft = campaign.draft_due,
           final = campaign.final_due;
         if (changed) {
-          if (locked)
+          if (!campaign.is_draft && campaign.status !== "recruiting")
             fail(
-              "지원자가 있거나 모집이 마감된 캠페인은 일정을 변경할 수 없습니다.",
+              "모집 중이거나 비공개 초안인 캠페인만 일정을 변경할 수 있습니다.",
               409,
             );
           draft = deadline(draftDate);
@@ -716,7 +716,8 @@ export function registerWorkflow(
           guidelines !== campaign.guidelines ||
           guidelinesUrl !== campaign.guidelines_url ||
           url !== campaign.product_url ||
-          capacity !== campaign.capacity
+          capacity !== campaign.capacity ||
+          changed
         ) {
           for (const a of applicants.filter(
             (a) => !["rejected", "completed", "no_show"].includes(a.status),

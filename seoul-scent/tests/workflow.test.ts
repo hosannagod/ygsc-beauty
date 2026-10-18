@@ -1295,7 +1295,7 @@ test("product links and recruitment start dates validate and block early applica
   }
 });
 
-test("campaign link editing enforces ownership and preserves dates after applications", async () => {
+test("campaign link and schedule editing enforces ownership and allows dates after applications", async () => {
   const f = await fixture();
   try {
     const id = await f.create({ product_url: "https://example.com/original" });
@@ -1331,13 +1331,29 @@ test("campaign link editing enforces ownership and preserves dates after applica
       (
         await f.req("brand", `/campaigns/${id}/details`, "PUT", {
           recruit_date: future(4),
+          final_date: future(12),
         })
       ).status,
-      409,
+      200,
     );
     row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
-    assert.equal(row.recruit_date, future(3));
+    assert.equal(row.recruit_date, future(4));
+    assert.equal(row.final_date, future(12));
+    assert.equal(row.final_due, deadline(future(12)));
     assert.equal(row.product_url, "https://example.com/updated");
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/details`, "PUT", {
+          recruit_date: future(13),
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (f.db.prepare("SELECT recruit_date FROM campaigns WHERE id=?").get(id) as any)
+        .recruit_date,
+      future(4),
+    );
   } finally {
     f.db.close();
   }
