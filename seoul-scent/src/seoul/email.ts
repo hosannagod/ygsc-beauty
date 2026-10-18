@@ -28,6 +28,35 @@ export function emailConfig(env: Env = process.env) {
   return { provider, from, replyTo, origin, dailyLimit, configured };
 }
 
+export async function sendPasswordResetEmail(
+  recipient: string,
+  token: string,
+  env: Env = process.env,
+  request: Fetch = fetch,
+) {
+  const config = emailConfig(env);
+  if (!config.configured || !validEmail(recipient))
+    throw new Error("Password reset email unavailable");
+  const link = `${config.origin}/password-reset#token=${encodeURIComponent(token)}`;
+  await checked(
+    await request("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      signal: AbortSignal.timeout(20_000),
+      headers: {
+        "api-key": env.BREVO_API_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "Seoul Scent", email: config.from },
+        to: [{ email: recipient }],
+        ...(config.replyTo ? { replyTo: { email: config.replyTo } } : {}),
+        subject: "[Seoul Scent] Reset your password / 비밀번호 재설정",
+        textContent: `English\n\nUse this link to set a new Seoul Scent password. It expires in 30 minutes and can only be used once. If you did not request this, you can ignore this email.\n\n${link}\n\n--------------------\n\n한국어\n\n아래 링크에서 새 비밀번호를 설정해 주세요. 링크는 30분 동안 한 번만 사용할 수 있습니다. 직접 요청하지 않았다면 이 메일을 무시해 주세요.\n\n${link}\n\nSeoul Scent`,
+      }),
+    }),
+  );
+}
+
 // Called inside the same transaction as selection. No past selections are backfilled.
 export function queueSelectionEmail(
   db: DB,
@@ -180,9 +209,9 @@ export function emailWorker(
         ).run();
         const recent = db
           .prepare(
-            "SELECT COUNT(*) AS n FROM email_attempts WHERE created_at>?",
+          "SELECT (SELECT COUNT(*) FROM email_attempts WHERE created_at>?) + (SELECT COUNT(*) FROM password_reset_mail_attempts WHERE created_at>?) AS n",
           )
-          .get(now - 86400_000) as any;
+          .get(now - 86400_000, now - 86400_000) as any;
         if (recent.n >= emailConfig(env).dailyLimit) return null;
         const row = db
           .prepare(

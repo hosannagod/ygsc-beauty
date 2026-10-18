@@ -41,6 +41,16 @@ export function openDb(path: string) {
     CREATE TABLE IF NOT EXISTS login_attempts (
       email TEXT PRIMARY KEY, failures INTEGER NOT NULL, locked_until INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS password_reset_throttle (
+      email_hash TEXT PRIMARY KEY, requested_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS password_reset_mail_attempts (
+      id INTEGER PRIMARY KEY, created_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS blocked_emails (
       email TEXT PRIMARY KEY, created_at INTEGER NOT NULL, actor_id INTEGER NOT NULL
     );

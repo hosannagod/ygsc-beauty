@@ -6,6 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { createHash, randomBytes } from "node:crypto";
 import { openDb, hashPassword, verifyPassword, type User } from "./db.js";
+import { emailConfig, sendPasswordResetEmail } from "./email.js";
 import { page } from "./views.js";
 
 const selectUser = "id, email, name, role, must_change_password, username";
@@ -18,6 +19,7 @@ export function createApp(
   production = false,
   publicOrigin?: string,
   allowedOrigins: readonly string[] = [],
+  mailFetch: typeof fetch = fetch,
 ) {
   const app = new Hono<{ Variables: { user: User | null } }>();
   app.use(
@@ -76,6 +78,9 @@ export function createApp(
         "/api/account",
         "/api/me",
         "/api/logout",
+        "/password-reset",
+        "/api/password-reset/request",
+        "/api/password-reset/confirm",
         "/health",
       ].includes(c.req.path) &&
       !c.req.path.startsWith("/assets/")
@@ -127,6 +132,12 @@ export function createApp(
     c.get("user")
       ? c.redirect("/dashboard")
       : c.html(page("register", undefined, language(c.req.header("Cookie")))),
+  );
+  app.get("/forgot-password", (c) =>
+    c.html(page("forgot-password", undefined, language(c.req.header("Cookie")))),
+  );
+  app.get("/password-reset", (c) =>
+    c.html(page("reset-password", undefined, language(c.req.header("Cookie")))),
   );
   app.get("/dashboard", (c) =>
     c.get("user")
@@ -429,6 +440,103 @@ export function createApp(
         ? "/account"
         : `/dashboard/${user.role}`,
     });
+  });
+  app.post("/api/password-reset/request", async (c) => {
+    const payload = await c.req.json().catch(() => null);
+    const email =
+      typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
+    if (
+      email.length > 254 ||
+      !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email)
+    )
+      return c.json({ error: "올바른 이메일 주소를 입력해 주세요." }, 400);
+    const now = Date.now();
+    const emailHash = digest(email);
+    const user = db
+      .prepare("SELECT id,email FROM users WHERE lower(email)=? AND role IN ('brand','influencer')")
+      .get(email) as { id: number; email: string } | undefined;
+    const config = emailConfig();
+    const token = db.transaction(() => {
+      db.prepare("DELETE FROM password_reset_tokens WHERE expires_at<=?").run(now);
+      db.prepare("DELETE FROM password_reset_throttle WHERE requested_at<?").run(
+        now - 86400_000,
+      );
+      db.prepare("DELETE FROM password_reset_mail_attempts WHERE created_at<?").run(
+        now - 86400_000,
+      );
+      const recent = db
+        .prepare("SELECT requested_at FROM password_reset_throttle WHERE email_hash=?")
+        .get(emailHash) as { requested_at: number } | undefined;
+      if (recent && recent.requested_at > now - 10 * 60_000) return "";
+      db.prepare(
+        "INSERT INTO password_reset_throttle(email_hash,requested_at) VALUES(?,?) ON CONFLICT(email_hash) DO UPDATE SET requested_at=excluded.requested_at",
+      ).run(emailHash, now);
+      if (!user || !config.configured) return "";
+      const attempts = db
+        .prepare(
+          "SELECT (SELECT COUNT(*) FROM email_attempts WHERE created_at>?) + (SELECT COUNT(*) FROM password_reset_mail_attempts WHERE created_at>?) AS n",
+        )
+        .get(now - 86400_000, now - 86400_000) as { n: number };
+      if (attempts.n >= config.dailyLimit) return "";
+      const raw = randomBytes(32).toString("hex");
+      db.prepare(
+        "INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET token_hash=excluded.token_hash,expires_at=excluded.expires_at",
+      ).run(user.id, digest(raw), now + 30 * 60_000);
+      db.prepare("INSERT INTO password_reset_mail_attempts(created_at) VALUES(?)").run(
+        now,
+      );
+      return raw;
+    })();
+    if (token && user) {
+      try {
+        await sendPasswordResetEmail(user.email, token, process.env, mailFetch);
+      } catch {
+        db.prepare("DELETE FROM password_reset_tokens WHERE user_id=? AND token_hash=?")
+          .run(user.id, digest(token));
+        db.prepare("DELETE FROM password_reset_throttle WHERE email_hash=? AND requested_at=?")
+          .run(emailHash, now);
+      }
+    }
+    return c.json({ success: true });
+  });
+  app.post("/api/password-reset/confirm", async (c) => {
+    const payload = await c.req.json().catch(() => null);
+    const token = payload?.token,
+      password = payload?.new_password;
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token))
+      return c.json({ error: "재설정 링크가 유효하지 않습니다." }, 400);
+    if (
+      typeof password !== "string" ||
+      password.length < 12 ||
+      password.length > 128 ||
+      password !== payload.confirm_password
+    )
+      return c.json(
+        { error: "새 비밀번호는 12~128자로 입력하고 확인 값과 일치해야 합니다." },
+        400,
+      );
+    const now = Date.now();
+    const changed = db.transaction(() => {
+      const row = db
+        .prepare(
+          "SELECT t.user_id,u.email,u.username FROM password_reset_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? AND t.expires_at>? AND u.role IN ('brand','influencer')",
+        )
+        .get(digest(token), now) as
+        | { user_id: number; email: string; username: string | null }
+        | undefined;
+      if (!row) return false;
+      db.prepare("UPDATE users SET password_hash=?,must_change_password=0 WHERE id=?")
+        .run(hashPassword(password), row.user_id);
+      db.prepare("DELETE FROM password_reset_tokens WHERE user_id=?").run(row.user_id);
+      db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.user_id);
+      for (const key of [row.email, row.username, `login:${row.user_id}`, `account:${row.user_id}`])
+        if (key) db.prepare("DELETE FROM login_attempts WHERE email=?").run(key);
+      return true;
+    })();
+    if (!changed)
+      return c.json({ error: "링크가 만료되었거나 이미 사용되었습니다. 다시 요청해 주세요." }, 400);
+    deleteCookie(c, cookie, { path: "/", secure: production });
+    return c.json({ success: true });
   });
   app.post("/api/logout", (c) => {
     const token = getCookie(c, cookie);

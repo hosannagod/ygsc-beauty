@@ -31,6 +31,55 @@ if (form)
       button.disabled = false;
     }
   });
+const resetRequestForm = document.querySelector("#reset-request-form");
+if (resetRequestForm)
+  resetRequestForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = resetRequestForm.querySelector("button"),
+      error = document.querySelector("#form-error"),
+      success = document.querySelector("#form-success");
+    button.disabled = true;
+    error.hidden = true;
+    success.hidden = true;
+    try {
+      await request("/api/password-reset/request", {
+        email: resetRequestForm.elements.email.value,
+      });
+      success.textContent = t(
+        "계정에 등록된 이메일이라면 재설정 링크를 보냈습니다. 받은편지함과 스팸함을 확인해 주세요.",
+      );
+      success.hidden = false;
+    } catch (e) {
+      error.textContent = e.message;
+      error.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+const resetForm = document.querySelector("#password-reset-form");
+if (resetForm) {
+  const token = new URLSearchParams(location.hash.slice(1)).get("token") || "";
+  history.replaceState(null, "", location.pathname);
+  resetForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = resetForm.querySelector("button"),
+      error = document.querySelector("#form-error");
+    button.disabled = true;
+    error.hidden = true;
+    try {
+      await request("/api/password-reset/confirm", {
+        token,
+        new_password: resetForm.elements.new_password.value,
+        confirm_password: resetForm.elements.confirm_password.value,
+      });
+      location.assign("/login");
+    } catch (e) {
+      error.textContent = e.message;
+      error.hidden = false;
+      button.disabled = false;
+    }
+  });
+}
 const logout = document.querySelector("#logout");
 if (logout)
   logout.addEventListener("click", async () => {

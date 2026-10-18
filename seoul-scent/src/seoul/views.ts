@@ -11,7 +11,7 @@ const escape = (value: string) =>
   );
 
 export function page(
-  kind: "login" | "register" | "dashboard" | "forbidden",
+  kind: "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "forbidden",
   user?: User,
   lang: Language = "ko",
 ) {
@@ -21,12 +21,16 @@ export function page(
     brand: t("브랜드"),
     influencer: t("인플루언서"),
   };
-  const auth = kind === "login" || kind === "register";
+  const auth = ["login", "register", "forgot-password", "reset-password"].includes(kind);
   const register = kind === "register";
   const title = auth
-    ? register
-      ? t("새로운 협업을 시작하세요")
-      : t("다시 만나서 반가워요")
+    ? kind === "forgot-password"
+      ? t("비밀번호 찾기")
+      : kind === "reset-password"
+        ? t("새 비밀번호 설정")
+        : register
+          ? t("새로운 협업을 시작하세요")
+          : t("다시 만나서 반가워요")
     : kind === "forbidden"
       ? t("접근 권한이 없습니다")
       : html`${escape(user!.name)}님, 안녕하세요`;
@@ -64,8 +68,9 @@ export function page(
               </p>
               <h2>${title}</h2>
               <p class="muted">
-                ${register ? t("가입 유형을 선택하고 계정을 만들어 주세요.") : t("계정에 로그인하여 협업을 이어가세요.")}
+                ${kind === "forgot-password" ? t("등록된 이메일로 재설정 링크를 보내드립니다.") : kind === "reset-password" ? t("새 비밀번호를 입력해 주세요.") : register ? t("가입 유형을 선택하고 계정을 만들어 주세요.") : t("계정에 로그인하여 협업을 이어가세요.")}
               </p>
+              ${kind === "forgot-password" ? html`<form id="reset-request-form"><label>${t("등록된 이메일")}<input name="email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com" /></label><p id="form-error" role="alert" hidden></p><p id="form-success" role="status" hidden></p><button class="primary" type="submit">${t("재설정 링크 받기")} <span>→</span></button></form><p class="note">${t("브랜드 아이디만 있고 이메일이 등록되지 않은 계정은 운영사에 문의해 주세요.")}</p><p class="switch"><a href="/login">${t("로그인으로 돌아가기")}</a></p>` : kind === "reset-password" ? html`<form id="password-reset-form"><label>${t("새 비밀번호")}<input name="new_password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label><label>${t("새 비밀번호 확인")}<input name="confirm_password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label><p id="form-error" role="alert" hidden></p><button class="primary" type="submit">${t("비밀번호 변경")} <span>→</span></button></form><p class="switch"><a href="/forgot-password">${t("새 링크 요청하기")}</a></p>` : html`
               <form id="auth-form" data-mode="${kind}">
                 ${register ? t('<fieldset><legend>가입 유형</legend><div class="role-options"><label><input type="radio" name="role" value="brand" checked> 브랜드</label><label><input type="radio" name="role" value="influencer"> 인플루언서</label></div></fieldset><div id="brand-fields"><label>브랜드명<input name="brand_name" autocomplete="organization" required minlength="2" maxlength="60" placeholder="브랜드명을 입력해 주세요"></label><label>담당자명<input name="contact_name" autocomplete="name" required minlength="2" maxlength="60" placeholder="담당자 성함을 입력해 주세요"></label></div><div id="influencer-fields" hidden><label>성함<input name="name" autocomplete="name" disabled minlength="2" maxlength="60" placeholder="성함을 입력해 주세요"></label></div><label>연락처<input name="phone" type="tel" autocomplete="tel" required minlength="8" maxlength="30" placeholder="010-1234-5678"></label>') : ""}
                 <label
@@ -94,7 +99,9 @@ export function page(
               <p class="switch">
                 ${register ? t('이미 계정이 있나요? <a href="/login">로그인</a>') : t('처음 방문하셨나요? <a href="/register">회원가입</a>')}
               </p>
+              ${kind === "login" ? html`<p class="switch"><a href="/forgot-password">${t("비밀번호를 잊으셨나요?")}</a></p>` : ""}
               ${register ? t('<p class="note">운영사 계정은 별도로 발급됩니다.</p>') : ""}
+              `}
             </div>
           </section>
         </main>`
