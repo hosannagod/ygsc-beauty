@@ -860,14 +860,26 @@ export function registerWorkflow(
   );
   app.post(
     "/api/work/campaigns/:id/close",
-    wrap((c) => {
+    wrap(async (c) => {
       const u = current(c),
-        campaign = campaignFor(db, id(c), u, true);
+        campaign = campaignFor(db, id(c), u, true),
+        b = await body(c);
       if (campaign.status !== "recruiting")
         fail("모집 중인 캠페인만 마감할 수 있습니다.", 409);
-      db.prepare("UPDATE campaigns SET status='closed' WHERE id=?").run(
-        campaign.id,
-      );
+      if (campaign.recruit_due > Date.now() && b.confirm_close !== true)
+        fail("마감일 전 모집을 종료하려면 확인이 필요합니다.", 409);
+      db.transaction(() => {
+        db.prepare("UPDATE campaigns SET status='closed' WHERE id=?").run(
+          campaign.id,
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_close',?,?)",
+        ).run(
+          u.id,
+          JSON.stringify({ campaign_id: campaign.id, recruit_date: campaign.recruit_date }),
+          Date.now(),
+        );
+      })();
       return c.json({ success: true });
     }),
   );
@@ -882,9 +894,14 @@ export function registerWorkflow(
         campaign.recruit_due <= Date.now()
       )
         fail("모집 마감일이 남은 캠페인만 다시 열 수 있습니다.", 409);
-      db.prepare("UPDATE campaigns SET status='recruiting' WHERE id=?").run(
-        campaign.id,
-      );
+      db.transaction(() => {
+        db.prepare("UPDATE campaigns SET status='recruiting' WHERE id=?").run(
+          campaign.id,
+        );
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_reopen',?,?)",
+        ).run(u.id, JSON.stringify({ campaign_id: campaign.id }), Date.now());
+      })();
       return c.json({ success: true });
     }),
   );

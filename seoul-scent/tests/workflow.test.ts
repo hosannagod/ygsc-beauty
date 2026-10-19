@@ -821,7 +821,7 @@ test("full lifecycle with revision history, consent, notifications, completion e
       (await f.req("brand", `/campaigns/${c}/complete`, "POST", {})).status,
       409,
     );
-    await f.req("brand", `/campaigns/${c}/close`, "POST", {});
+    await f.req("brand", `/campaigns/${c}/close`, "POST", { confirm_close: true });
     assert.equal(
       (await f.req("brand", `/campaigns/${c}/complete`, "POST", {})).status,
       200,
@@ -1363,7 +1363,8 @@ test("a manually closed campaign can reopen before its recruitment deadline", as
   const f = await fixture();
   try {
     const id = await f.create();
-    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 200);
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 409);
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", { confirm_close: true })).status, 200);
     assert.equal(
       ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any).campaign.status,
       "closed",
@@ -1375,7 +1376,10 @@ test("a manually closed campaign can reopen before its recruitment deadline", as
       "recruiting",
     );
     await f.apply(id);
-    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 200);
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", { confirm_close: true })).status, 200);
+    const log = f.db.prepare("SELECT action,actor_id FROM admin_audit WHERE action IN ('campaign_close','campaign_reopen') ORDER BY id").all() as any[];
+    assert.deepEqual(log.map((row) => row.action), ["campaign_close", "campaign_reopen", "campaign_close"]);
+    assert.ok(log.every((row) => row.actor_id === f.ids.brand));
     f.db.prepare("UPDATE campaigns SET recruit_due=? WHERE id=?").run(Date.now() - 1, id);
     assert.equal((await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status, 409);
   } finally {
@@ -1664,7 +1668,12 @@ test("campaign editing validates all fields, retains participant conditions and 
     );
     assert.equal(
       (await f.req("brand", path, "PUT", { final_date: future(13) })).status,
-      409,
+      200,
+    );
+    assert.equal(
+      (f.db.prepare("SELECT final_date FROM campaigns WHERE id=?").get(id) as any)
+        .final_date,
+      future(13),
     );
     assert.equal(
       (await f.req("otherbrand", path, "PUT", { title: "다른 브랜드 수정" }))
@@ -1702,7 +1711,7 @@ test("campaign editing validates all fields, retains participant conditions and 
     row = f.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id) as any;
     assert.equal(row.capacity, 3);
     assert.equal(row.compensation, 100000);
-    assert.equal(row.final_date, future(12));
+    assert.equal(row.final_date, future(13));
     f.db.prepare("UPDATE campaigns SET status='completed' WHERE id=?").run(id);
     assert.equal(
       (await f.req("brand", path, "PUT", { title: "종료 후 수정" })).status,

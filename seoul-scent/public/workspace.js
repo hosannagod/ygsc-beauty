@@ -1837,7 +1837,7 @@
         if (
           !(await confirmAction(
             button.dataset.campaignAction === "close"
-              ? t("새 지원을 받지 않도록 모집을 마감할까요?")
+              ? t("설정한 모집 마감일 전이라도 지금 즉시 모집을 마감할까요? 새 지원을 받을 수 없게 됩니다.")
               : button.dataset.campaignAction === "reopen"
                 ? t("모집 마감일 전까지 다시 지원을 받을까요?")
               : t("모든 활동을 확인하고 캠페인을 종료할까요?"),
@@ -1848,7 +1848,7 @@
         await api(
           `/campaigns/${button.dataset.id}/${button.dataset.campaignAction}`,
           "POST",
-          {},
+          button.dataset.campaignAction === "close" ? { confirm_close: true } : {},
         );
         toast(t("처리되었습니다."));
         await render();
