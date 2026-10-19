@@ -594,9 +594,13 @@ export function registerWorkflow(
           b.review_required === undefined
             ? !!campaign.review_required
             : b.review_required;
-        if (locked && review !== !!campaign.review_required)
+        if (
+          locked &&
+          review !== !!campaign.review_required &&
+          !(u.role === "admin" && campaign.status === "recruiting" && selected === 0)
+        )
           fail(
-            "지원자가 있거나 모집이 마감된 캠페인의 검수 방식은 변경할 수 없습니다.",
+            "선정자가 있거나 모집이 마감된 캠페인의 검수 방식은 변경할 수 없습니다. 지원자가 있는 경우 관리자만 변경할 수 있습니다.",
             409,
           );
         const startDate = b.recruit_start_date ?? campaign.recruit_start_date,

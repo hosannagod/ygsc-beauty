@@ -1359,6 +1359,36 @@ test("campaign link and schedule editing enforces ownership and allows dates aft
   }
 });
 
+test("admin can disable draft review after applications but before any selection", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create();
+    const applicationId = await f.apply(id);
+    const path = `/campaigns/${id}/details`;
+    assert.equal(
+      (await f.req("brand", path, "PUT", { review_required: false })).status,
+      409,
+    );
+    assert.equal(
+      (await f.req("admin", path, "PUT", { review_required: false })).status,
+      200,
+    );
+    let row = f.db.prepare("SELECT review_required,draft_date,draft_due,final_date,final_due FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.review_required, 0);
+    assert.equal(row.draft_date, row.final_date);
+    assert.equal(row.draft_due, row.final_due);
+    f.db.prepare("UPDATE applications SET status='selected' WHERE id=?").run(applicationId);
+    assert.equal(
+      (await f.req("admin", path, "PUT", { review_required: true })).status,
+      409,
+    );
+    row = f.db.prepare("SELECT review_required FROM campaigns WHERE id=?").get(id) as any;
+    assert.equal(row.review_required, 0);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("a manually closed campaign can reopen before its recruitment deadline", async () => {
   const f = await fixture();
   try {

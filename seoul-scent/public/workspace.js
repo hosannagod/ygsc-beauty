@@ -699,6 +699,11 @@
       if (c.status !== "completed") {
         const locked =
           !c.is_draft && (applications.length > 0 || c.status !== "recruiting");
+        const canEditReview =
+          !locked ||
+          (role === "admin" &&
+            c.status === "recruiting" &&
+            applications.every((a) => ["applied", "rejected"].includes(a.status)));
         root.innerHTML += html`<section class="panel">
           <details>
             <summary>캠페인 편집</summary>
@@ -731,7 +736,7 @@
                   type="checkbox"
                   name="review_required"
                   ${c.review_required ? "checked" : ""}
-                  ${locked ? "disabled" : ""}
+                  ${canEditReview ? "" : "disabled"}
                 /><span
                   >초안 검수 필요 (해제하면 최종 SNS 링크만 제출)</span
                 ></label
@@ -740,7 +745,7 @@
               <div class="form-grid">
                 ${input("recruit_start_date", t("모집 시작일"), "date", c.status === "recruiting" || c.is_draft ? "required" : "required readonly", c.recruit_start_date)}${input("recruit_date", t("모집 마감일"), "date", c.status === "recruiting" || c.is_draft ? "required" : "required readonly", c.recruit_date)}${input("draft_date", t("초안 제출 마감일"), "date", c.status === "recruiting" || c.is_draft ? "required" : "required readonly", c.draft_date)}${input("final_date", t("최종 업로드 마감일"), "date", c.status === "recruiting" || c.is_draft ? "required" : "required readonly", c.final_date)}
               </div>
-              ${locked ? t('<p class="note left">모집 중에는 지원자가 있어도 일정을 수정할 수 있습니다. 지원자가 있거나 모집이 마감되면 보상 조건과 검수 방식은 변경할 수 없습니다.</p>') : ""}
+              ${locked ? t('<p class="note left">모집 중에는 지원자가 있어도 일정을 수정할 수 있습니다. 보상 조건은 지원자가 생기면 변경할 수 없습니다. 초안 검수 방식은 선정 전까지 관리자만 변경할 수 있습니다.</p>') : ""}
               <p class="note left">
                 모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시
                 진행 중인 지원자에게 알림이 전달됩니다.
