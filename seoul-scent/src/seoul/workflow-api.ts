@@ -872,6 +872,23 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/campaigns/:id/reopen",
+    wrap((c) => {
+      const u = current(c),
+        campaign = campaignFor(db, id(c), u, true);
+      if (
+        campaign.is_draft ||
+        campaign.status !== "closed" ||
+        campaign.recruit_due <= Date.now()
+      )
+        fail("모집 마감일이 남은 캠페인만 다시 열 수 있습니다.", 409);
+      db.prepare("UPDATE campaigns SET status='recruiting' WHERE id=?").run(
+        campaign.id,
+      );
+      return c.json({ success: true });
+    }),
+  );
+  app.post(
     "/api/work/campaigns/:id/complete",
     wrap((c) => {
       const u = current(c),

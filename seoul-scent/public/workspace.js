@@ -837,7 +837,7 @@
                   모집 마감하기
                 </button>`
               : !c.is_draft && c.status === "closed"
-                ? html`<button
+                ? html`${c.recruit_due > Date.now() ? `<button class="secondary" data-campaign-action="reopen" data-id="${id}">${t("모집 다시 열기")}</button>` : ""}<button
                       class="secondary"
                       data-campaign-action="complete"
                       data-id="${id}"
@@ -1838,6 +1838,8 @@
           !(await confirmAction(
             button.dataset.campaignAction === "close"
               ? t("새 지원을 받지 않도록 모집을 마감할까요?")
+              : button.dataset.campaignAction === "reopen"
+                ? t("모집 마감일 전까지 다시 지원을 받을까요?")
               : t("모든 활동을 확인하고 캠페인을 종료할까요?"),
           ))
         )

@@ -1359,6 +1359,30 @@ test("campaign link and schedule editing enforces ownership and allows dates aft
   }
 });
 
+test("a manually closed campaign can reopen before its recruitment deadline", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create();
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 200);
+    assert.equal(
+      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any).campaign.status,
+      "closed",
+    );
+    assert.equal((await f.req("otherbrand", `/campaigns/${id}/reopen`, "POST", {})).status, 403);
+    assert.equal((await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status, 200);
+    assert.equal(
+      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any).campaign.status,
+      "recruiting",
+    );
+    await f.apply(id);
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 200);
+    f.db.prepare("UPDATE campaigns SET recruit_due=? WHERE id=?").run(Date.now() - 1, id);
+    assert.equal((await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("existing campaigns migrate once without losing applications or schedule data", async () => {
   const f = await fixture();
   try {
