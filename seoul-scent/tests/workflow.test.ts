@@ -1955,6 +1955,8 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     ).json()) as any;
     assert.equal(detail.campaign.images.length, 4);
     const images = detail.campaign.images;
+    let listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
+    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, images[0].id);
     const imagePath = images[0].url.replace("/api/work", "");
     const image = await f.req("influencer", imagePath);
     assert.equal(image.status, 200);
@@ -2017,6 +2019,8 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     ).json()) as any;
     assert.equal(detail.campaign.images.length, 2);
     assert.equal(detail.campaign.images[0].id, images[2].id);
+    listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
+    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, images[2].id);
     assert.equal((await f.req("influencer", imagePath)).status, 404);
     assert.equal(
       (await f.req("brand", path, "PUT", { images: [] })).status,
@@ -2032,6 +2036,8 @@ test("campaign photos enforce limits and ownership, support replacement and roll
       ).n,
       0,
     );
+    listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
+    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, null);
   } finally {
     f.db.close();
   }

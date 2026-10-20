@@ -514,6 +514,27 @@ nav {
 .card-top .muted {
   font-size: 12px;
 }
+.campaign-card-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+.campaign-card-thumbnail {
+  display: block;
+  width: 116px;
+  height: 116px;
+  margin-top: 22px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #f4f6f0;
+}
+.campaign-card-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .campaign-card h3 {
   font-size: 21px;
   letter-spacing: -0.6px;
@@ -1085,6 +1106,10 @@ summary {
   }
   .campaign-card {
     padding: 22px;
+  }
+  .campaign-card-thumbnail {
+    width: 88px;
+    height: 88px;
   }
 }
 

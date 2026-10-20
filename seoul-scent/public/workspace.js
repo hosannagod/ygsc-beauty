@@ -244,9 +244,14 @@
           >${esc(c.brand_name)}</span
         >
       </div>
-      <a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a>
-      <p class="product">${esc(c.product)}</p>
-      <p class="muted clamp">${esc(c.description)}</p>
+      <div class="campaign-card-intro">
+        <div>
+          <a href="/campaigns/${c.id}"><h3>${esc(c.title)}</h3></a>
+          <p class="product">${esc(c.product)}</p>
+          <p class="muted clamp">${esc(c.description)}</p>
+        </div>
+        ${c.thumbnail_id ? `<a class="campaign-card-thumbnail" href="/campaigns/${c.id}" aria-label="${esc(c.title)} ${t("상세 보기 →")}"><img src="/api/work/campaigns/${c.id}/images/${c.thumbnail_id}" alt="${esc(c.title)}" loading="lazy" decoding="async"></a>` : ""}
+      </div>
       <div class="campaign-meta">
         <span
           >${c.pay_type === "paid" ? html`${money(c.compensation)}원` : t("제품 제공")}</span

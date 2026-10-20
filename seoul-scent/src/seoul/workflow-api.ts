@@ -353,6 +353,7 @@ export function registerWorkflow(
             ? "WHERE c.deleted_at=0 AND c.is_draft=0"
             : "WHERE c.deleted_at=0";
       const query = db.prepare(`SELECT c.*,u.name AS brand_name,
+      (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id) AS applicant_count,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id AND a.status NOT IN ('applied','rejected')) AS selected_count,
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id AND a.status='completed') AS completed_count
