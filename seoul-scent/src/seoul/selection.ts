@@ -52,11 +52,12 @@ export function finalizeSelection(
     if (count + ids.length > campaign.capacity)
       fail("남은 모집 인원보다 많이 선택했습니다.", 409);
     const note =
-      "캠페인 참여자로 선정되었습니다. 내 캠페인에서 배송지를 확인하거나 수정하고, 필수 동의와 참여 의사·콘텐츠 가이드·기한 내 업로드 항목을 체크한 뒤 저장해 주세요. 기존 배송지도 이번 캠페인에서 다시 확인해야 제품 발송이 가능합니다.";
+      "캠페인 참여자로 선정되었습니다. 선정 후 72시간 이내에 내 캠페인에서 배송지를 확인하거나 수정하고, 필수 동의와 참여 의사·콘텐츠 가이드·기한 내 업로드 항목을 체크한 뒤 저장해 주세요. 기존 배송지도 이번 캠페인에서 다시 확인해야 제품 발송이 가능합니다.";
+    const selectedAt = Date.now();
     for (const a of applicants) {
       db.prepare(
-        "UPDATE applications SET status='selected',updated_at=CURRENT_TIMESTAMP WHERE id=?",
-      ).run(a.id);
+        "UPDATE applications SET status='selected',participation_due=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      ).run(selectedAt + 259200000, a.id);
       event(db, a, user.id, "selected", note);
       notify(
         db,

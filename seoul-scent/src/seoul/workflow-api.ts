@@ -666,8 +666,8 @@ export function registerWorkflow(
           finalDate !== campaign.final_date
         )
           db.prepare(
-            "UPDATE applications SET participation_confirmed_at=0 WHERE campaign_id=? AND status='selected'",
-          ).run(campaign.id);
+            "UPDATE applications SET participation_confirmed_at=0,participation_due=? WHERE campaign_id=? AND status='selected'",
+          ).run(Date.now() + 259200000, campaign.id);
         if (b.publish === true) {
           if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
           recruitmentDates(

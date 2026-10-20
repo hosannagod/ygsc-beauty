@@ -141,12 +141,19 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       ["address_detail", "TEXT NOT NULL DEFAULT ''"],
       ["shipping_address_at", "INTEGER NOT NULL DEFAULT 0"],
       ["participation_confirmed_at", "INTEGER NOT NULL DEFAULT 0"],
+      ["participation_due", "INTEGER NOT NULL DEFAULT 0"],
       ["secondary_use_consent", "INTEGER NOT NULL DEFAULT 0"],
       ["original_delivery_consent", "INTEGER NOT NULL DEFAULT 0"],
     ];
     for (const [name, definition] of added)
       if (!applications.some((c) => c.name === name))
         db.exec(`ALTER TABLE applications ADD COLUMN ${name} ${definition}`);
+    db.exec(`UPDATE applications SET participation_due=(
+      SELECT MIN(created_at)+259200000 FROM application_events
+      WHERE application_id=applications.id AND status='selected'
+    ) WHERE participation_due=0 AND status='selected' AND EXISTS (
+      SELECT 1 FROM application_events WHERE application_id=applications.id AND status='selected'
+    )`);
     db.exec(
       "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1 WHERE consent_version='secondary-use-v1' AND consent_at>0; INSERT OR IGNORE INTO schema_version VALUES(4)",
     );
