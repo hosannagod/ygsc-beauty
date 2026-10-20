@@ -725,5 +725,15 @@
   "선정된 캠페인에서 기본 배송지를 불러옵니다. 실제 배송지는 참여 내역에서 확인하고 저장해 주세요.": "Your default address is loaded in selected campaigns. Confirm and save the address on each application before shipping.",
   "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요.": "Your default address has been loaded. Save it to use it for this campaign.",
   "아직 선정된 캠페인이 없습니다.": "No campaigns have selected you yet.",
-  "선정 대기 중인 지원이 없습니다.": "No applications are awaiting selection."
+  "선정 대기 중인 지원이 없습니다.": "No applications are awaiting selection.",
+  "앰버서더 수료증": "Ambassador completion certificate",
+  "이력·수료증": "History · certificate",
+  "이력·수료증 보기": "View history · certificate",
+  "캠페인 참여와 콘텐츠 업로드를 완료한 이력이 1건 이상이면 수료증을 발급할 수 있습니다. 이전 프로젝트의 완료 이력도 포함됩니다.": "You can issue a certificate after completing at least one campaign and its content upload. Completed past projects are included.",
+  "수료증에 표시할 완료 캠페인": "Completed campaigns on certificate",
+  "수료증 보기 / PDF 저장": "View certificate / save PDF",
+  "수료증 발급 / PDF 저장": "Issue certificate / save PDF",
+  "콘텐츠 업로드와 완료 처리가 끝난 활동만 표시됩니다.": "Only activities with completed content uploads are shown.",
+  "발급된 수료증 보기 / PDF 저장": "View issued certificate / save PDF",
+  "아직 발급 대상이 아닙니다.": "Not yet eligible for a certificate."
 }

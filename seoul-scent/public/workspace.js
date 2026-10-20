@@ -587,7 +587,9 @@
         <div class="form-grid">
           ${input("recruit_start_date", t("모집 시작일"), "date", "required", today())}${input("recruit_date", t("모집 마감일"), "date", "required")}${input("draft_date", t("초안 제출 마감일"), "date", "required")}${input("final_date", t("최종 업로드 마감일"), "date", "required")}
         </div>
-        <p class="note left">${t("임시저장 후 상세 화면에서 내용을 검토하고 게시할 수 있습니다. 게시 전에는 인플루언서에게 보이지 않습니다.")}</p>
+        <p class="note left">
+          ${t("임시저장 후 상세 화면에서 내용을 검토하고 게시할 수 있습니다. 게시 전에는 인플루언서에게 보이지 않습니다.")}
+        </p>
         ${photoEditor()}${englishEditor()}${submit(t("임시저장"))}
       </form>`;
   }
@@ -710,7 +712,9 @@
           !locked ||
           (role === "admin" &&
             c.status === "recruiting" &&
-            applications.every((a) => ["applied", "rejected"].includes(a.status)));
+            applications.every((a) =>
+              ["applied", "rejected"].includes(a.status),
+            ));
         root.innerHTML += html`<section class="panel">
           <details>
             <summary>캠페인 편집</summary>
@@ -770,12 +774,20 @@
           (a) => !!a.participation_confirmed_at,
         ).length,
         awaitingConfirmation = selectedApplications.filter(
-          (a) => a.status === "selected" && !a.participation_confirmed_at && (!a.participation_due || a.participation_due >= Date.now()),
+          (a) =>
+            a.status === "selected" &&
+            !a.participation_confirmed_at &&
+            (!a.participation_due || a.participation_due >= Date.now()),
         ).length,
         overdueConfirmation = selectedApplications.filter(
-          (a) => a.status === "selected" && !a.participation_confirmed_at && a.participation_due > 0 && a.participation_due < Date.now(),
+          (a) =>
+            a.status === "selected" &&
+            !a.participation_confirmed_at &&
+            a.participation_due > 0 &&
+            a.participation_due < Date.now(),
         ).length,
-        withoutConfirmationRecord = selected - confirmed - awaitingConfirmation - overdueConfirmation,
+        withoutConfirmationRecord =
+          selected - confirmed - awaitingConfirmation - overdueConfirmation,
         review = applications.filter((a) =>
           ["draft_submitted", "final_submitted"].includes(a.status),
         ).length;
@@ -788,7 +800,9 @@
         <div class="participation-counts" aria-label="${t("참여 확인")}">
           <span class="muted">${t("참여 확인")}</span>
           <span>${t("확인 완료")} <strong>${confirmed}</strong></span>
-          <span>${t("확인 대기")} <strong>${awaitingConfirmation}</strong></span>
+          <span
+            >${t("확인 대기")} <strong>${awaitingConfirmation}</strong></span
+          >
           ${overdueConfirmation ? `<span>${t("확인 기한 경과")} <strong>${overdueConfirmation}</strong></span>` : ""}
           ${withoutConfirmationRecord ? `<span>${t("기존 진행 · 확인 기록 없음")} <strong>${withoutConfirmationRecord}</strong></span>` : ""}
         </div>
@@ -1344,11 +1358,11 @@
         ${p.blacklisted ? t('<div class="warning">누적 노쇼로 신규 캠페인 지원이 영구 제한됩니다.</div>') : p.blocked_until > Date.now() ? html`<div class="warning">지원 제한 종료: ${datetime(p.blocked_until)}</div>` : ""}
         ${promotionPanel(p, onboarding)} ${historyCards(history)}
         <section class="panel">
-          <h2>${t("활동증명서")}</h2>
+          <h2>${t("앰버서더 수료증")}</h2>
           <p>
-            ${t("브랜드가 완료 처리한 캠페인이 1개 이상이면 발급할 수 있습니다.")}
+            ${t("캠페인 참여와 콘텐츠 업로드를 완료한 이력이 1건 이상이면 수료증을 발급할 수 있습니다. 이전 프로젝트의 완료 이력도 포함됩니다.")}
           </p>
-          ${certificate.eligible ? `<button class="primary" data-certificate>${t("활동증명서 발급")}</button>` : `<p class="muted">${t("아직 발급 조건을 충족하지 않았습니다.")}</p>`}
+          ${certificate.eligible ? `<p><strong>${t("수료증에 표시할 완료 캠페인")} · ${certificate.completed_count}${t("건")}</strong></p><ul class="certificate-projects">${certificate.activities.map((a) => `<li>${esc(a.title)}</li>`).join("")}</ul><button class="primary" data-certificate>${t(certificate.certificate_url ? "수료증 보기 / PDF 저장" : "수료증 발급 / PDF 저장")}</button>` : `<p class="muted">${t("아직 발급 조건을 충족하지 않았습니다.")}</p>`}
         </section>
         <form class="panel editor" data-task="profile">
           <p class="note left">
@@ -1483,11 +1497,11 @@
             <th>역할</th>
             <th>${t("등급 · 완료")}${gradeInfo()}</th>
             <th>노쇼 · 제한</th>
-            <th>이력</th>
+            <th>${t("이력·수료증")}</th>
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(t(u.nationality || (u.role === "influencer" ? "미등록" : "—")))}</td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">이력 보기</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(t(u.nationality || (u.role === "influencer" ? "미등록" : "—")))}</td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">${t("이력·수료증 보기")}</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };
@@ -1786,7 +1800,9 @@
           await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);
           break;
         case "campaign-publish":
-          await api(`/campaigns/${form.dataset.id}/details`, "PUT", { publish: true });
+          await api(`/campaigns/${form.dataset.id}/details`, "PUT", {
+            publish: true,
+          });
           toast(t("게시되었습니다."));
           await render();
           return;
@@ -1858,10 +1874,12 @@
         if (
           !(await confirmAction(
             button.dataset.campaignAction === "close"
-              ? t("설정한 모집 마감일 전이라도 지금 즉시 모집을 마감할까요? 새 지원을 받을 수 없게 됩니다.")
+              ? t(
+                  "설정한 모집 마감일 전이라도 지금 즉시 모집을 마감할까요? 새 지원을 받을 수 없게 됩니다.",
+                )
               : button.dataset.campaignAction === "reopen"
                 ? t("모집 마감일 전까지 다시 지원을 받을까요?")
-              : t("모든 활동을 확인하고 캠페인을 종료할까요?"),
+                : t("모든 활동을 확인하고 캠페인을 종료할까요?"),
           ))
         )
           return;
@@ -1869,7 +1887,9 @@
         await api(
           `/campaigns/${button.dataset.id}/${button.dataset.campaignAction}`,
           "POST",
-          button.dataset.campaignAction === "close" ? { confirm_close: true } : {},
+          button.dataset.campaignAction === "close"
+            ? { confirm_close: true }
+            : {},
         );
         toast(t("처리되었습니다."));
         await render();
@@ -1881,6 +1901,16 @@
       if (button.hasAttribute("data-certificate")) {
         button.disabled = true;
         const certificate = await api("/certificate", "POST", {});
+        location.assign(certificate.url);
+        return;
+      }
+      if (button.dataset.adminCertificate) {
+        button.disabled = true;
+        const certificate = await api(
+          `/admin/users/${button.dataset.adminCertificate}/certificate`,
+          "POST",
+          {},
+        );
         location.assign(certificate.url);
         return;
       }
@@ -1931,7 +1961,7 @@
         const person = managedUsers.find(
           (u) => String(u.id) === button.dataset.history,
         );
-        const { applications, history } = await api(
+        const { applications, history, certificate } = await api(
           `/admin/users/${button.dataset.history}/history`,
         );
         const dialog = document.querySelector("#influencer-detail");
@@ -1990,6 +2020,14 @@
                 </dd>
               </div>
             </dl>
+            <section class="panel certificate-admin">
+              <h3>${t("앰버서더 수료증")}</h3>
+              <p>
+                ${t("완료 캠페인")} ${certificate.completed_count}${t("건")} ·
+                ${t("콘텐츠 업로드와 완료 처리가 끝난 활동만 표시됩니다.")}
+              </p>
+              ${certificate.eligible ? `<ul class="certificate-projects">${certificate.activities.map((a) => `<li>${esc(a.title)}</li>`).join("")}</ul><button class="primary" data-admin-certificate="${person.id}">${t(certificate.certificate_url ? "발급된 수료증 보기 / PDF 저장" : "수료증 발급 / PDF 저장")}</button>` : `<p class="muted">${t("아직 발급 대상이 아닙니다.")}</p>`}
+            </section>
             <details class="detail-history">
               <summary>${t("프로필 정보 수정")}</summary>
               <form

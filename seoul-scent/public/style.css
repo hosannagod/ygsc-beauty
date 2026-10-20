@@ -1477,3 +1477,5 @@ dialog.influencer-detail {
     grid-row: 5;
   }
 }
+
+.certificate-projects{margin:12px 0 20px;padding-left:22px;display:grid;gap:8px;line-height:1.55}.certificate-projects li{overflow-wrap:anywhere}.certificate-admin{margin:20px 0}.certificate-admin h3{margin-top:0}

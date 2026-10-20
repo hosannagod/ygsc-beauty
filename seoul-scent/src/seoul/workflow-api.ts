@@ -14,7 +14,7 @@ import {
 import {
   certificatePage,
   issueCertificate,
-  completedActivities,
+  certificateSummary,
 } from "./certificate.js";
 import {
   parseCampaignImages,
@@ -209,14 +209,36 @@ export function registerWorkflow(
     "/api/work/certificate",
     wrap((c) => {
       const u = role(c, "influencer");
-      const count = completedActivities(db, u.id).length;
-      return c.json({ eligible: count >= 1, completed_count: count });
+      return c.json(certificateSummary(db, u.id));
     }),
   );
   app.post(
     "/api/work/certificate",
     wrap((c) => {
       const certificate = issueCertificate(db, role(c, "influencer"));
+      return c.json({ url: `/certificates/${certificate.id}` });
+    }),
+  );
+  app.post(
+    "/api/work/admin/users/:id/certificate",
+    wrap((c) => {
+      const actor = role(c, "admin");
+      const person = db
+        .prepare("SELECT id,name,email,role FROM users WHERE id=?")
+        .get(id(c)) as User | undefined;
+      if (!person) return fail("계정을 찾을 수 없습니다.", 404);
+      if (person.role !== "influencer")
+        fail("인플루언서 계정만 발급할 수 있습니다.", 409);
+      const certificate = issueCertificate(db, person);
+      db.prepare(
+        "INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)",
+      ).run(
+        actor.id,
+        person.id,
+        "certificate_issue",
+        certificate.id,
+        Date.now(),
+      );
       return c.json({ url: `/certificates/${certificate.id}` });
     }),
   );
@@ -227,7 +249,7 @@ export function registerWorkflow(
       const certificate = db
         .prepare("SELECT * FROM activity_certificates WHERE id=?")
         .get(c.req.param("id")) as any;
-      if (!certificate) fail("활동증명서를 찾을 수 없습니다.", 404);
+      if (!certificate) fail("수료증을 찾을 수 없습니다.", 404);
       if (u.role !== "admin" && certificate.user_id !== u.id)
         fail("접근 권한이 없습니다.", 403);
       return c.html(certificatePage(certificate));
@@ -600,7 +622,11 @@ export function registerWorkflow(
         if (
           locked &&
           review !== !!campaign.review_required &&
-          !(u.role === "admin" && campaign.status === "recruiting" && selected === 0)
+          !(
+            u.role === "admin" &&
+            campaign.status === "recruiting" &&
+            selected === 0
+          )
         )
           fail(
             "선정자가 있거나 모집이 마감된 캠페인의 검수 방식은 변경할 수 없습니다. 지원자가 있는 경우 관리자만 변경할 수 있습니다.",
@@ -883,7 +909,10 @@ export function registerWorkflow(
           "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_close',?,?)",
         ).run(
           u.id,
-          JSON.stringify({ campaign_id: campaign.id, recruit_date: campaign.recruit_date }),
+          JSON.stringify({
+            campaign_id: campaign.id,
+            recruit_date: campaign.recruit_date,
+          }),
           Date.now(),
         );
       })();
@@ -1226,13 +1255,18 @@ export function registerWorkflow(
       const message = text(b.message, "콘텐츠 가이드 메일", 20, 12000),
         expected = integer(b.expected_count, "발송 대상 인원", 1, 500);
       const result = db.transaction(() => {
-        const recipients = db.prepare(
-          `SELECT a.id,u.email FROM applications a JOIN users u ON u.id=a.influencer_id
+        const recipients = db
+          .prepare(
+            `SELECT a.id,u.email FROM applications a JOIN users u ON u.id=a.influencer_id
            WHERE a.campaign_id=? AND a.status='shipping' AND a.tracking_number!=''
            ORDER BY a.id`,
-        ).all(campaign.id) as { id: number; email: string }[];
+          )
+          .all(campaign.id) as { id: number; email: string }[];
         if (recipients.length !== expected)
-          fail("배송 대상 인원이 변경됐습니다. 명단을 다시 확인해 주세요.", 409);
+          fail(
+            "배송 대상 인원이 변경됐습니다. 명단을 다시 확인해 주세요.",
+            409,
+          );
         const now = Date.now();
         const insert = db.prepare(
           `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
@@ -1251,7 +1285,12 @@ export function registerWorkflow(
           ).changes;
         db.prepare(
           "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,?,?,?)",
-        ).run(u.id, "campaign_guide_email", `campaign:${campaign.id};queued:${queued}`, now);
+        ).run(
+          u.id,
+          "campaign_guide_email",
+          `campaign:${campaign.id};queued:${queued}`,
+          now,
+        );
         return { recipients: recipients.length, queued };
       })();
       return c.json(result);
@@ -1264,9 +1303,11 @@ export function registerWorkflow(
         campaign = campaignFor(db, id(c), u, true);
       return c.json({
         campaign_id: campaign.id,
-        counts: db.prepare(
-          "SELECT status,COUNT(*) AS count FROM email_outbox WHERE event_key LIKE ? GROUP BY status",
-        ).all(`content-guide:${campaign.id}:%`),
+        counts: db
+          .prepare(
+            "SELECT status,COUNT(*) AS count FROM email_outbox WHERE event_key LIKE ? GROUP BY status",
+          )
+          .all(`content-guide:${campaign.id}:%`),
       });
     }),
   );
@@ -1992,7 +2033,9 @@ export function registerWorkflow(
               )
               .get(user.id, user.id);
             const applications = db
-              .prepare("SELECT id,status,participation_confirmed_at,shipping_address_at,tracking_number FROM applications WHERE influencer_id=?")
+              .prepare(
+                "SELECT id,status,participation_confirmed_at,shipping_address_at,tracking_number FROM applications WHERE influencer_id=?",
+              )
               .all(user.id) as any[];
             if (
               profile.completed_count ||
@@ -2005,11 +2048,16 @@ export function registerWorkflow(
                   a.tracking_number,
               )
             )
-              fail(`활동 또는 배송 진행 이력이 있어 삭제할 수 없습니다: ${email}`, 409);
+              fail(
+                `활동 또는 배송 진행 이력이 있어 삭제할 수 없습니다: ${email}`,
+                409,
+              );
             if (
-              db.prepare(
-                "SELECT 1 FROM email_outbox WHERE status='sending' AND application_id IN (SELECT id FROM applications WHERE influencer_id=?) LIMIT 1",
-              ).get(user.id)
+              db
+                .prepare(
+                  "SELECT 1 FROM email_outbox WHERE status='sending' AND application_id IN (SELECT id FROM applications WHERE influencer_id=?) LIMIT 1",
+                )
+                .get(user.id)
             )
               fail(`메일 발송이 진행 중입니다: ${email}`, 409);
             return { email, user, applications };
@@ -2044,9 +2092,9 @@ export function registerWorkflow(
               db.prepare("DELETE FROM email_outbox WHERE application_id=?").run(
                 application.id,
               );
-              db.prepare("DELETE FROM application_events WHERE application_id=?").run(
-                application.id,
-              );
+              db.prepare(
+                "DELETE FROM application_events WHERE application_id=?",
+              ).run(application.id);
             }
             db.prepare("DELETE FROM applications WHERE influencer_id=?").run(
               user.id,
@@ -2054,18 +2102,18 @@ export function registerWorkflow(
             db.prepare("DELETE FROM notifications WHERE user_id=?").run(
               user.id,
             );
-            db.prepare("DELETE FROM onboarding_submissions WHERE user_id=?").run(
-              user.id,
-            );
-            db.prepare("UPDATE onboarding_submissions SET reviewer_id=NULL WHERE reviewer_id=?").run(
-              user.id,
-            );
-            db.prepare("UPDATE application_events SET actor_id=NULL WHERE actor_id=?").run(
-              user.id,
-            );
-            db.prepare("UPDATE admin_audit SET target_user_id=NULL WHERE target_user_id=?").run(
-              user.id,
-            );
+            db.prepare(
+              "DELETE FROM onboarding_submissions WHERE user_id=?",
+            ).run(user.id);
+            db.prepare(
+              "UPDATE onboarding_submissions SET reviewer_id=NULL WHERE reviewer_id=?",
+            ).run(user.id);
+            db.prepare(
+              "UPDATE application_events SET actor_id=NULL WHERE actor_id=?",
+            ).run(user.id);
+            db.prepare(
+              "UPDATE admin_audit SET target_user_id=NULL WHERE target_user_id=?",
+            ).run(user.id);
             db.prepare("DELETE FROM login_attempts WHERE email IN (?,?)").run(
               user.email,
               `login:${user.id}`,
@@ -2304,6 +2352,7 @@ export function registerWorkflow(
       role(c, "admin");
       return c.json({
         history: historicalActivities(db, id(c)),
+        certificate: certificateSummary(db, id(c)),
         applications: db
           .prepare(
             `SELECT a.*,c.title,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE a.influencer_id=? ORDER BY a.id DESC`,

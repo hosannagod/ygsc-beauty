@@ -150,7 +150,12 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const campaignId = brand.url().split("/").pop();
     await brand.getByText("비공개 초안", { exact: true }).first().waitFor();
-    assert.equal((await influencer.request.get(base + "/api/work/campaigns/" + campaignId)).status(), 404);
+    assert.equal(
+      (
+        await influencer.request.get(base + "/api/work/campaigns/" + campaignId)
+      ).status(),
+      404,
+    );
     await brand.waitForFunction(
       () => document.querySelectorAll(".campaign-gallery img").length === 4,
     );
@@ -603,10 +608,12 @@ const { spawn, spawnSync } = require("node:child_process"),
       "https://www.instagram.com/reel/approved",
     );
     await influencer.goto(base + "/profile");
-    await influencer.getByRole("button", { name: "활동증명서 발급" }).click();
+    await influencer
+      .getByRole("button", { name: "수료증 발급 / PDF 저장" })
+      .click();
     await influencer.waitForURL(/\/certificates\//);
     await influencer
-      .getByRole("heading", { name: "Certificate of Participation" })
+      .getByRole("heading", { name: "Certificate of Completion" })
       .waitFor();
     const certificatePdf = await influencer.pdf({ format: "A4" });
     assert.equal(certificatePdf.subarray(0, 4).toString(), "%PDF");
@@ -645,7 +652,12 @@ const { spawn, spawnSync } = require("node:child_process"),
     assert.equal(scheduledResponse.status(), 201);
     const scheduled = await scheduledResponse.json();
     assert.equal(
-      (await brand.request.put(base + `/api/work/campaigns/${scheduled.id}/details`, { data: { publish: true } })).status(),
+      (
+        await brand.request.put(
+          base + `/api/work/campaigns/${scheduled.id}/details`,
+          { data: { publish: true } },
+        )
+      ).status(),
       200,
     );
     await influencer.goto(base + "/campaigns/" + scheduled.id);
@@ -671,14 +683,22 @@ const { spawn, spawnSync } = require("node:child_process"),
     assert.equal(await admin.locator("#user-role").inputValue(), "influencer");
     await admin.locator("#user-grade").selectOption("basic");
     assert.equal(
-      await admin.getByRole("button", { name: "이력 보기" }).count(),
+      await admin.getByRole("button", { name: "이력·수료증 보기" }).count(),
       0,
     );
     await admin.locator("#user-grade").selectOption("all");
     await admin.locator("#user-search").fill("01012345678");
-    await admin.getByRole("button", { name: "이력 보기" }).waitFor();
+    await admin.getByRole("button", { name: "이력·수료증 보기" }).waitFor();
     await admin.locator("#user-search").fill("");
-    await admin.getByRole("button", { name: "이력 보기" }).click();
+    await admin.getByRole("button", { name: "이력·수료증 보기" }).click();
+    await admin.locator("#influencer-detail").waitFor({ state: "visible" });
+    await admin
+      .locator("#influencer-detail [data-admin-certificate]")
+      .click();
+    await admin.waitForURL(/\/certificates\//);
+    await admin.getByRole("heading", { name: "Certificate of Completion" }).waitFor();
+    await admin.goto(base + "/admin/users");
+    await admin.getByRole("button", { name: "이력·수료증 보기" }).click();
     await admin.locator("#influencer-detail").waitFor({ state: "visible" });
     await admin.locator("#influencer-detail [data-close-influencer]").click();
     await admin.getByRole("link", { name: "운영 정책" }).click();
@@ -751,9 +771,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     assert.equal(await brand.locator("[name=draft_date]").isVisible(), false);
     await brand.locator("[name=recruit_date]").fill(future(2));
     await brand.locator("[name=final_date]").fill(future(10));
-    await brand
-      .getByRole("button", { name: "임시저장" })
-      .click();
+    await brand.getByRole("button", { name: "임시저장" }).click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const directCampaign = brand.url().split("/").pop();
     await brand.getByRole("button", { name: "캠페인 게시" }).click();
@@ -1001,7 +1019,12 @@ const { spawn, spawnSync } = require("node:child_process"),
     assert.equal(batchResponse.status(), 201);
     const batchCampaign = (await batchResponse.json()).id;
     assert.equal(
-      (await brand.request.put(base + `/api/work/campaigns/${batchCampaign}/details`, { data: { publish: true } })).status(),
+      (
+        await brand.request.put(
+          base + `/api/work/campaigns/${batchCampaign}/details`,
+          { data: { publish: true } },
+        )
+      ).status(),
       200,
     );
     for (const page of [influencer, importedPage])

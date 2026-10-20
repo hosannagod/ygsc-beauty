@@ -83,7 +83,9 @@ async function fixture() {
     });
     assert.equal(r.status, 201, await r.clone().text());
     const id = ((await r.json()) as any).id;
-    const published = await req("brand", `/campaigns/${id}/details`, "PUT", { publish: true });
+    const published = await req("brand", `/campaigns/${id}/details`, "PUT", {
+      publish: true,
+    });
     assert.equal(published.status, 200, await published.clone().text());
     return id;
   };
@@ -129,15 +131,47 @@ test("new campaigns stay private until reviewed and explicitly published", async
     assert.equal(response.status, 201);
     const id = ((await response.json()) as any).id;
     const path = `/campaigns/${id}`;
-    assert.equal((await (await f.req("brand", path)).json() as any).campaign.is_draft, 1);
+    assert.equal(
+      ((await (await f.req("brand", path)).json()) as any).campaign.is_draft,
+      1,
+    );
     assert.equal((await f.req("influencer", path)).status, 404);
-    assert.ok(!(await (await f.req("influencer", "/campaigns")).json() as any).campaigns.some((row: any) => row.id === id));
-    assert.equal((await f.req("brand", `${path}/details`, "PUT", { title: "검토한 캠페인" })).status, 200);
-    assert.equal((await (await f.req("brand", path)).json() as any).campaign.is_draft, 1);
-    assert.equal((await f.req("otherbrand", `${path}/details`, "PUT", { publish: true })).status, 403);
-    assert.equal((await f.req("brand", `${path}/details`, "PUT", { publish: true })).status, 200);
-    assert.equal((await (await f.req("influencer", path)).json() as any).campaign.title, "검토한 캠페인");
-    assert.equal((await f.req("brand", `${path}/details`, "PUT", { publish: true })).status, 409);
+    assert.ok(
+      !(
+        (await (await f.req("influencer", "/campaigns")).json()) as any
+      ).campaigns.some((row: any) => row.id === id),
+    );
+    assert.equal(
+      (
+        await f.req("brand", `${path}/details`, "PUT", {
+          title: "검토한 캠페인",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      ((await (await f.req("brand", path)).json()) as any).campaign.is_draft,
+      1,
+    );
+    assert.equal(
+      (await f.req("otherbrand", `${path}/details`, "PUT", { publish: true }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await f.req("brand", `${path}/details`, "PUT", { publish: true }))
+        .status,
+      200,
+    );
+    assert.equal(
+      ((await (await f.req("influencer", path)).json()) as any).campaign.title,
+      "검토한 캠페인",
+    );
+    assert.equal(
+      (await f.req("brand", `${path}/details`, "PUT", { publish: true }))
+        .status,
+      409,
+    );
   } finally {
     f.db.close();
   }
@@ -537,7 +571,11 @@ test("certificates require completed activity and protect ownership with stable 
     });
     assert.equal(page.status, 200);
     const html = await page.text();
-    assert.match(html, /Certificate of Participation/);
+    assert.match(html, /Certificate of Completion/);
+    assert.match(html, /대표 김은총/);
+    assert.match(html, /Kim Eunchong/);
+    assert.match(html, /서울 향기 협업/);
+    assert.match(html, /PDF 저장/);
     assert.match(html, /&lt;script&gt;/);
     assert.ok(!html.includes("influencer@test.com"));
     assert.equal((await f.app.request(url)).status, 401);
@@ -553,6 +591,81 @@ test("certificates require completed activity and protect ownership with stable 
           .get() as any
       ).n,
       1,
+    );
+  } finally {
+    f.db.close();
+  }
+});
+test("admins issue a completion certificate for an eligible influencer only", async () => {
+  const f = await fixture();
+  try {
+    const endpoint = `/admin/users/${f.ids.influencer}/certificate`;
+    assert.equal((await f.req("brand", endpoint, "POST", {})).status, 403);
+    assert.equal((await f.req("admin", endpoint, "POST", {})).status, 409);
+    assert.equal(
+      (
+        await f.req(
+          "admin",
+          `/admin/users/${f.ids.brand}/certificate`,
+          "POST",
+          {},
+        )
+      ).status,
+      409,
+    );
+    const campaignId = await f.create({
+      review_required: false,
+      draft_date: "",
+    });
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    await f.action(applicationId, "ship", {
+      carrier: "CJ대한통운",
+      tracking_number: "123456789",
+    });
+    await f.action(
+      applicationId,
+      "final",
+      { url: "https://instagram.com/reel/test" },
+      "influencer",
+    );
+    assert.equal((await f.req("admin", endpoint, "POST", {})).status, 409);
+    await f.action(applicationId, "complete", { views: 1, best: false });
+    const summary = (await (
+      await f.req("admin", `/admin/users/${f.ids.influencer}/history`)
+    ).json()) as any;
+    assert.equal(summary.certificate.completed_count, 1);
+    assert.equal(summary.certificate.activities[0].title, "서울 향기 협업");
+    assert.equal(summary.certificate.certificate_url, null);
+    const issued = await f.req("admin", endpoint, "POST", {});
+    assert.equal(issued.status, 200);
+    const { url } = (await issued.json()) as any;
+    assert.equal(
+      ((await (await f.req("admin", endpoint, "POST", {})).json()) as any).url,
+      url,
+    );
+    assert.equal(
+      ((await (await f.req("influencer", "/certificate")).json()) as any)
+        .certificate_url,
+      url,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT COUNT(*) AS n FROM activity_certificates")
+          .get() as any
+      ).n,
+      1,
+    );
+    assert.equal(
+      (
+        f.db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM admin_audit WHERE action='certificate_issue'",
+          )
+          .get() as any
+      ).n,
+      2,
     );
   } finally {
     f.db.close();
@@ -707,8 +820,15 @@ test("selection queues email atomically; mail history and retry are admin-only",
   }
 });
 test("admin sends a campaign guide only once to shipped participants", async () => {
-  const keys = ["EMAIL_PROVIDER", "EMAIL_FROM", "BREVO_API_KEY", "APP_ORIGIN"] as const;
-  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const keys = [
+    "EMAIL_PROVIDER",
+    "EMAIL_FROM",
+    "BREVO_API_KEY",
+    "APP_ORIGIN",
+  ] as const;
+  const previous = Object.fromEntries(
+    keys.map((key) => [key, process.env[key]]),
+  );
   Object.assign(process.env, {
     EMAIL_PROVIDER: "brevo",
     EMAIL_FROM: "notifications@example.com",
@@ -722,20 +842,45 @@ test("admin sends a campaign guide only once to shipped participants", async () 
     const pendingId = await f.apply(campaignId, "other");
     assert.equal((await f.action(shippedId, "select")).status, 200);
     assert.equal((await f.action(pendingId, "select")).status, 200);
-    assert.equal((await f.action(shippedId, "ship", { carrier: "우체국택배", tracking_number: "123456789" })).status, 200);
+    assert.equal(
+      (
+        await f.action(shippedId, "ship", {
+          carrier: "우체국택배",
+          tracking_number: "123456789",
+        })
+      ).status,
+      200,
+    );
     const path = `/admin/campaigns/${campaignId}/guide-email`;
-    const payload = { expected_count: 1, message: "English guide\n\n--------------------\n\n한국어 가이드" };
+    const payload = {
+      expected_count: 1,
+      message: "English guide\n\n--------------------\n\n한국어 가이드",
+    };
     assert.equal((await f.req("brand", path, "POST", payload)).status, 403);
-    assert.equal((await f.req("admin", path, "POST", { ...payload, expected_count: 2 })).status, 409);
+    assert.equal(
+      (await f.req("admin", path, "POST", { ...payload, expected_count: 2 }))
+        .status,
+      409,
+    );
     const sent = await f.req("admin", path, "POST", payload);
     assert.equal(sent.status, 200, await sent.clone().text());
     assert.deepEqual(await sent.json(), { recipients: 1, queued: 1 });
-    assert.deepEqual(await (await f.req("admin", path, "POST", payload)).json(), { recipients: 1, queued: 0 });
-    const guides = f.db.prepare("SELECT application_id,body FROM email_outbox WHERE event_key LIKE 'content-guide:%'").all() as any[];
+    assert.deepEqual(
+      await (await f.req("admin", path, "POST", payload)).json(),
+      { recipients: 1, queued: 0 },
+    );
+    const guides = f.db
+      .prepare(
+        "SELECT application_id,body FROM email_outbox WHERE event_key LIKE 'content-guide:%'",
+      )
+      .all() as any[];
     assert.equal(guides.length, 1);
     assert.equal(guides[0].application_id, shippedId);
     assert.match(guides[0].body, /English guide/);
-    assert.deepEqual(await (await f.req("admin", path)).json(), { campaign_id: campaignId, counts: [{ status: "pending", count: 1 }] });
+    assert.deepEqual(await (await f.req("admin", path)).json(), {
+      campaign_id: campaignId,
+      counts: [{ status: "pending", count: 1 }],
+    });
   } finally {
     f.db.close();
     for (const key of keys) {
@@ -882,7 +1027,9 @@ test("full lifecycle with revision history, consent, notifications, completion e
       (await f.req("brand", `/campaigns/${c}/complete`, "POST", {})).status,
       409,
     );
-    await f.req("brand", `/campaigns/${c}/close`, "POST", { confirm_close: true });
+    await f.req("brand", `/campaigns/${c}/close`, "POST", {
+      confirm_close: true,
+    });
     assert.equal(
       (await f.req("brand", `/campaigns/${c}/complete`, "POST", {})).status,
       200,
@@ -1411,8 +1558,11 @@ test("campaign link and schedule editing enforces ownership and allows dates aft
       400,
     );
     assert.equal(
-      (f.db.prepare("SELECT recruit_date FROM campaigns WHERE id=?").get(id) as any)
-        .recruit_date,
+      (
+        f.db
+          .prepare("SELECT recruit_date FROM campaigns WHERE id=?")
+          .get(id) as any
+      ).recruit_date,
       future(4),
     );
   } finally {
@@ -1434,16 +1584,24 @@ test("admin can disable draft review after applications but before any selection
       (await f.req("admin", path, "PUT", { review_required: false })).status,
       200,
     );
-    let row = f.db.prepare("SELECT review_required,draft_date,draft_due,final_date,final_due FROM campaigns WHERE id=?").get(id) as any;
+    let row = f.db
+      .prepare(
+        "SELECT review_required,draft_date,draft_due,final_date,final_due FROM campaigns WHERE id=?",
+      )
+      .get(id) as any;
     assert.equal(row.review_required, 0);
     assert.equal(row.draft_date, row.final_date);
     assert.equal(row.draft_due, row.final_due);
-    f.db.prepare("UPDATE applications SET status='selected' WHERE id=?").run(applicationId);
+    f.db
+      .prepare("UPDATE applications SET status='selected' WHERE id=?")
+      .run(applicationId);
     assert.equal(
       (await f.req("admin", path, "PUT", { review_required: true })).status,
       409,
     );
-    row = f.db.prepare("SELECT review_required FROM campaigns WHERE id=?").get(id) as any;
+    row = f.db
+      .prepare("SELECT review_required FROM campaigns WHERE id=?")
+      .get(id) as any;
     assert.equal(row.review_required, 0);
   } finally {
     f.db.close();
@@ -1454,25 +1612,62 @@ test("a manually closed campaign can reopen before its recruitment deadline", as
   const f = await fixture();
   try {
     const id = await f.create();
-    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status, 409);
-    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", { confirm_close: true })).status, 200);
     assert.equal(
-      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any).campaign.status,
+      (await f.req("brand", `/campaigns/${id}/close`, "POST", {})).status,
+      409,
+    );
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/close`, "POST", {
+          confirm_close: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any)
+        .campaign.status,
       "closed",
     );
-    assert.equal((await f.req("otherbrand", `/campaigns/${id}/reopen`, "POST", {})).status, 403);
-    assert.equal((await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status, 200);
     assert.equal(
-      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any).campaign.status,
+      (await f.req("otherbrand", `/campaigns/${id}/reopen`, "POST", {})).status,
+      403,
+    );
+    assert.equal(
+      (await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status,
+      200,
+    );
+    assert.equal(
+      ((await (await f.req("brand", `/campaigns/${id}`)).json()) as any)
+        .campaign.status,
       "recruiting",
     );
     await f.apply(id);
-    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", { confirm_close: true })).status, 200);
-    const log = f.db.prepare("SELECT action,actor_id FROM admin_audit WHERE action IN ('campaign_close','campaign_reopen') ORDER BY id").all() as any[];
-    assert.deepEqual(log.map((row) => row.action), ["campaign_close", "campaign_reopen", "campaign_close"]);
+    assert.equal(
+      (
+        await f.req("brand", `/campaigns/${id}/close`, "POST", {
+          confirm_close: true,
+        })
+      ).status,
+      200,
+    );
+    const log = f.db
+      .prepare(
+        "SELECT action,actor_id FROM admin_audit WHERE action IN ('campaign_close','campaign_reopen') ORDER BY id",
+      )
+      .all() as any[];
+    assert.deepEqual(
+      log.map((row) => row.action),
+      ["campaign_close", "campaign_reopen", "campaign_close"],
+    );
     assert.ok(log.every((row) => row.actor_id === f.ids.brand));
-    f.db.prepare("UPDATE campaigns SET recruit_due=? WHERE id=?").run(Date.now() - 1, id);
-    assert.equal((await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status, 409);
+    f.db
+      .prepare("UPDATE campaigns SET recruit_due=? WHERE id=?")
+      .run(Date.now() - 1, id);
+    assert.equal(
+      (await f.req("brand", `/campaigns/${id}/reopen`, "POST", {})).status,
+      409,
+    );
   } finally {
     f.db.close();
   }
@@ -1762,8 +1957,11 @@ test("campaign editing validates all fields, retains participant conditions and 
       200,
     );
     assert.equal(
-      (f.db.prepare("SELECT final_date FROM campaigns WHERE id=?").get(id) as any)
-        .final_date,
+      (
+        f.db
+          .prepare("SELECT final_date FROM campaigns WHERE id=?")
+          .get(id) as any
+      ).final_date,
       future(13),
     );
     assert.equal(
@@ -2016,8 +2214,13 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     ).json()) as any;
     assert.equal(detail.campaign.images.length, 4);
     const images = detail.campaign.images;
-    let listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
-    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, images[0].id);
+    let listed = (await (
+      await f.req("influencer", "/campaigns")
+    ).json()) as any;
+    assert.equal(
+      listed.campaigns.find((row: any) => row.id === c).thumbnail_id,
+      images[0].id,
+    );
     const imagePath = images[0].url.replace("/api/work", "");
     const image = await f.req("influencer", imagePath);
     assert.equal(image.status, 200);
@@ -2081,7 +2284,10 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     assert.equal(detail.campaign.images.length, 2);
     assert.equal(detail.campaign.images[0].id, images[2].id);
     listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
-    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, images[2].id);
+    assert.equal(
+      listed.campaigns.find((row: any) => row.id === c).thumbnail_id,
+      images[2].id,
+    );
     assert.equal((await f.req("influencer", imagePath)).status, 404);
     assert.equal(
       (await f.req("brand", path, "PUT", { images: [] })).status,
@@ -2098,7 +2304,10 @@ test("campaign photos enforce limits and ownership, support replacement and roll
       0,
     );
     listed = (await (await f.req("influencer", "/campaigns")).json()) as any;
-    assert.equal(listed.campaigns.find((row: any) => row.id === c).thumbnail_id, null);
+    assert.equal(
+      listed.campaigns.find((row: any) => row.id === c).thumbnail_id,
+      null,
+    );
   } finally {
     f.db.close();
   }
