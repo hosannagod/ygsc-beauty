@@ -672,6 +672,37 @@ test("admins issue a completion certificate for an eligible influencer only", as
     f.db.close();
   }
 });
+test("influencers may withdraw before selection and reapply while recruiting", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    const path = `/applications/${applicationId}/action`;
+    assert.equal((await f.req("brand", path, "POST", { action: "withdraw" })).status, 403);
+    assert.equal((await f.req("other", path, "POST", { action: "withdraw" })).status, 403);
+    assert.equal((await f.req("influencer", path, "POST", { action: "withdraw" })).status, 200);
+    const withdrawn = f.db.prepare("SELECT status,withdrawn_at FROM applications WHERE id=?").get(applicationId) as any;
+    assert.equal(withdrawn.status, "rejected");
+    assert.ok(withdrawn.withdrawn_at > 0);
+    assert.equal((await f.action(applicationId, "select")).status, 409);
+    assert.equal((await f.req("influencer", path, "POST", { action: "withdraw" })).status, 409);
+    assert.equal(
+      (f.db.prepare("SELECT COUNT(*) AS count FROM application_events WHERE application_id=? AND status='withdrawn'").get(applicationId) as any).count,
+      1,
+    );
+    const reapplied = await f.req("influencer", `/campaigns/${campaignId}/apply`, "POST", {
+      secondary_use_consent: true,
+      original_delivery_consent: true,
+    });
+    assert.equal(reapplied.status, 201);
+    assert.equal(((await reapplied.json()) as any).id, applicationId);
+    assert.equal((f.db.prepare("SELECT status,withdrawn_at FROM applications WHERE id=?").get(applicationId) as any).withdrawn_at, 0);
+    assert.equal((await f.action(applicationId, "select")).status, 200);
+    assert.equal((await f.req("influencer", path, "POST", { action: "withdraw" })).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("applying requires a web profile link; saving it enables application and syncs contact", async () => {
   const { db, req, create, apply, ids } = await fixture();
   try {

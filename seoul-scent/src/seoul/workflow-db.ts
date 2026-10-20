@@ -259,4 +259,13 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       db.exec(
         `ALTER TABLE influencer_profiles ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`,
       );
+  if (
+    !(db.prepare("PRAGMA table_info(applications)").all() as { name: string }[]).some(
+      (column) => column.name === "withdrawn_at",
+    )
+  )
+    db.exec(
+      "ALTER TABLE applications ADD COLUMN withdrawn_at INTEGER NOT NULL DEFAULT 0",
+    );
+  db.exec("INSERT OR IGNORE INTO schema_version VALUES(13)");
 }

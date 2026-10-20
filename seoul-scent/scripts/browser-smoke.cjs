@@ -410,6 +410,15 @@ const { spawn, spawnSync } = require("node:child_process"),
       .click();
     await influencer.waitForURL(/\/applications\/\d+$/);
     const appId = influencer.url().split("/").pop();
+    await influencer.getByRole("button", { name: "지원 취소" }).click();
+    await influencer.locator("#confirm-accept").click();
+    await influencer.getByText("지원 취소", { exact: true }).first().waitFor();
+    await influencer.goto(base + "/campaigns/" + campaignId);
+    await influencer.locator("[name=secondary_use_consent]").check();
+    await influencer.locator("[name=original_delivery_consent]").check();
+    await influencer.getByRole("button", { name: "지원하기", exact: false }).click();
+    await influencer.waitForURL(/\/applications\/\d+$/);
+    assert.equal(influencer.url().split("/").pop(), appId);
     await influencer.goto(base + "/applications");
     await influencer.getByRole("heading", { name: "지원 완료 1" }).waitFor();
     if (process.env.PREVIEW_DIR) {

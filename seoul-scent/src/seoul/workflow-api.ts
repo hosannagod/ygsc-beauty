@@ -851,14 +851,28 @@ export function registerWorkflow(
           );
         if (!campaignEligible(p))
           fail("홍보 인증 승인 후 캠페인에 지원할 수 있습니다.", 409);
-        if (
-          db
-            .prepare(
-              "SELECT id FROM applications WHERE campaign_id=? AND influencer_id=?",
-            )
-            .get(campaign.id, u.id)
-        )
+        const previous = db
+          .prepare(
+            "SELECT id,status,withdrawn_at FROM applications WHERE campaign_id=? AND influencer_id=?",
+          )
+          .get(campaign.id, u.id) as
+          | { id: number; status: string; withdrawn_at: number }
+          | undefined;
+        if (previous && !(previous.status === "rejected" && previous.withdrawn_at))
           fail("이미 지원한 캠페인입니다.", 409);
+        if (previous) {
+          db.prepare(
+            "UPDATE applications SET status='applied',withdrawn_at=0,consent_at=?,consent_version='secondary-and-original-v2',secondary_use_consent=1,original_delivery_consent=1,phone=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+          ).run(Date.now(), p.phone, previous.id);
+          event(db, previous, u.id, "applied", "취소한 캠페인에 다시 지원했습니다.");
+          notify(
+            db,
+            campaign.brand_id,
+            `${campaign.title}: 지원자가 다시 지원했습니다.`,
+            `/campaigns/${campaign.id}`,
+          );
+          return previous.id;
+        }
         const r = db
           .prepare(
             "INSERT INTO applications(campaign_id,influencer_id,consent_at,phone,address,consent_version,secondary_use_consent,original_delivery_consent) VALUES(?,?,?,?,?,?,?,?)",
@@ -1029,6 +1043,16 @@ export function registerWorkflow(
               typeof b.note === "string"
                 ? text(b.note, "반려 사유", 0, 1000)
                 : "지원이 반려되었습니다.";
+            break;
+          case "withdraw":
+            if (!influencer) fail("본인의 지원만 취소할 수 있습니다.", 403);
+            requireState(["applied"]);
+            status = "rejected";
+            note = "지원자가 선정 전에 지원을 취소했습니다.";
+            db.prepare("UPDATE applications SET withdrawn_at=? WHERE id=?").run(
+              Date.now(),
+              a.id,
+            );
             break;
           case "address": {
             const admin = u.role === "admin";
@@ -1225,7 +1249,7 @@ export function registerWorkflow(
         db.prepare(
           "UPDATE applications SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
         ).run(status, a.id);
-        event(db, a, u.id, status, note, link);
+        event(db, a, u.id, b.action === "withdraw" ? "withdrawn" : status, note, link);
         if (b.action === "select") queueSelectionEmail(db, a.id);
         notify(
           db,

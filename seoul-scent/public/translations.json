@@ -735,5 +735,8 @@
   "수료증 발급 / PDF 저장": "Issue certificate / save PDF",
   "콘텐츠 업로드와 완료 처리가 끝난 활동만 표시됩니다.": "Only activities with completed content uploads are shown.",
   "발급된 수료증 보기 / PDF 저장": "View issued certificate / save PDF",
-  "아직 발급 대상이 아닙니다.": "Not yet eligible for a certificate."
+  "아직 발급 대상이 아닙니다.": "Not yet eligible for a certificate.",
+  "지원 취소": "Application withdrawn",
+  "이 캠페인 지원을 취소했습니다. 모집 중이라면 다시 지원할 수 있습니다.": "You withdrew this application. You may apply again while recruitment is open.",
+  "선정 전 지원을 취소할까요? 브랜드의 선정 대상에서 제외됩니다.": "Withdraw this application before selection? The brand will no longer consider it."
 }

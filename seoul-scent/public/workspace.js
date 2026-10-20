@@ -18,6 +18,7 @@
   const labels = {
     applied: t("지원 완료"),
     rejected: t("반려"),
+    withdrawn: t("지원 취소"),
     selected: t("선정됨"),
     shipping: t("배송 중"),
     draft_submitted: t("초안 검수 대기"),
@@ -64,6 +65,8 @@
   };
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
+  const applicationBadge = (a) =>
+    badge(a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status);
   const money = (n) =>
     Number(n).toLocaleString(
       window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
@@ -267,7 +270,7 @@
   const applicationCard = (a) =>
     html`<article class="campaign-card">
       <div class="card-top">
-        ${badge(a.status)}${a.best ? '<span class="best">★ Best</span>' : ""}
+        ${applicationBadge(a)}${a.best ? '<span class="best">★ Best</span>' : ""}
       </div>
       <h3>${esc(a.title)}</h3>
       <p class="muted">${esc(a.brand_name)} · ${esc(a.product)}</p>
@@ -643,10 +646,12 @@
         '<div class="warning">English translation is temporarily unavailable for some content. The original is shown. Please try again later or ask the brand to add English content.</div>';
     if (role === "influencer") {
       const { profile } = await api("/profile");
-      root.innerHTML += applications.length
+      if (applications[0]?.withdrawn_at)
+        root.innerHTML += `<div class="notice">${t("이 캠페인 지원을 취소했습니다. 모집 중이라면 다시 지원할 수 있습니다.")}</div>`;
+      root.innerHTML += applications.length && !applications[0].withdrawn_at
         ? html`<section class="panel">
             <h2>내 지원 상태</h2>
-            ${badge(applications[0].status)}
+            ${applicationBadge(applications[0])}
             <a class="text-link" href="/applications/${applications[0].id}"
               >참여 내역 보기 →</a
             >
@@ -1018,7 +1023,7 @@
                           >
                         </td>
                         <td data-label="${t("상태")}">
-                          ${badge(a.status)}${a.best ? " ★ Best" : ""}
+                          ${applicationBadge(a)}${a.best ? " ★ Best" : ""}
                         </td>
                         <td data-label="${t("참여 확인")}">
                           ${a.status === "applied" || a.status === "rejected" ? "—" : a.participation_confirmed_at ? `${t("확인 완료")}<small>${datetime(a.participation_confirmed_at)}</small>` : a.status === "selected" ? `${a.participation_due && a.participation_due < Date.now() ? t("확인 기한 경과") : t("확인 대기")}${a.participation_due ? `<small>${t("확인 마감")}: ${datetime(a.participation_due)}</small>` : ""}` : t("기존 진행 · 확인 기록 없음")}
@@ -1082,6 +1087,14 @@
     let actions = "",
       shippingAddressForm = "";
     if (influencer) {
+      if (a.status === "applied")
+        actions = actionForm(
+          a,
+          "withdraw",
+          "",
+          t("지원 취소"),
+          t("선정 전 지원을 취소할까요? 브랜드의 선정 대상에서 제외됩니다."),
+        );
       if (
         ["applied", "selected"].includes(a.status) &&
         a.consent_version.startsWith("external-form-v2")
@@ -1243,7 +1256,7 @@
       heading(
         esc(a.title),
         `${esc(a.influencer_name)} · ${esc(a.influencer_email)}`,
-        badge(a.status),
+        applicationBadge(a),
       ) +
       html`<div class="deadline-strip">
           ${a.review_required ? html`<span>초안 마감 <strong>${effectiveDraft}</strong></span>` : t("<span>초안 검수 없음</span>")}<span
@@ -1310,7 +1323,7 @@
             <section class="panel">
               <h2>협업 타임라인</h2>
               <ol class="timeline">
-                ${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(["revision_requested", "rejected"].includes(e.status) ? e.note : window.ScentI18n.message(e.note))}</p>${e.link ? link(e.link, t("당시 제출 링크")) : ""}<small>${esc(e.actor_name || t("시스템"))} · ${datetime(e.created_at)}</small></li>`).join("")}
+                ${events.map((e) => `<li>${badge(e.status)}<p class="preline">${esc(["revision_requested", "rejected", "withdrawn"].includes(e.status) ? e.note : window.ScentI18n.message(e.note))}</p>${e.link ? link(e.link, t("당시 제출 링크")) : ""}<small>${esc(e.actor_name || t("시스템"))} · ${datetime(e.created_at)}</small></li>`).join("")}
               </ol>
             </section>
           </div>
@@ -2057,7 +2070,7 @@
                           (a) =>
                             html`<div class="alert-row">
                               <div>
-                                ${badge(a.status)}
+                                ${applicationBadge(a)}
                                 <strong>${esc(a.title)}</strong>
                                 <p class="muted">
                                   ${esc(a.brand_name)} · ${a.views}
