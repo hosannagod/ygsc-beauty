@@ -49,7 +49,7 @@ const runEmails = () => {
 const mail = emailConfig();
 console.log(`Email provider: ${mail.provider}; configured: ${mail.configured}`);
 runEmails();
-const mailTimer = setInterval(runEmails, 30_000);
+const mailTimer = setInterval(runEmails, 5_000);
 mailTimer.unref();
 const port = Number(process.env.PORT || 3000);
 const server = serve({ fetch: app.fetch, port }, () =>
