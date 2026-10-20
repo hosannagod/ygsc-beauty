@@ -478,7 +478,7 @@ export function registerWorkflow(
       const campaignId = db.transaction(() => {
         const result = db
           .prepare(
-            `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required,guidelines_url) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required,guidelines_url,is_draft,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           )
           .run(
             u.id,
@@ -500,6 +500,8 @@ export function registerWorkflow(
             start,
             review ? 1 : 0,
             guidelinesUrl,
+            1,
+            "closed",
           );
         for (const field of englishFields)
           db.prepare(`UPDATE campaigns SET ${field}_en=? WHERE id=?`).run(

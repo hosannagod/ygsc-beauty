@@ -146,9 +146,11 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.waitForFunction(
       () => document.querySelectorAll(".photo-preview").length === 4,
     );
-    await brand.getByRole("button", { name: "캠페인 등록" }).click();
+    await brand.getByRole("button", { name: "임시저장" }).click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const campaignId = brand.url().split("/").pop();
+    await brand.getByText("비공개 초안", { exact: true }).first().waitFor();
+    assert.equal((await influencer.request.get(base + "/api/work/campaigns/" + campaignId)).status(), 404);
     await brand.waitForFunction(
       () => document.querySelectorAll(".campaign-gallery img").length === 4,
     );
@@ -189,7 +191,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand
       .locator("[name=description_en]")
       .fill("Updated product information. Please review before filming.");
-    await brand.getByRole("button", { name: "캠페인 수정 저장" }).click();
+    await brand.getByRole("button", { name: "임시저장" }).click();
     await brand.locator('a[href="https://example.com/updated"]').waitFor();
     assert.equal(
       await brand
@@ -197,6 +199,9 @@ const { spawn, spawnSync } = require("node:child_process"),
         .getAttribute("href"),
       "https://example.com/updated",
     );
+    await brand.getByRole("button", { name: "캠페인 게시" }).click();
+    await brand.locator("#confirm-accept").click();
+    await brand.locator("#toast").getByText("게시되었습니다.").waitFor();
     await influencer.goto(base + "/campaigns/" + campaignId);
     await influencer
       .getByRole("heading", { name: "프로필 등록이 필요합니다" })
@@ -639,6 +644,10 @@ const { spawn, spawnSync } = require("node:child_process"),
     );
     assert.equal(scheduledResponse.status(), 201);
     const scheduled = await scheduledResponse.json();
+    assert.equal(
+      (await brand.request.put(base + `/api/work/campaigns/${scheduled.id}/details`, { data: { publish: true } })).status(),
+      200,
+    );
     await influencer.goto(base + "/campaigns/" + scheduled.id);
     await influencer.getByText("모집 예정", { exact: true }).waitFor();
     assert.equal(
@@ -743,10 +752,13 @@ const { spawn, spawnSync } = require("node:child_process"),
     await brand.locator("[name=recruit_date]").fill(future(2));
     await brand.locator("[name=final_date]").fill(future(10));
     await brand
-      .getByRole("button", { name: "캠페인 등록", exact: false })
+      .getByRole("button", { name: "임시저장" })
       .click();
     await brand.waitForURL(/\/campaigns\/\d+$/);
     const directCampaign = brand.url().split("/").pop();
+    await brand.getByRole("button", { name: "캠페인 게시" }).click();
+    await brand.locator("#confirm-accept").click();
+    await brand.locator("#toast").getByText("게시되었습니다.").waitFor();
     await influencer.goto(base + "/campaigns/" + directCampaign);
     const guideLink = influencer.getByRole("link", {
       name: "콘텐츠 가이드 문서 열기",
@@ -988,6 +1000,10 @@ const { spawn, spawnSync } = require("node:child_process"),
     );
     assert.equal(batchResponse.status(), 201);
     const batchCampaign = (await batchResponse.json()).id;
+    assert.equal(
+      (await brand.request.put(base + `/api/work/campaigns/${batchCampaign}/details`, { data: { publish: true } })).status(),
+      200,
+    );
     for (const page of [influencer, importedPage])
       assert.equal(
         (

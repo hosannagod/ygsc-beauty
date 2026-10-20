@@ -83,6 +83,10 @@ test("promotion review authorizes Bronze without campaign/certificate credit; pr
         final_date: future(10),
       })
     ).json();
+    assert.equal(
+      (await req("brand", `/campaigns/${campaign.id}/details`, "PUT", { publish: true })).status,
+      200,
+    );
     const consent = {
       secondary_use_consent: true,
       original_delivery_consent: true,

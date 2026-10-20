@@ -433,7 +433,7 @@
           : "",
       ) +
       t(
-        `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`,
+        `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="draft">비공개 초안</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`,
       );
     const render = () => {
       const search = document
@@ -587,7 +587,8 @@
         <div class="form-grid">
           ${input("recruit_start_date", t("모집 시작일"), "date", "required", today())}${input("recruit_date", t("모집 마감일"), "date", "required")}${input("draft_date", t("초안 제출 마감일"), "date", "required")}${input("final_date", t("최종 업로드 마감일"), "date", "required")}
         </div>
-        ${photoEditor()}${englishEditor()}${submit(t("캠페인 등록"))}
+        <p class="note left">${t("임시저장 후 상세 화면에서 내용을 검토하고 게시할 수 있습니다. 게시 전에는 인플루언서에게 보이지 않습니다.")}</p>
+        ${photoEditor()}${englishEditor()}${submit(t("임시저장"))}
       </form>`;
   }
   document.addEventListener("change", (event) => {
@@ -631,7 +632,8 @@
               >최종 <strong>${esc(c.final_date)}</strong></span
             ><span>한국 시간 · 당일 자정 마감</span>
           </div>
-        </section>`;
+        </section>
+        ${c.is_draft && role !== "influencer" ? `<section class="panel"><h2>${t("게시 전 검토")}</h2><p>${t("캠페인 내용과 사진, 모집 일정, 콘텐츠 가이드를 확인해 주세요. 게시하면 인플루언서에게 공개됩니다.")}</p><form data-task="campaign-publish" data-id="${id}" data-confirm="${esc(t("이 캠페인을 게시하고 인플루언서에게 공개할까요?"))}">${submit(t("캠페인 게시"))}</form></section>` : ""}`;
     if (role === "admin")
       root.innerHTML += `<section class="panel" id="capacity-editor"><h2>${t("관리자 캠페인 관리")}</h2><form class="editor" data-task="campaign-capacity" data-id="${id}">${input("capacity", t("선정 정원"), "number", 'required min="1" max="500"', c.capacity)}<p class="note left">${t("일정과 가이드라인을 변경하지 않고 정원만 수정합니다. 이미 선정된 인원보다 작게 줄일 수 없습니다.")}</p>${submit(t("선정 정원 저장"))}</form><button class="secondary" data-delete-campaign="${id}">${t("캠페인 삭제")}</button></section>`;
     if (c._translationUnavailable)
@@ -713,7 +715,7 @@
           <details>
             <summary>캠페인 편집</summary>
             <form class="editor" data-task="campaign-details" data-id="${id}">
-              ${c.is_draft ? `<div class="warning">${t("비공개 초안입니다. 모집 인원과 일정·가이드라인을 설정한 후 공개해 주세요.")}</div><label class="check"><input type="checkbox" name="publish"><span>${t("저장 후 캠페인 공개")}</span></label>` : ""}
+              ${c.is_draft ? `<div class="warning">${t("비공개 초안입니다. 내용을 수정·저장한 뒤 위의 게시 버튼으로 공개해 주세요.")}</div>` : ""}
               ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"', (c._original || c).title)}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"', (c._original || c).product)}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000"', c.product_url)}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"', (c._original || c).description)}${textarea("guidelines", t("콘텐츠 가이드라인"), 'maxlength="6000" rows="5"', (c._original || c).guidelines)}${input("guidelines_url", t("콘텐츠 가이드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://docs.google.com/document/d/..."', c.guidelines_url)}
               <p class="note left">
                 ${t("텍스트 또는 가이드 링크를 입력해 주세요. 문서 공유 권한은 참여자가 볼 수 있도록 설정해 주세요.")}
@@ -755,7 +757,7 @@
                 모집 인원은 이미 선정된 인원보다 줄일 수 없습니다. 정보 수정 시
                 진행 중인 지원자에게 알림이 전달됩니다.
               </p>
-              ${photoEditor(c.images || [])}${englishEditor(c)}${submit(t("캠페인 수정 저장"))}
+              ${photoEditor(c.images || [])}${englishEditor(c)}${submit(t(c.is_draft ? "임시저장" : "캠페인 수정 저장"))}
             </form>
           </details>
         </section>`;
@@ -1783,6 +1785,11 @@
         case "campaign-details":
           await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);
           break;
+        case "campaign-publish":
+          await api(`/campaigns/${form.dataset.id}/details`, "PUT", { publish: true });
+          toast(t("게시되었습니다."));
+          await render();
+          return;
         case "apply": {
           const r = await api(
             `/campaigns/${form.dataset.id}/apply`,

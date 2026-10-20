@@ -82,7 +82,10 @@ async function fixture() {
       ...extra,
     });
     assert.equal(r.status, 201, await r.clone().text());
-    return ((await r.json()) as any).id;
+    const id = ((await r.json()) as any).id;
+    const published = await req("brand", `/campaigns/${id}/details`, "PUT", { publish: true });
+    assert.equal(published.status, 200, await published.clone().text());
+    return id;
   };
   const apply = async (id: number, key = "influencer") => {
     const r = await req(key, `/campaigns/${id}/apply`, "POST", {
@@ -119,6 +122,26 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("new campaigns stay private until reviewed and explicitly published", async () => {
+  const f = await fixture();
+  try {
+    const response = await f.req("brand", "/campaigns", "POST", campaign);
+    assert.equal(response.status, 201);
+    const id = ((await response.json()) as any).id;
+    const path = `/campaigns/${id}`;
+    assert.equal((await (await f.req("brand", path)).json() as any).campaign.is_draft, 1);
+    assert.equal((await f.req("influencer", path)).status, 404);
+    assert.ok(!(await (await f.req("influencer", "/campaigns")).json() as any).campaigns.some((row: any) => row.id === id));
+    assert.equal((await f.req("brand", `${path}/details`, "PUT", { title: "검토한 캠페인" })).status, 200);
+    assert.equal((await (await f.req("brand", path)).json() as any).campaign.is_draft, 1);
+    assert.equal((await f.req("otherbrand", `${path}/details`, "PUT", { publish: true })).status, 403);
+    assert.equal((await f.req("brand", `${path}/details`, "PUT", { publish: true })).status, 200);
+    assert.equal((await (await f.req("influencer", path)).json() as any).campaign.title, "검토한 캠페인");
+    assert.equal((await f.req("brand", `${path}/details`, "PUT", { publish: true })).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("campaign guide documents support link-only content, safe URLs and partial edits", async () => {
   const f = await fixture();
   try {
