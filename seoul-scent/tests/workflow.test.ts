@@ -574,6 +574,7 @@ test("certificates require completed activity and protect ownership with stable 
     assert.match(html, /Certificate of Completion/);
     assert.match(html, /대표 김은총/);
     assert.match(html, /Kim Eunchong/);
+    assert.match(html, /\/assets\/signature-kim-eunchong\.png/);
     assert.match(html, /서울 향기 협업/);
     assert.match(html, /PDF 저장/);
     assert.match(html, /&lt;script&gt;/);

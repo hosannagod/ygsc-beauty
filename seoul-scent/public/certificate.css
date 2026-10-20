@@ -260,14 +260,11 @@ body {
   align-items: flex-end;
 }
 .signature {
-  font-family: "Segoe Script", "Brush Script MT", "Apple Chancery", cursive;
-  font-style: italic;
-  font-weight: 500;
-  color: #253d31;
-  font-size: 29px;
-  transform: rotate(-8deg);
-  margin: 8px 28px 0 0;
-  white-space: nowrap;
+  display: block;
+  width: 175px;
+  height: 85px;
+  object-fit: contain;
+  margin: 0 55px -18px 0;
 }
 .issuer-name {
   border-top: 1px solid #a6b2a7;
@@ -381,9 +378,6 @@ body {
 .certificate-footer {
   margin-top: auto;
   padding-top: 36px;
-}
-.signature {
-  margin-right: 75px;
 }
 .seal {
   top: -68px;
