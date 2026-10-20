@@ -683,6 +683,44 @@ test("selection queues email atomically; mail history and retry are admin-only",
     else process.env.EMAIL_PROVIDER = previous;
   }
 });
+test("admin sends a campaign guide only once to shipped participants", async () => {
+  const keys = ["EMAIL_PROVIDER", "EMAIL_FROM", "BREVO_API_KEY", "APP_ORIGIN"] as const;
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    EMAIL_PROVIDER: "brevo",
+    EMAIL_FROM: "notifications@example.com",
+    BREVO_API_KEY: "test-only",
+    APP_ORIGIN: "https://example.com",
+  });
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const shippedId = await f.apply(campaignId);
+    const pendingId = await f.apply(campaignId, "other");
+    assert.equal((await f.action(shippedId, "select")).status, 200);
+    assert.equal((await f.action(pendingId, "select")).status, 200);
+    assert.equal((await f.action(shippedId, "ship", { carrier: "우체국택배", tracking_number: "123456789" })).status, 200);
+    const path = `/admin/campaigns/${campaignId}/guide-email`;
+    const payload = { expected_count: 1, message: "English guide\n\n--------------------\n\n한국어 가이드" };
+    assert.equal((await f.req("brand", path, "POST", payload)).status, 403);
+    assert.equal((await f.req("admin", path, "POST", { ...payload, expected_count: 2 })).status, 409);
+    const sent = await f.req("admin", path, "POST", payload);
+    assert.equal(sent.status, 200, await sent.clone().text());
+    assert.deepEqual(await sent.json(), { recipients: 1, queued: 1 });
+    assert.deepEqual(await (await f.req("admin", path, "POST", payload)).json(), { recipients: 1, queued: 0 });
+    const guides = f.db.prepare("SELECT application_id,body FROM email_outbox WHERE event_key LIKE 'content-guide:%'").all() as any[];
+    assert.equal(guides.length, 1);
+    assert.equal(guides[0].application_id, shippedId);
+    assert.match(guides[0].body, /English guide/);
+    assert.deepEqual(await (await f.req("admin", path)).json(), { campaign_id: campaignId, counts: [{ status: "pending", count: 1 }] });
+  } finally {
+    f.db.close();
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
 test("full lifecycle with revision history, consent, notifications, completion exactly once", async () => {
   const f = await fixture();
   try {

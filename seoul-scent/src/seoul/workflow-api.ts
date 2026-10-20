@@ -5,7 +5,7 @@ import { tierLabel } from "./tier.js";
 import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
 import { mergeInfluencers } from "./influencer-merge.js";
-import { queueSelectionEmail, emailStatus } from "./email.js";
+import { queueSelectionEmail, emailStatus, emailConfig } from "./email.js";
 import {
   profileComplete,
   socialProfileUrl,
@@ -1211,6 +1211,61 @@ export function registerWorkflow(
     wrap((c) => {
       role(c, "admin");
       return c.json(emailStatus(db));
+    }),
+  );
+  app.post(
+    "/api/work/admin/campaigns/:id/guide-email",
+    wrap(async (c) => {
+      const u = role(c, "admin"),
+        campaign = campaignFor(db, id(c), u, true),
+        b = await body(c);
+      if (!emailConfig().configured)
+        fail("메일 발송 설정을 확인해 주세요.", 503);
+      const message = text(b.message, "콘텐츠 가이드 메일", 20, 12000),
+        expected = integer(b.expected_count, "발송 대상 인원", 1, 500);
+      const result = db.transaction(() => {
+        const recipients = db.prepare(
+          `SELECT a.id,u.email FROM applications a JOIN users u ON u.id=a.influencer_id
+           WHERE a.campaign_id=? AND a.status='shipping' AND a.tracking_number!=''
+           ORDER BY a.id`,
+        ).all(campaign.id) as { id: number; email: string }[];
+        if (recipients.length !== expected)
+          fail("배송 대상 인원이 변경됐습니다. 명단을 다시 확인해 주세요.", 409);
+        const now = Date.now();
+        const insert = db.prepare(
+          `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+           VALUES(?,?,?,?,?,?,?)`,
+        );
+        let queued = 0;
+        for (const recipient of recipients)
+          queued += insert.run(
+            recipient.id,
+            `content-guide:${campaign.id}:${recipient.id}`,
+            recipient.email,
+            `[Seoul Scent] ${campaign.title} Content guide / 콘텐츠 가이드`,
+            `${message}\n\n`,
+            now,
+            now,
+          ).changes;
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,?,?,?)",
+        ).run(u.id, "campaign_guide_email", `campaign:${campaign.id};queued:${queued}`, now);
+        return { recipients: recipients.length, queued };
+      })();
+      return c.json(result);
+    }),
+  );
+  app.get(
+    "/api/work/admin/campaigns/:id/guide-email",
+    wrap((c) => {
+      const u = role(c, "admin"),
+        campaign = campaignFor(db, id(c), u, true);
+      return c.json({
+        campaign_id: campaign.id,
+        counts: db.prepare(
+          "SELECT status,COUNT(*) AS count FROM email_outbox WHERE event_key LIKE ? GROUP BY status",
+        ).all(`content-guide:${campaign.id}:%`),
+      });
     }),
   );
   app.post(
