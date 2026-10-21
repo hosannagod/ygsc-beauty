@@ -446,16 +446,32 @@
       );
     if (role === "admin" && new URLSearchParams(location.search).get("status") === "draft")
       document.querySelector("#campaign-status").value = "draft";
+    const statusLabels = {
+      "": t("전체 상태"),
+      draft: t("비공개 초안"),
+      scheduled: t("모집 예정"),
+      recruiting: t("모집 중"),
+      closed: t("모집 마감"),
+      completed: t("완료"),
+    };
     const render = () => {
       const search = document
           .querySelector("#campaign-search")
           .value.toLowerCase(),
         status = document.querySelector("#campaign-status").value;
-      const filtered = campaigns.filter(
-        (c) =>
-          (!status || campaignStatus(c) === status) &&
-          (c.title + " " + c.brand_name).toLowerCase().includes(search),
+      const matching = campaigns.filter((c) =>
+        (c.title + " " + c.brand_name).toLowerCase().includes(search),
       );
+      const counts = { "": matching.length };
+      for (const campaign of matching) {
+        const currentStatus = campaignStatus(campaign);
+        counts[currentStatus] = (counts[currentStatus] || 0) + 1;
+      }
+      for (const option of document.querySelector("#campaign-status").options)
+        option.textContent = `${statusLabels[option.value]} (${counts[option.value] || 0})`;
+      const filtered = status
+        ? matching.filter((c) => campaignStatus(c) === status)
+        : matching;
       document.querySelector("#campaign-results").innerHTML = filtered.length
         ? filtered.map(campaignCard).join("")
         : empty(
