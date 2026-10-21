@@ -738,5 +738,11 @@
   "아직 발급 대상이 아닙니다.": "Not yet eligible for a certificate.",
   "지원 취소": "Application withdrawn",
   "이 캠페인 지원을 취소했습니다. 모집 중이라면 다시 지원할 수 있습니다.": "You withdrew this application. You may apply again while recruitment is open.",
-  "선정 전 지원을 취소할까요? 브랜드의 선정 대상에서 제외됩니다.": "Withdraw this application before selection? The brand will no longer consider it."
+  "선정 전 지원을 취소할까요? 브랜드의 선정 대상에서 제외됩니다.": "Withdraw this application before selection? The brand will no longer consider it.",
+  "게시 대기 초안": "Drafts awaiting publication",
+  "브랜드가 임시저장한 캠페인을 검토하고 게시할 수 있습니다.": "Review and publish campaigns saved as drafts by brands.",
+  "초안 전체 보기 →": "View all drafts →",
+  "초안 검토·게시 →": "Review and publish draft →",
+  "검토할 비공개 초안이 없습니다.": "There are no private drafts to review.",
+  "초안을 열어 내용·사진·일정을 확인한 뒤 게시해 주세요.": "Open a draft, review its details, photos and dates, then publish it."
 }

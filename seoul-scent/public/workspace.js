@@ -262,7 +262,7 @@
       </div>
       <div class="card-bottom">
         <span>모집 ${esc(c.recruit_start_date)} ~ ${esc(c.recruit_date)}</span
-        ><a class="text-link" href="/campaigns/${c.id}">상세 보기 →</a>
+        ><a class="text-link" href="/campaigns/${c.id}">${role === "admin" && c.is_draft ? t("초안 검토·게시 →") : t("상세 보기 →")}</a>
       </div>
       ${role !== "influencer" ? html`<p class="small muted">지원 ${c.applicant_count} · 선정 ${c.selected_count} · 완료 ${c.completed_count}</p>` : ""}
       ${role === "admin" ? `<div class="button-row"><a class="secondary" href="/campaigns/${c.id}#capacity-editor">${t("정원 편집")}</a><button class="secondary" data-delete-campaign="${c.id}">${t("캠페인 삭제")}</button></div>` : ""}
@@ -375,6 +375,8 @@
         </div>
         ${campaigns.length ? `<section class="campaign-grid">${campaigns.slice(0, 4).map(campaignCard).join("")}</section>` : empty(t("첫 캠페인을 준비해 보세요"), t("제품과 가이드라인을 등록하면 인플루언서 모집을 시작할 수 있습니다."))}`;
       if (role === "admin") {
+        const drafts = campaigns.filter((c) => c.is_draft);
+        main = `<div class="section-heading"><div><h2>${t("게시 대기 초안")} <span class="muted">${drafts.length}</span></h2><p class="muted">${t("브랜드가 임시저장한 캠페인을 검토하고 게시할 수 있습니다.")}</p></div><a class="secondary" href="/campaigns?status=draft">${t("초안 전체 보기 →")}</a></div>${drafts.length ? `<section class="campaign-grid">${drafts.slice(0, 4).map(campaignCard).join("")}</section>` : `<p class="muted">${t("검토할 비공개 초안이 없습니다.")}</p>`}${main}`;
         const mail = await api("/admin/email");
         const emailStates = {
           pending: t("발송 대기"),
@@ -425,6 +427,7 @@
   }
   async function campaigns() {
     const { campaigns } = await api("/campaigns");
+    const drafts = role === "admin" ? campaigns.filter((c) => c.is_draft) : [];
     root.innerHTML =
       heading(
         role === "influencer" ? t("나에게 맞는 캠페인") : t("캠페인 관리"),
@@ -435,9 +438,14 @@
             )
           : "",
       ) +
+      (role === "admin" && drafts.length
+        ? `<div class="notice">${t("게시 대기 초안")} ${drafts.length}${t("건")} · ${t("초안을 열어 내용·사진·일정을 확인한 뒤 게시해 주세요.")}</div>`
+        : "") +
       t(
         `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="draft">비공개 초안</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`,
       );
+    if (role === "admin" && new URLSearchParams(location.search).get("status") === "draft")
+      document.querySelector("#campaign-status").value = "draft";
     const render = () => {
       const search = document
           .querySelector("#campaign-search")

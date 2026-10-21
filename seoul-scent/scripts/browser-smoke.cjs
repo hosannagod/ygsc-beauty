@@ -204,9 +204,24 @@ const { spawn, spawnSync } = require("node:child_process"),
         .getAttribute("href"),
       "https://example.com/updated",
     );
-    await brand.getByRole("button", { name: "캠페인 게시" }).click();
-    await brand.locator("#confirm-accept").click();
-    await brand.locator("#toast").getByText("게시되었습니다.").waitFor();
+    const reviewer = await browser.newPage();
+    reviewer.on("pageerror", (e) => errors.push(e.message));
+    await reviewer.goto(base + "/login");
+    await reviewer.locator("[name=email]").fill("admin@example.test");
+    await reviewer.locator("[name=password]").fill(password);
+    await reviewer.getByRole("button", { name: "로그인", exact: false }).click();
+    await reviewer.waitForURL("**/dashboard/admin");
+    await reviewer.getByRole("heading", { name: "게시 대기 초안 1" }).waitFor();
+    await reviewer.getByRole("link", { name: "초안 전체 보기 →" }).click();
+    await reviewer.waitForURL("**/campaigns?status=draft");
+    assert.equal(await reviewer.locator("#campaign-status").inputValue(), "draft");
+    await reviewer.locator(`#campaign-results a[href="/campaigns/${campaignId}"]`).first().click();
+    await reviewer.getByRole("button", { name: "캠페인 게시" }).click();
+    await reviewer.locator("#confirm-accept").click();
+    await reviewer.locator("#toast").getByText("게시되었습니다.").waitFor();
+    await reviewer.close();
+    await brand.reload();
+    await brand.getByText("모집 중", { exact: true }).first().waitFor();
     await influencer.goto(base + "/campaigns/" + campaignId);
     await influencer
       .getByRole("heading", { name: "프로필 등록이 필요합니다" })

@@ -176,6 +176,24 @@ test("new campaigns stay private until reviewed and explicitly published", async
     f.db.close();
   }
 });
+test("admins can find and publish a brand's private draft", async () => {
+  const f = await fixture();
+  try {
+    const created = await f.req("brand", "/campaigns", "POST", campaign);
+    assert.equal(created.status, 201);
+    const id = ((await created.json()) as any).id;
+    const adminList = (await (await f.req("admin", "/campaigns")).json()) as any;
+    assert.ok(adminList.campaigns.some((row: any) => row.id === id && row.is_draft === 1));
+    assert.equal(((await (await f.req("admin", `/campaigns/${id}`)).json()) as any).campaign.is_draft, 1);
+    assert.equal((await f.req("otherbrand", `/campaigns/${id}`)).status, 403);
+    assert.equal((await f.req("influencer", `/campaigns/${id}`)).status, 404);
+    assert.equal((await f.req("admin", `/campaigns/${id}/details`, "PUT", { publish: true })).status, 200);
+    assert.equal(((await (await f.req("influencer", `/campaigns/${id}`)).json()) as any).campaign.is_draft, 0);
+    assert.equal((await f.req("admin", `/campaigns/${id}/details`, "PUT", { publish: true })).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("campaign guide documents support link-only content, safe URLs and partial edits", async () => {
   const f = await fixture();
   try {
