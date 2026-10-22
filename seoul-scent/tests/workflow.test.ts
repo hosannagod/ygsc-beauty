@@ -1153,9 +1153,13 @@ test("Asia/Seoul midnight and safe external link validation", () => {
     "https://youtube.com/watch",
     "http://instagram.com/p/abc",
     "https://evil.test/video",
+    "https://vt.tiktok.com/",
+    "https://vt.tiktok.com.evil.test/ZSgU2AxAC/",
   ])
     assert.throws(() => externalLink(url, false));
   assert.ok(externalLink("https://youtu.be/12345", false));
+  assert.ok(externalLink("https://vt.tiktok.com/ZSgU2AxAC/", false));
+  assert.ok(externalLink("https://vm.tiktok.com/ZMabc123/", false));
   assert.ok(externalLink("https://drive.google.com/open?id=12345", true));
 });
 test("no-show is idempotent, blocks new applications, demotes, blacklists on second campaign", async () => {

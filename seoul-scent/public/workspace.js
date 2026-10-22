@@ -1676,6 +1676,8 @@
             "youtube.com": /^\/(watch|shorts\/[^/]+)/,
             "youtu.be": /^\/[^/]+/,
             "tiktok.com": /^\/@[^/]+\/video\/\d+/,
+            "vt.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
+            "vm.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
             "facebook.com": /^\/.+/,
             "x.com": /^\/[^/]+\/status\/\d+/,
           }[host]?.test(url.pathname) &&
