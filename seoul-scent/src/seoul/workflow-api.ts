@@ -1463,7 +1463,7 @@ export function registerWorkflow(
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.campaign_access_granted,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({
@@ -1477,6 +1477,42 @@ export function registerWorkflow(
               u.blocked_until <= Date.now(),
           })),
       });
+    }),
+  );
+  app.post(
+    "/api/work/admin/influencers/grant-import-access",
+    wrap(async (c) => {
+      const admin = role(c, "admin"),
+        b = await body(c);
+      const expected = integer(b.expected_count, "대상 인원", 1, 500);
+      const candidates = db
+        .prepare(
+          `SELECT u.id,u.password_hash,u.must_change_password,p.*
+           FROM users u JOIN influencer_profiles p ON p.user_id=u.id
+           WHERE u.role='influencer' AND u.must_change_password=1
+             AND p.completed_count=0 AND p.onboarding_approved=0
+             AND p.campaign_access_granted=0 AND p.blacklisted=0
+             AND p.blocked_until<=?`,
+        )
+        .all(Date.now()) as any[];
+      const ids = candidates
+        .filter((person) =>
+          profileComplete(person) && verifyPassword("0000", person.password_hash),
+        )
+        .map((person) => person.id);
+      if (ids.length !== expected)
+        fail(`대상 인원이 변경되었습니다. 현재 ${ids.length}명입니다.`, 409);
+      if (b.dry_run !== false) return c.json({ count: ids.length, applied: false });
+      db.transaction(() => {
+        const grant = db.prepare(
+          "UPDATE influencer_profiles SET campaign_access_granted=1 WHERE user_id=? AND campaign_access_granted=0",
+        );
+        for (const userId of ids) grant.run(userId);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_access_grant',?,?)",
+        ).run(admin.id, JSON.stringify({ user_ids: ids, count: ids.length }), Date.now());
+      })();
+      return c.json({ count: ids.length, applied: true });
     }),
   );
   app.post(

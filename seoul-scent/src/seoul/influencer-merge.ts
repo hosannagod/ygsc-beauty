@@ -100,7 +100,7 @@ export function mergeInfluencers(
     db.prepare("UPDATE users SET phone=? WHERE id=?").run(phone, targetId);
     db.prepare(
       `UPDATE influencer_profiles SET phone=?,address=?,social_url=?,followers=?,
-      completed_count=?,total_views=?,no_show_count=?,blocked_until=?,blacklisted=?,onboarding_approved=? WHERE user_id=?`,
+      completed_count=?,total_views=?,no_show_count=?,blocked_until=?,blacklisted=?,onboarding_approved=?,campaign_access_granted=? WHERE user_id=?`,
     ).run(
       phone,
       primary.address || profiles.find((p) => p.address)?.address || "",
@@ -114,6 +114,7 @@ export function mergeInfluencers(
       Math.max(...profiles.map((p) => p.blocked_until)),
       Math.max(...profiles.map((p) => p.blacklisted)),
       Math.max(...profiles.map((p) => p.onboarding_approved)),
+      Math.max(...profiles.map((p) => p.campaign_access_granted)),
       targetId,
     );
     db.prepare(

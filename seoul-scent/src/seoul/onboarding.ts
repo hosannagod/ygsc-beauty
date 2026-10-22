@@ -12,7 +12,7 @@ import {
 import { parseCampaignImages } from "./campaign-images.js";
 export const promotionLink = "https://bit.ly/4glyo5O";
 export function campaignEligible(p: any) {
-  return p.completed_count > 0 || p.onboarding_approved === 1;
+  return p.completed_count > 0 || p.onboarding_approved === 1 || p.campaign_access_granted === 1;
 }
 export function onboardingStatus(db: DB, user: number) {
   const row = db
