@@ -1662,37 +1662,20 @@
     if (field.name !== "url" || !["draft", "final"].includes(action)) return;
     let valid = false;
     try {
-      const url = new URL(field.value),
-        host = url.hostname.replace(/^www\./, "");
+      const url = new URL(field.value);
       valid =
         (action === "draft" ? ["http:", "https:"] : ["https:"]).includes(
           url.protocol,
         ) &&
         !url.username &&
-        !url.password &&
-        (action === "draft" ||
-          ({
-            "instagram.com": /^\/(p|reel|tv)\/[^/]+/,
-            "youtube.com": /^\/(watch|shorts\/[^/]+)/,
-            "youtu.be": /^\/[^/]+/,
-            "tiktok.com": /^\/@[^/]+\/video\/\d+/,
-            "vt.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
-            "vm.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
-            "facebook.com": /^\/.+/,
-            "x.com": /^\/[^/]+\/status\/\d+/,
-          }[host]?.test(url.pathname) &&
-            !(
-              host === "youtube.com" &&
-              url.pathname === "/watch" &&
-              !url.searchParams.get("v")
-            )));
+        !url.password;
     } catch {}
     field.setCustomValidity(
       !field.value || valid
         ? ""
         : action === "draft"
           ? t("올바른 HTTP/HTTPS 웹 링크를 입력해 주세요.")
-          : t("지원되는 SNS 게시물 링크를 입력해 주세요."),
+          : t("유효한 HTTPS 링크를 입력해 주세요."),
     );
   });
   root.addEventListener("submit", async (event) => {

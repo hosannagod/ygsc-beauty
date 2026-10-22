@@ -1149,17 +1149,17 @@ test("Asia/Seoul midnight and safe external link validation", () => {
   ])
     assert.throws(() => externalLink(url, true));
   for (const url of [
-    "https://instagram.com/username",
-    "https://youtube.com/watch",
     "http://instagram.com/p/abc",
-    "https://evil.test/video",
-    "https://vt.tiktok.com/",
-    "https://vt.tiktok.com.evil.test/ZSgU2AxAC/",
+    "https://user:pass@instagram.com/p/abc",
+    "javascript:alert(1)",
   ])
     assert.throws(() => externalLink(url, false));
   assert.ok(externalLink("https://youtu.be/12345", false));
   assert.ok(externalLink("https://vt.tiktok.com/ZSgU2AxAC/", false));
   assert.ok(externalLink("https://vm.tiktok.com/ZMabc123/", false));
+  assert.ok(externalLink("https://xhslink.cn/m/43AN3g6NbJt", false));
+  assert.ok(externalLink("https://www.xiaohongshu.com/explore/123", false));
+  assert.ok(externalLink("https://instagram.com/username", false));
   assert.ok(externalLink("https://drive.google.com/open?id=12345", true));
 });
 test("no-show is idempotent, blocks new applications, demotes, blacklists on second campaign", async () => {

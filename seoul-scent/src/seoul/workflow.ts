@@ -102,28 +102,6 @@ export function externalLink(value: unknown, draft: boolean) {
     url.password
   )
     fail("인증 정보가 없는 HTTP/HTTPS 웹 링크를 입력해 주세요.");
-  if (!draft) {
-    const host = url.hostname.replace(/^www\./, "");
-    const paths: Record<string, RegExp> = {
-      "instagram.com": /^\/(p|reel|tv)\/[^/]+/,
-      "youtube.com": /^\/(watch|shorts\/[^/]+)/,
-      "youtu.be": /^\/[^/]+/,
-      "tiktok.com": /^\/@[^/]+\/video\/\d+/,
-      "vt.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
-      "vm.tiktok.com": /^\/[A-Za-z0-9_-]{5,}\/?$/,
-      "facebook.com": /^\/.+/,
-      "x.com": /^\/[^/]+\/status\/\d+/,
-    };
-    if (
-      !paths[host]?.test(url.pathname) ||
-      (host === "youtube.com" &&
-        url.pathname === "/watch" &&
-        !url.searchParams.get("v"))
-    )
-      fail(
-        "Instagram, YouTube, TikTok, Facebook 또는 X의 게시물 링크를 입력해 주세요.",
-      );
-  }
   return url.href;
 }
 export function notify(
