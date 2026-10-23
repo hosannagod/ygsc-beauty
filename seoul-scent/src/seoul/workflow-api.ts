@@ -1353,6 +1353,80 @@ export function registerWorkflow(
       return c.json(result);
     }),
   );
+  app.post(
+    "/api/work/admin/campaigns/:id/final-reminder-email",
+    wrap(async (c) => {
+      const u = role(c, "admin"),
+        campaign = campaignFor(db, id(c), u, true),
+        b = await body(c);
+      if (!emailConfig().configured)
+        fail("메일 발송 설정을 확인해 주세요.", 503);
+      const finalDate = text(b.final_date, "최종 업로드 마감일", 10, 10),
+        expected = integer(b.expected_count, "발송 대상 인원", 1, 500);
+      if (campaign.final_date !== finalDate || campaign.final_due <= Date.now())
+        fail("캠페인의 최종 업로드 마감일을 다시 확인해 주세요.", 409);
+      const recipients = db.prepare(
+        `SELECT a.id,u.email,u.name FROM applications a
+         JOIN users u ON u.id=a.influencer_id
+         WHERE a.campaign_id=? AND a.status='shipping'
+           AND a.tracking_number!='' AND a.final_url=''
+         ORDER BY a.id`,
+      ).all(campaign.id) as { id: number; email: string; name: string }[];
+      if (recipients.length !== expected)
+        fail(`발송 대상이 변경됐습니다. 현재 ${recipients.length}명입니다.`, 409);
+      if (b.dry_run !== false)
+        return c.json({ recipients: recipients.length, queued: 0, applied: false });
+      const now = Date.now(),
+        dueEn = new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric",
+        }).format(new Date(campaign.final_due - 1)),
+        dueKo = new Intl.DateTimeFormat("ko-KR", {
+          timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric",
+        }).format(new Date(campaign.final_due - 1));
+      const queued = db.transaction(() => {
+        const insert = db.prepare(
+          `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+           VALUES(?,?,?,?,?,?,?)`,
+        );
+        let count = 0;
+        for (const recipient of recipients) {
+          const message = `English
+
+Hello ${recipient.name},
+
+This is a reminder for the ${campaign.title_en || campaign.title} campaign. Please publish your content and submit the final post link by ${dueEn} (KST).
+
+If you have not received the product, please reply to this email so we can check the delivery.
+
+--------------------
+
+한국어
+
+안녕하세요, ${recipient.name}님.
+
+${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링크를 ${dueKo}까지 제출해 주세요.
+
+제품을 아직 받지 못하셨다면 이 메일에 회신해 주시면 배송 상태를 확인하겠습니다.
+
+`;
+          count += insert.run(
+            recipient.id,
+            `final-reminder:${campaign.id}:${recipient.id}:${finalDate}`,
+            recipient.email,
+            `[Seoul Scent] ${campaign.title} Final upload reminder / 최종 업로드 안내`,
+            message,
+            now,
+            now,
+          ).changes;
+        }
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_final_reminder_email',?,?)",
+        ).run(u.id, JSON.stringify({ campaign_id: campaign.id, final_date: finalDate, recipients: recipients.length, queued: count }), now);
+        return count;
+      })();
+      return c.json({ recipients: recipients.length, queued, applied: true });
+    }),
+  );
   app.get(
     "/api/work/admin/campaigns/:id/guide-email",
     wrap((c) => {
