@@ -794,6 +794,8 @@
             </form>
           </details>
         </section>`;
+        if (c.status === "closed")
+          root.innerHTML += `<section class="panel"><h3>${t("최종 업로드 마감일 연장")}</h3><p class="note left">${t("모집이 마감된 캠페인도 최종 업로드 마감일을 연장할 수 있습니다. 진행 중인 선정자에게 알림이 전달됩니다.")}</p><form class="editor" data-task="campaign-final-deadline" data-id="${id}">${input("final_date", t("새 최종 업로드 마감일"), "date", "required", c.final_date)}${submit(t("마감일 연장 저장"))}</form></section>`;
       }
       const selectedApplications = applications.filter(
           (a) => !["applied", "rejected"].includes(a.status),
@@ -1817,6 +1819,9 @@
           break;
         case "campaign-capacity":
           await api(`/campaigns/${form.dataset.id}/capacity`, "PUT", data);
+          break;
+        case "campaign-final-deadline":
+          await api(`/campaigns/${form.dataset.id}/final-deadline`, "PUT", data);
           break;
         case "campaign-details":
           await api(`/campaigns/${form.dataset.id}/details`, "PUT", data);

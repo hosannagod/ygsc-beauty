@@ -424,6 +424,39 @@ export function registerWorkflow(
       return c.json({ success: true });
     }),
   );
+  app.put(
+    "/api/work/campaigns/:id/final-deadline",
+    wrap(async (c) => {
+      const u = current(c),
+        b = await body(c);
+      const campaign = campaignFor(db, id(c), u, true);
+      if (campaign.is_draft || campaign.status !== "closed")
+        fail("모집이 마감된 캠페인의 최종 업로드 기한만 연장할 수 있습니다.", 409);
+      const finalDate = text(b.final_date, "최종 업로드 마감일", 10, 10);
+      const finalDue = deadline(finalDate);
+      if (finalDue <= campaign.final_due || finalDue <= Date.now())
+        fail("현재 마감일보다 늦은 미래 날짜를 입력해 주세요.", 409);
+      db.transaction(() => {
+        if (campaign.review_required)
+          db.prepare("UPDATE campaigns SET final_date=?,final_due=? WHERE id=?")
+            .run(finalDate, finalDue, campaign.id);
+        else
+          db.prepare("UPDATE campaigns SET draft_date=?,draft_due=?,final_date=?,final_due=? WHERE id=?")
+            .run(finalDate, finalDue, finalDate, finalDue, campaign.id);
+        const participants = db.prepare(
+          "SELECT id,influencer_id FROM applications WHERE campaign_id=? AND status NOT IN ('applied','rejected','completed','no_show')",
+        ).all(campaign.id) as { id: number; influencer_id: number }[];
+        for (const participant of participants)
+          notify(db, participant.influencer_id,
+            `${campaign.title}: 최종 업로드 마감일이 ${finalDate}로 연장되었습니다.`,
+            `/applications/${participant.id}`);
+        db.prepare(
+          "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_final_deadline_extend',?,?)",
+        ).run(u.id, JSON.stringify({ campaign_id: campaign.id, previous: campaign.final_date, final_date: finalDate, notified: participants.length }), Date.now());
+      })();
+      return c.json({ success: true, final_date: finalDate });
+    }),
+  );
   app.delete(
     "/api/work/campaigns/:id",
     wrap((c) => {

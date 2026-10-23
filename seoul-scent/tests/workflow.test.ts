@@ -1726,6 +1726,32 @@ test("a manually closed campaign can reopen before its recruitment deadline", as
     f.db.close();
   }
 });
+test("closed campaigns can extend the final deadline without resetting participation confirmation", async () => {
+  const f = await fixture();
+  try {
+    const id = await f.create({ review_required: false });
+    const applicationId = await f.apply(id);
+    assert.equal((await f.action(applicationId, "select")).status, 200);
+    const before = f.db.prepare("SELECT participation_confirmed_at FROM applications WHERE id=?")
+      .get(applicationId) as any;
+    assert.ok(before.participation_confirmed_at);
+    assert.equal((await f.req("brand", `/campaigns/${id}/close`, "POST", { confirm_close: true })).status, 200);
+    const path = `/campaigns/${id}/final-deadline`;
+    const finalDate = future(15);
+    assert.equal((await f.req("otherbrand", path, "PUT", { final_date: finalDate })).status, 403);
+    assert.equal((await f.req("brand", path, "PUT", { final_date: campaign.final_date })).status, 409);
+    assert.equal((await f.req("admin", path, "PUT", { final_date: finalDate })).status, 200);
+    const updated = f.db.prepare("SELECT status,final_date,draft_date FROM campaigns WHERE id=?")
+      .get(id) as any;
+    assert.equal(updated.status, "closed");
+    assert.equal(updated.final_date, finalDate);
+    assert.equal(updated.draft_date, finalDate);
+    assert.equal((f.db.prepare("SELECT participation_confirmed_at FROM applications WHERE id=?")
+      .get(applicationId) as any).participation_confirmed_at, before.participation_confirmed_at);
+  } finally {
+    f.db.close();
+  }
+});
 
 test("existing campaigns migrate once without losing applications or schedule data", async () => {
   const f = await fixture();
