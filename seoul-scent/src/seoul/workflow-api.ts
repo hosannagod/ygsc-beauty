@@ -2316,6 +2316,22 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
       );
     }),
   );
+  app.post(
+    "/api/work/admin/influencers/unblock-email",
+    wrap(async (c) => {
+      const actor = role(c, "admin"), b = await body(c);
+      const email = text(b.email, "이메일", 3, 254).toLowerCase();
+      if (!/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(email))
+        fail("올바른 이메일 주소를 입력해 주세요.");
+      const removed = db.transaction(() => {
+        const result = db.prepare("DELETE FROM blocked_emails WHERE email=?").run(email);
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'email_unblock',?,?)")
+          .run(actor.id, JSON.stringify({ email, removed: result.changes }), Date.now());
+        return result.changes;
+      })();
+      return c.json({ email, unblocked: removed > 0 });
+    }),
+  );
   app.delete(
     "/api/work/admin/users/:id",
     wrap(async (c) => {
