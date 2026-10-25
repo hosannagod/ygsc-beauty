@@ -1623,6 +1623,27 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
     }),
   );
   app.post(
+    "/api/work/admin/users/:id/grant-bronze-access",
+    wrap((c) => {
+      const actor = role(c, "admin"), target = id(c);
+      const result = db.transaction(() => {
+        const user = db.prepare("SELECT id,role FROM users WHERE id=?").get(target) as any;
+        const profile = db.prepare("SELECT * FROM influencer_profiles WHERE user_id=?").get(target) as any;
+        if (!user || user.role !== "influencer" || !profile)
+          fail("인플루언서를 찾을 수 없습니다.", 404);
+        if (!profileComplete(profile)) fail("프로필 정보를 먼저 완료해 주세요.", 409);
+        if (profile.blacklisted || profile.blocked_until > Date.now())
+          fail("지원 제한 중인 계정입니다.", 409);
+        db.prepare("UPDATE influencer_profiles SET onboarding_approved=1 WHERE user_id=?").run(target);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(actor.id, target, "grant_bronze_access", "Admin approved bronze campaign access", Date.now());
+        notify(db, target, "브론즈 등급으로 승급되었습니다. 캠페인에 지원할 수 있습니다.", "/campaigns");
+        return { success: true, user_id: target };
+      })();
+      return c.json(result);
+    }),
+  );
+  app.post(
     "/api/work/admin/users",
     wrap(async (c) => {
       const actor = role(c, "admin"),
