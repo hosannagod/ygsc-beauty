@@ -195,6 +195,13 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   ); CREATE INDEX IF NOT EXISTS email_outbox_pending ON email_outbox(status,next_attempt);
   CREATE TABLE IF NOT EXISTS email_attempts(id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES email_outbox(id),created_at INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS email_attempts_time ON email_attempts(created_at);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS application_content_links (
+    id INTEGER PRIMARY KEY,
+    application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  ); CREATE INDEX IF NOT EXISTS application_content_links_application ON application_content_links(application_id,id);`);
   db.exec("INSERT OR IGNORE INTO schema_version VALUES(8)");
   db.transaction(() => {
     if (

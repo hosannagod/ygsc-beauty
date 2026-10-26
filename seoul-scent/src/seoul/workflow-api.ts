@@ -1034,6 +1034,10 @@ export function registerWorkflow(
         application: {
           ...a,
           tracking_url: shippingTrackingUrl(a.carrier, a.tracking_number),
+          content_links: (() => {
+            const links = db.prepare("SELECT id,url FROM application_content_links WHERE application_id=? ORDER BY id").all(a.id) as { id: number; url: string }[];
+            return links.length ? links : a.final_url ? [{ id: 0, url: a.final_url }] : [];
+          })(),
         },
         events: db
           .prepare(
@@ -1247,16 +1251,28 @@ export function registerWorkflow(
           }
           case "final":
             if (!influencer) fail("접근 권한이 없습니다.", 403);
-            requireState(a.review_required ? ["draft_approved"] : ["shipping"]);
-            if (Date.now() >= a.final_due)
+            requireState(a.review_required ? ["draft_approved", "final_submitted", "completed"] : ["shipping", "final_submitted", "completed"]);
+            if (!a.final_url && Date.now() >= a.final_due)
               fail("최종 제출 마감이 지났습니다.", 409);
             link = externalLink(b.url, false);
-            status = "final_submitted";
-            note = "최종 SNS 게시물 링크가 제출되었습니다.";
-            db.prepare("UPDATE applications SET final_url=? WHERE id=?").run(
-              link,
-              a.id,
-            );
+            if (a.final_url && !db.prepare("SELECT 1 FROM application_content_links WHERE application_id=?").get(a.id))
+              db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)").run(a.id, a.final_url, Date.now(), Date.now());
+            if (b.link_id !== undefined && b.link_id !== "") {
+              let linkId = integer(Number(b.link_id), "콘텐츠 링크 ID", 0);
+              if (linkId === 0)
+                linkId = (db.prepare("SELECT id FROM application_content_links WHERE application_id=? ORDER BY id LIMIT 1").get(a.id) as { id: number }).id;
+              const updated = db.prepare("UPDATE application_content_links SET url=?,updated_at=? WHERE id=? AND application_id=?")
+                .run(link, Date.now(), linkId, a.id);
+              if (!updated.changes) fail("수정할 링크를 찾을 수 없습니다.", 404);
+              note = "최종 SNS 게시물 링크가 수정되었습니다.";
+            } else {
+              db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)")
+                .run(a.id, link, Date.now(), Date.now());
+              note = "최종 SNS 게시물 링크가 추가되었습니다.";
+            }
+            const first = db.prepare("SELECT url FROM application_content_links WHERE application_id=? ORDER BY id LIMIT 1").get(a.id) as { url: string };
+            db.prepare("UPDATE applications SET final_url=? WHERE id=?").run(first.url, a.id);
+            if (a.status !== "completed") status = "final_submitted";
             break;
           case "complete": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
@@ -2631,7 +2647,9 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,a.best,a.views,p.tier,p.completed_count,p.onboarding_approved,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
+          `SELECT a.id,u.name,a.status,a.draft_url,a.final_url,
+            COALESCE((SELECT group_concat(url, char(10)) FROM application_content_links WHERE application_id=a.id),a.final_url) AS all_final_urls,
+            a.best,a.views,p.tier,p.completed_count,p.onboarding_approved,a.consent_version FROM applications a JOIN users u ON u.id=a.influencer_id JOIN influencer_profiles p ON p.user_id=u.id WHERE a.campaign_id=? ORDER BY a.id`,
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -2642,6 +2660,7 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
         { header: "상태", key: "status", width: 20 },
         { header: "초안 URL", key: "draft_url", width: 50 },
         { header: "최종 SNS URL", key: "final_url", width: 50 },
+        { header: "전체 SNS URL", key: "all_final_urls", width: 60 },
         { header: "Best", key: "best", width: 10 },
         { header: "확인 조회수", key: "views", width: 15 },
         { header: "등급", key: "tier", width: 15 },

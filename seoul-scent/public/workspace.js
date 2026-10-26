@@ -1200,7 +1200,8 @@
         );
       if (
         a.status === "draft_approved" ||
-        (!a.review_required && a.status === "shipping")
+        (!a.review_required && a.status === "shipping") ||
+        (["final_submitted", "completed"].includes(a.status) && a.final_url)
       )
         actions = actionForm(
           a,
@@ -1211,9 +1212,11 @@
             "url",
             'required placeholder="https://www.instagram.com/reel/…"',
           ),
-          t("최종 URL 제출"),
-          t("콘텐츠의 SNS 게시물 URL을 최종 제출할까요?"),
+          a.final_url ? t("콘텐츠 링크 추가") : t("최종 URL 제출"),
+          a.final_url ? "" : t("콘텐츠의 SNS 게시물 URL을 최종 제출할까요?"),
         );
+      if (a.content_links?.length)
+        actions += `<section class="content-links-editor"><h3>${t("제출한 콘텐츠 링크")}</h3>${a.content_links.map((item, index) => `<div class="content-link-item"><p>${index + 1}. ${link(item.url, t("게시물 열기"))}</p>${actionForm(a, "final", `<input type="hidden" name="link_id" value="${item.id}">${input("url", t("SNS 게시물 URL 수정"), "url", 'required placeholder="https://..."', item.url)}`, t("링크 수정 저장"))}</div>`).join("")}</section>`;
     } else {
       if (a.status === "applied")
         actions = `<div class="review-actions"><p class="note left">${t("캠페인 지원자 목록에서 선택한 뒤 최종 선정해 주세요.")}</p><a class="primary" href="/campaigns/${a.campaign_id}">${t("최종 선정하러 가기")}</a>${actionForm(a, "reject", textarea("note", t("반려 사유 (선택)"), 'maxlength="1000"'), t("지원 반려"), t("이 지원을 반려할까요?"))}</div>`;
@@ -1294,7 +1297,7 @@
           <div>
             <section class="panel">
               <h2>제출 콘텐츠</h2>
-              ${influencer ? "" : `<p>${t("참여 횟수")}${participationInfo()} · ${t("완료")} ${a.completed_count}${t("회")} · ${t("진행 중")} ${a.active_count || 0}${t("건")}</p>`}${!influencer ? `<p>${t("국적")}: ${esc(t(a.nationality || "미등록"))}</p>` : ""}${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.final_url ? html`<p>최종 · ${link(a.final_url, t("SNS 게시물 보기"))}</p>` : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
+              ${influencer ? "" : `<p>${t("참여 횟수")}${participationInfo()} · ${t("완료")} ${a.completed_count}${t("회")} · ${t("진행 중")} ${a.active_count || 0}${t("건")}</p>`}${!influencer ? `<p>${t("국적")}: ${esc(t(a.nationality || "미등록"))}</p>` : ""}${a.social_url ? html`<p>${link(a.social_url, t("인플루언서 SNS 프로필"))} · ${money(a.followers)} 팔로워 · ${tierName(a.tier, a.completed_count, a.onboarding_approved)}</p>` : ""}${a.draft_url ? html`<p>초안 · ${link(a.draft_url, t("초안 링크 열기"))}</p>` : a.review_required ? t('<p class="muted">초안 링크가 아직 제출되지 않았습니다.</p>') : t('<p class="muted">초안 검수 없음</p>')}${a.content_links?.length ? a.content_links.map((item, index) => html`<p>최종 ${index + 1} · ${link(item.url, t("SNS 게시물 보기"))}</p>`).join("") : ""}${a.best ? t('<span class="best">★ Best 활동</span>') : ""}${a.status === "completed" ? html`<p class="muted">브랜드 확인 조회수 ${money(a.views)}</p>` : ""}
             </section>
             <section class="panel">
               <h3>배송 정보</h3>
