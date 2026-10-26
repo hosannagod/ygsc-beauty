@@ -90,6 +90,8 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       db.exec(
         "ALTER TABLE campaigns ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0 CHECK(is_draft IN (0,1))",
       );
+    if (!cols.some((c) => c.name === "selection_finalized_at"))
+      db.exec("ALTER TABLE campaigns ADD COLUMN selection_finalized_at INTEGER NOT NULL DEFAULT 0");
     if (!cols.some((c) => c.name === "import_key"))
       db.exec("ALTER TABLE campaigns ADD COLUMN import_key TEXT");
     db.exec(

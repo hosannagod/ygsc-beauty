@@ -939,6 +939,18 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/campaigns/:id/finalize-selection",
+    wrap((c) => {
+      const u = current(c), campaign = campaignFor(db, id(c), u, true);
+      if (u.role !== "admin" && u.role !== "brand") fail("접근 권한이 없습니다.", 403);
+      if (campaign.status !== "closed") fail("모집 마감 후 선정 결과를 확정해 주세요.", 409);
+      const remaining = db.prepare("SELECT COUNT(*) AS count FROM applications WHERE campaign_id=? AND status='applied'").get(campaign.id) as { count: number };
+      db.prepare("UPDATE campaigns SET selection_finalized_at=? WHERE id=? AND selection_finalized_at=0")
+        .run(Date.now(), campaign.id);
+      return c.json({ success: true, not_selected: remaining.count });
+    }),
+  );
+  app.post(
     "/api/work/campaigns/:id/close",
     wrap(async (c) => {
       const u = current(c),
@@ -1019,7 +1031,7 @@ export function registerWorkflow(
       return c.json({
         applications: db
           .prepare(
-            `SELECT a.*,c.review_required,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE c.deleted_at=0 AND a.influencer_id=? ORDER BY a.id DESC`,
+            `SELECT a.*,c.selection_finalized_at,c.review_required,c.title,c.product,c.draft_date,c.final_date,c.recruit_date,u.name AS brand_name FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=c.brand_id WHERE c.deleted_at=0 AND a.influencer_id=? ORDER BY a.id DESC`,
           )
           .all(u.id),
       });

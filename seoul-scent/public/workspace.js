@@ -18,6 +18,7 @@
   const labels = {
     applied: t("지원 완료"),
     rejected: t("반려"),
+    not_selected: t("미선정"),
     withdrawn: t("지원 취소"),
     selected: t("선정됨"),
     shipping: t("배송 중"),
@@ -66,7 +67,7 @@
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const applicationBadge = (a) =>
-    badge(a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status);
+    badge(a.status === "applied" && a.selection_finalized_at ? "not_selected" : a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status);
   const money = (n) =>
     Number(n).toLocaleString(
       window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
@@ -289,11 +290,15 @@
     const groups = [
       [
         "지원 완료",
-        applications.filter((a) => ["applied", "rejected"].includes(a.status)),
+        applications.filter((a) => (a.status === "applied" && !a.selection_finalized_at) || a.status === "rejected"),
       ],
       [
         "선정",
         applications.filter((a) => !["applied", "rejected"].includes(a.status)),
+      ],
+      [
+        "미선정",
+        applications.filter((a) => a.status === "applied" && a.selection_finalized_at),
       ],
     ];
     return groups
@@ -860,6 +865,7 @@
           </div>
           ${submit(t("최종 선정"))}
         </form>
+        ${c.status === "closed" ? `<form class="panel" data-task="finalize-selection" data-id="${id}"><h3>${t("선정 결과 확정")}</h3><p class="note left">${c.selection_finalized_at ? t("선정 결과가 확정되었습니다. 미선정자는 내 캠페인에서 결과를 볼 수 있습니다.") : t("선정을 마친 뒤 확정하면 남은 지원자에게 미선정 상태가 표시됩니다. 이메일은 발송되지 않습니다.")}</p>${c.selection_finalized_at ? "" : submit(t("선정 결과 확정"))}</form>` : ""}
         <div id="applicants-table" class="panel table-wrap"></div>
         <section class="panel">
           <h3>배송 엑셀</h3>
@@ -1113,7 +1119,7 @@
     let actions = "",
       shippingAddressForm = "";
     if (influencer) {
-      if (a.status === "applied")
+      if (a.status === "applied" && !a.selection_finalized_at)
         actions = actionForm(
           a,
           "withdraw",
@@ -1281,6 +1287,8 @@
         : esc(a.draft_date);
     if (a.campaign_deleted_at)
       actions = `<p class="warning">${t("관리자가 삭제한 캠페인입니다. 참여 이력만 확인할 수 있습니다.")}</p>`;
+    if (influencer && a.status === "applied" && a.selection_finalized_at)
+      actions = `<p class="notice">${t("이번 캠페인에는 선정되지 않았습니다. 다른 캠페인에도 지원하실 수 있습니다.")}</p>`;
     root.innerHTML =
       heading(
         esc(a.title),
@@ -1709,6 +1717,11 @@
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
       switch (form.dataset.task) {
+        case "finalize-selection": {
+          if (!(await confirmAction(t("남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.")))) return;
+          await api(`/campaigns/${form.dataset.id}/finalize-selection`, "POST", {});
+          break;
+        }
         case "final-selection": {
           const ids = JSON.parse(form.dataset.applicationIds || "[]");
           if (!ids.length) throw new Error(t("선정할 지원자를 선택해 주세요."));
