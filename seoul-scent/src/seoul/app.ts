@@ -342,7 +342,7 @@ export function createApp(
       typeof name !== "string" ||
       name.length < 2 ||
       name.length > 60 ||
-      body.password.length < 12 ||
+      body.password.length < 8 ||
       body.password.length > 128 ||
       !/^[+0-9 ()-]{8,30}$/.test(phone) ||
       (body.role === "brand" &&
@@ -351,7 +351,7 @@ export function createApp(
       return c.json(
         {
           error:
-            "이메일, 이름·브랜드명·담당자명(2~60자), 연락처, 비밀번호(12~128자)를 확인해 주세요.",
+            "이메일, 이름·브랜드명·담당자명(2~60자), 연락처, 비밀번호(8~128자)를 확인해 주세요.",
         },
         400,
       );

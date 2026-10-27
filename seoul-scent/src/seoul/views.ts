@@ -87,9 +87,9 @@ export function page(
                     type="password"
                     autocomplete="${register ? "new-password" : "current-password"}"
                     required
-                    ${register ? 'minlength="12"' : ""}
+                    ${register ? 'minlength="8"' : ""}
                     maxlength="128"
-                    placeholder="${register ? t("12자 이상 입력해 주세요") : t("비밀번호를 입력해 주세요")}"
+                    placeholder="${register ? t("8자 이상 입력해 주세요") : t("비밀번호를 입력해 주세요")}"
                 /></label>
                 <p id="form-error" role="alert" hidden></p>
                 <button class="primary" type="submit">

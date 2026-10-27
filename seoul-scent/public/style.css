@@ -1,5 +1,12 @@
+@font-face {
+  font-family: Pretendard;
+  src: url('/assets/pretendard-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
 :root {
-  font-family: Inter, "Noto Sans KR", system-ui, sans-serif;
+  font-family: Pretendard, system-ui, sans-serif;
   color: #26362f;
   background: #fafbf8;
   font-synthesis: none;
@@ -303,13 +310,13 @@ header {
 }
 .welcome-mark {
   font-size: 70px;
-  font-family: Georgia, serif;
+  font-family: inherit;
   color: #6f815e;
   padding: 0 28px;
 }
 .welcome-mark span {
   display: block;
-  font-family: system-ui;
+  font-family: inherit;
   font-size: 8px;
   letter-spacing: 3px;
 }
