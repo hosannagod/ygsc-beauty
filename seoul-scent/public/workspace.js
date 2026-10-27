@@ -447,7 +447,7 @@
         ? `<div class="notice">${t("게시 대기 초안")} ${drafts.length}${t("건")} · ${t("초안을 열어 내용·사진·일정을 확인한 뒤 게시해 주세요.")}</div>`
         : "") +
       t(
-        `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="draft">비공개 초안</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><section class="campaign-grid" id="campaign-results"></section>`,
+        `<div class="toolbar"><input id="campaign-search" placeholder="캠페인·브랜드 검색" aria-label="캠페인 검색"><select id="campaign-status" aria-label="캠페인 상태"><option value="">전체 상태</option><option value="draft">비공개 초안</option><option value="scheduled">모집 예정</option><option value="recruiting">모집 중</option><option value="closed">모집 마감</option><option value="completed">완료</option></select></div><div id="campaign-results"></div>`,
       );
     if (role === "admin" && new URLSearchParams(location.search).get("status") === "draft")
       document.querySelector("#campaign-status").value = "draft";
@@ -477,8 +477,17 @@
       const filtered = status
         ? matching.filter((c) => campaignStatus(c) === status)
         : matching;
+      const order = role === "influencer"
+        ? ["recruiting", "scheduled", "closed", "completed"]
+        : ["recruiting", "scheduled", "closed", "completed", "draft"];
       document.querySelector("#campaign-results").innerHTML = filtered.length
-        ? filtered.map(campaignCard).join("")
+        ? order.map((group) => {
+            const items = filtered.filter((c) => campaignStatus(c) === group);
+            if (!items.length) return "";
+            if (group === "scheduled") items.sort((a, b) => a.recruit_start - b.recruit_start);
+            if (group === "recruiting") items.sort((a, b) => a.recruit_due - b.recruit_due);
+            return `<div class="section-heading"><h2>${statusLabels[group]} <span class="muted">${items.length}</span></h2></div><section class="campaign-grid">${items.map(campaignCard).join("")}</section>`;
+          }).join("")
         : empty(
             t("캠페인이 없습니다"),
             t("검색 조건을 바꾸거나 새로운 캠페인을 등록해 주세요."),
