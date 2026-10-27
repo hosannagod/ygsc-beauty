@@ -1455,6 +1455,56 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
       return c.json({ recipients: recipients.length, queued, applied: true });
     }),
   );
+  app.post(
+    "/api/work/admin/campaigns/:id/progress-email",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), campaign = campaignFor(db, id(c), admin, true), b = await body(c);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      if (!["shipping", "selected"].includes(b.audience)) fail("발송 대상을 확인해 주세요.");
+      const expected = integer(b.expected_count, "발송 대상 인원", 1, 500);
+      const date = text(b.final_date, "최종 업로드 마감일", 10, 10);
+      if (campaign.final_date !== date) fail("마감일이 변경됐습니다. 다시 확인해 주세요.", 409);
+      const recipients = db.prepare(`SELECT a.id,u.email,u.name FROM applications a JOIN users u ON u.id=a.influencer_id
+        WHERE a.campaign_id=? AND a.status=? AND a.final_url='' AND (?='selected' OR a.tracking_number!='') ORDER BY a.id`)
+        .all(campaign.id, b.audience, b.audience) as { id: number; email: string; name: string }[];
+      if (recipients.length !== expected) fail(`발송 대상이 변경됐습니다. 현재 ${recipients.length}명입니다.`, 409);
+      if (b.dry_run !== false) return c.json({ recipients: recipients.length, queued: 0, applied: false });
+      const shipping = b.audience === "shipping", now = Date.now();
+      const queued = db.transaction(() => {
+        const insert = db.prepare(`INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        let count = 0;
+        for (const recipient of recipients) {
+          const message = `한국어
+
+${recipient.name}님, 안녕하세요. Seoul Scent입니다.
+
+${campaign.title} 캠페인 진행 상황을 안내드립니다.
+${shipping ? "제품 배송정보가 등록되었습니다. 제품을 잘 받으셨는지 확인해 주세요. 아직 받지 못하셨다면 이 메일에 회신해 주세요." : "제품 배송을 준비 중입니다. 내 캠페인에서 참여 의사와 배송지를 확인해 주세요. 배송이 시작되면 콘텐츠를 제작해 주세요."}
+콘텐츠를 게시한 뒤 최종 SNS 링크를 ${date}까지 내 캠페인에 제출해 주세요. 이미 제출하셨다면 추가 제출은 필요하지 않습니다.
+
+내 캠페인: https://seoul-scent.onrender.com/applications
+
+--------------------
+
+English
+
+Hello ${recipient.name},
+
+Here is an update on your ${campaign.title} campaign.
+${shipping ? "Your shipping information has been registered. Please check that you received the product. If you have not received it, reply to this email." : "We are preparing shipment. Please confirm your participation and shipping address in My Campaigns. Create your content after the product arrives."}
+Please publish your content and submit the final social post link in My Campaigns by ${date} (KST).
+
+My Campaigns: https://seoul-scent.onrender.com/applications
+`;
+          count += insert.run(recipient.id, `progress:2026-10-27:${campaign.id}:${b.audience}:${recipient.id}`,
+            recipient.email, `[Seoul Scent] ${campaign.title} 진행 상황 / Campaign update`, message, now, now).changes;
+        }
+        return count;
+      })();
+      return c.json({ recipients: recipients.length, queued, applied: true });
+    }),
+  );
   app.get(
     "/api/work/admin/campaigns/:id/guide-email",
     wrap((c) => {
