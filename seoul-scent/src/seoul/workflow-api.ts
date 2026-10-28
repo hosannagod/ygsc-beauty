@@ -1164,7 +1164,7 @@ export function registerWorkflow(
           }
           case "ship": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
-            requireState(["selected", "shipping"]);
+            requireState(["selected", "shipping", "final_submitted"]);
             if (a.status === "selected" && !a.participation_confirmed_at)
               fail("인플루언서의 캠페인 참여 확인이 필요합니다.", 409);
             if (
@@ -1181,7 +1181,7 @@ export function registerWorkflow(
             db.prepare(
               "UPDATE applications SET carrier=?,tracking_number=? WHERE id=?",
             ).run(carrier, tracking, a.id);
-            status = "shipping";
+            status = a.status === "final_submitted" ? "final_submitted" : "shipping";
             note = `${carrier} · ${tracking}`;
             break;
           }
@@ -1263,7 +1263,9 @@ export function registerWorkflow(
           }
           case "final":
             if (!influencer) fail("접근 권한이 없습니다.", 403);
-            requireState(a.review_required ? ["draft_approved", "final_submitted", "completed"] : ["shipping", "final_submitted", "completed"]);
+            requireState(a.review_required ? ["draft_approved", "final_submitted", "completed"] : ["selected", "shipping", "draft_submitted", "revision_requested", "draft_approved", "final_submitted", "completed"]);
+            if (a.status === "selected" && !a.participation_confirmed_at)
+              fail("먼저 배송지와 캠페인 참여 의사를 확인해 주세요.", 409);
             if (!a.final_url && Date.now() >= a.final_due)
               fail("최종 제출 마감이 지났습니다.", 409);
             link = externalLink(b.url, false);
@@ -2670,7 +2672,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
         campaign = campaignFor(db, id(c), u, true);
       const rows = db
         .prepare(
-          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number,a.recipient_name,a.postal_code,a.address_detail FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping') AND a.address!='' AND (a.status='shipping' OR a.participation_confirmed_at>0) ORDER BY a.id",
+          "SELECT a.id AS application_id,u.name,a.phone,a.address,a.carrier,a.tracking_number,a.recipient_name,a.postal_code,a.address_detail FROM applications a JOIN users u ON u.id=a.influencer_id WHERE a.campaign_id=? AND a.status IN ('selected','shipping','final_submitted') AND a.address!='' AND (a.status='shipping' OR a.participation_confirmed_at>0) ORDER BY a.id",
         )
         .all(campaign.id);
       const book = new ExcelJS.Workbook(),
@@ -2799,7 +2801,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
         const a = applicationFor(db, n, u);
         if (
           a.campaign_id !== campaign.id ||
-          !["selected", "shipping"].includes(a.status)
+          !["selected", "shipping", "final_submitted"].includes(a.status)
         )
           fail(`${i}행: 해당 캠페인의 선정/배송 단계가 아닙니다.`);
         if (
@@ -2823,9 +2825,9 @@ My Campaigns: https://seoul-scent.onrender.com/applications
           fail("종료된 캠페인입니다.", 409);
         for (const { a, carrier, tracking } of rows) {
           db.prepare(
-            "UPDATE applications SET status='shipping',carrier=?,tracking_number=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            "UPDATE applications SET status=CASE WHEN status='final_submitted' THEN status ELSE 'shipping' END,carrier=?,tracking_number=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
           ).run(carrier, tracking, a.id);
-          event(db, a, u.id, "shipping", `${carrier} · ${tracking}`);
+          event(db, a, u.id, a.status === "final_submitted" ? "final_submitted" : "shipping", `${carrier} · ${tracking}`);
           notify(
             db,
             a.influencer_id,

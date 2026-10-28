@@ -282,7 +282,7 @@
       ${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a
         class="primary link-button"
         href="/applications/${a.id}"
-        >${{ selected: t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), revision_requested: t("수정 반영하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기")}
+        >${{ selected: !a.review_required && a.participation_confirmed_at ? t("최종 URL 제출하기") : t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), draft_submitted: a.review_required ? t("진행 상황 보기") : t("최종 URL 제출하기"), revision_requested: a.review_required ? t("수정 반영하기") : t("최종 URL 제출하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기")}
         →</a
       >
     </article>`;
@@ -1215,7 +1215,7 @@
         );
       if (
         a.status === "draft_approved" ||
-        (!a.review_required && a.status === "shipping") ||
+        (!a.review_required && (["shipping", "draft_submitted", "revision_requested", "draft_approved"].includes(a.status) || (a.status === "selected" && a.participation_confirmed_at))) ||
         (["final_submitted", "completed"].includes(a.status) && a.final_url)
       )
         actions = actionForm(
@@ -1230,6 +1230,8 @@
           a.final_url ? t("콘텐츠 링크 추가") : t("최종 URL 제출"),
           a.final_url ? "" : t("콘텐츠의 SNS 게시물 URL을 최종 제출할까요?"),
         );
+      if (!a.review_required && a.status === "selected" && !a.participation_confirmed_at)
+        actions = `<p class="notice">${t("최종 콘텐츠를 제출하려면 먼저 위 배송 정보에서 참여 의사와 배송지를 확인해 주세요.")}</p>`;
       if (a.content_links?.length)
         actions += `<section class="content-links-editor"><h3>${t("제출한 콘텐츠 링크")}</h3>${a.content_links.map((item, index) => `<div class="content-link-item"><p>${index + 1}. ${link(item.url, t("게시물 열기"))}</p>${actionForm(a, "final", `<input type="hidden" name="link_id" value="${item.id}">${input("url", t("SNS 게시물 URL 수정"), "url", 'required placeholder="https://..."', item.url)}`, t("링크 수정 저장"))}</div>`).join("")}</section>`;
     } else {
@@ -1280,6 +1282,8 @@
             "이 활동을 완료하고 참여 횟수·등급에 반영할까요? 완료 처리는 한 번만 가능합니다.",
           ),
         );
+      if (a.status === "final_submitted" && !a.tracking_number && a.address)
+        actions += actionForm(a, "ship", input("carrier", t("택배사"), "text", 'required minlength="2" maxlength="40"') + input("tracking_number", t("송장번호"), "text", 'required minlength="5" maxlength="40"'), t("배송정보 등록"));
       if (
         ["draft_submitted", "draft_approved", "final_submitted"].includes(
           a.status,
@@ -1357,7 +1361,7 @@
           <div>
             <section class="panel">
               <h2>현재 단계의 작업</h2>
-              ${influencer ? (a.review_required ? t('<p class="notice">선정 후 배송지 등록 → 배송 시작 후 검수용 초안 링크 제출 → 초안 승인 후 최종 SNS 게시물 링크 제출 순서로 진행합니다. 각 단계가 되면 아래에 제출 버튼이 표시됩니다.</p>') : t('<p class="notice">이 캠페인은 초안 검수가 없습니다. 선정 후 배송지를 등록하고, 배송 시작 후 콘텐츠를 게시한 뒤 최종 SNS 링크를 제출해 주세요.</p>')) : ""}${
+              ${influencer ? (a.review_required ? t('<p class="notice">선정 후 배송지 등록 → 배송 시작 후 검수용 초안 링크 제출 → 초안 승인 후 최종 SNS 게시물 링크 제출 순서로 진행합니다. 각 단계가 되면 아래에 제출 버튼이 표시됩니다.</p>') : t('<p class="notice">이 캠페인은 초안 검수가 없습니다. 참여 의사와 배송지를 확인한 뒤 콘텐츠를 게시하고 최종 SNS 링크를 제출해 주세요.</p>')) : ""}${
                 a.feedback
                   ? html`<div class="feedback-box">
                       <strong>브랜드 수정 요청</strong>
