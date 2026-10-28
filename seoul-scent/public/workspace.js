@@ -1218,18 +1218,18 @@
         (!a.review_required && (["shipping", "draft_submitted", "revision_requested", "draft_approved"].includes(a.status) || (a.status === "selected" && a.participation_confirmed_at))) ||
         (["final_submitted", "completed"].includes(a.status) && a.final_url)
       )
-        actions = actionForm(
+        actions = (a.content_links?.length || 0) < 3 ? actionForm(
           a,
           "final",
           input(
             "url",
-            t("최종 SNS 게시물 URL"),
+            t("최종 SNS 게시물 URL (최대 3개)"),
             "url",
             'required placeholder="https://www.instagram.com/reel/…"',
           ),
           a.final_url ? t("콘텐츠 링크 추가") : t("최종 URL 제출"),
           a.final_url ? "" : t("콘텐츠의 SNS 게시물 URL을 최종 제출할까요?"),
-        );
+        ) : `<p class="notice">${t("최종 콘텐츠 링크 3개를 모두 제출했습니다. 아래에서 기존 링크를 수정할 수 있습니다.")}</p>`;
       if (!a.review_required && a.status === "selected" && !a.participation_confirmed_at)
         actions = `<p class="notice">${t("최종 콘텐츠를 제출하려면 먼저 위 배송 정보에서 참여 의사와 배송지를 확인해 주세요.")}</p>`;
       if (a.content_links?.length)

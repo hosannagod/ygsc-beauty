@@ -1280,6 +1280,8 @@ export function registerWorkflow(
               if (!updated.changes) fail("수정할 링크를 찾을 수 없습니다.", 404);
               note = "최종 SNS 게시물 링크가 수정되었습니다.";
             } else {
+              const count = (db.prepare("SELECT COUNT(*) AS count FROM application_content_links WHERE application_id=?").get(a.id) as { count: number }).count;
+              if (count >= 3) fail("최종 콘텐츠 링크는 캠페인당 최대 3개까지 제출할 수 있습니다.", 409);
               db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)")
                 .run(a.id, link, Date.now(), Date.now());
               note = "최종 SNS 게시물 링크가 추가되었습니다.";
