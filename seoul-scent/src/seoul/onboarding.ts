@@ -10,7 +10,7 @@ import {
   notify,
 } from "./workflow.js";
 import { parseCampaignImages } from "./campaign-images.js";
-export const promotionLink = "https://bit.ly/4glyo5O";
+export const promotionLink = "https://bit.ly/4syXxyv";
 export function campaignEligible(p: any) {
   return p.completed_count > 0 || p.onboarding_approved === 1 || p.campaign_access_granted === 1;
 }
