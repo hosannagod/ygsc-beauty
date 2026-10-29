@@ -126,6 +126,42 @@ ${row.title} 캠페인에 선정되었습니다.
   );
 }
 
+// Queue once when an influencer first confirms participation and a shipping address.
+export function queueBrandShippingReadyEmail(
+  db: DB,
+  applicationId: number,
+  env: Env = process.env,
+  now = Date.now(),
+) {
+  if (emailConfig(env).provider !== "brevo") return false;
+  const row = db.prepare(`SELECT a.id,a.status,a.participation_confirmed_at,a.address,
+    c.title,u.name AS influencer_name,b.name AS brand_name,b.email AS brand_email,b.username AS brand_username
+    FROM applications a JOIN campaigns c ON c.id=a.campaign_id
+    JOIN users u ON u.id=a.influencer_id JOIN users b ON b.id=c.brand_id
+    WHERE a.id=? AND c.deleted_at=0`).get(applicationId) as any;
+  if (!row || row.status !== "selected" || !row.participation_confirmed_at || !row.address ||
+      !validEmail(row.brand_email) || row.brand_email === row.brand_username) return false;
+  const subject = `[Seoul Scent] 배송 준비 요청 / Ready to ship · ${row.title}`;
+  const body = `English
+
+Hello ${row.brand_name},
+
+${row.influencer_name} has confirmed participation in ${row.title} and saved a shipping address. Please open the application below, review the delivery details, and arrange shipment. Enter the carrier and tracking number after dispatch.
+
+--------------------
+
+한국어
+
+안녕하세요, ${row.brand_name} 담당자님.
+
+${row.influencer_name}님이 ${row.title} 캠페인 참여와 배송지를 확인했습니다. 아래 신청 내역에서 배송 정보를 확인한 뒤 제품을 발송해 주세요. 발송 후 택배사와 송장번호를 등록해 주세요.
+
+신청 내역: `;
+  return db.prepare(`INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+    VALUES(?,?,?,?,?,?,?)`).run(applicationId, `brand_shipping_ready:${applicationId}`,
+    row.brand_email, subject, body, now, now).changes > 0;
+}
+
 class DeliveryError extends Error {
   constructor(
     public code: string,
@@ -152,7 +188,9 @@ export async function deliverEmail(row: any, env: Env, request: Fetch = fetch) {
   const text =
     row.body +
     new URL(`/applications/${row.application_id}`, config.origin).href +
-    "\n\nSeoul Scent\nThis email relates to a campaign you applied for. / 지원한 캠페인의 진행 안내입니다.";
+    (String(row.event_key).startsWith("brand_shipping_ready:")
+      ? "\n\nSeoul Scent\nThis email relates to a campaign you manage. / 운영 중인 캠페인의 진행 안내입니다."
+      : "\n\nSeoul Scent\nThis email relates to a campaign you applied for. / 지원한 캠페인의 진행 안내입니다.");
   const signal = AbortSignal.timeout(20_000);
   const response = await checked(
     await request("https://api.brevo.com/v3/smtp/email", {

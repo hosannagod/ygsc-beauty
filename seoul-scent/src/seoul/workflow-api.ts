@@ -5,7 +5,7 @@ import { tierLabel } from "./tier.js";
 import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
 import { mergeInfluencers } from "./influencer-merge.js";
-import { queueSelectionEmail, emailStatus, emailConfig } from "./email.js";
+import { queueSelectionEmail, queueBrandShippingReadyEmail, emailStatus, emailConfig } from "./email.js";
 import {
   profileComplete,
   socialProfileUrl,
@@ -1202,6 +1202,8 @@ export function registerWorkflow(
               Date.now(),
               a.id,
             );
+            if (influencer && !a.participation_confirmed_at)
+              queueBrandShippingReadyEmail(db, a.id);
             note = admin
               ? "운영사가 배송지를 수정했습니다."
               : "배송지가 등록되었습니다.";

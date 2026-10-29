@@ -201,6 +201,28 @@ test("participation confirmation and shipping address edits close after four day
     f.db.close();
   }
 });
+test("first participation confirmation queues one brand shipping email", async () => {
+  const previous = process.env.EMAIL_PROVIDER;
+  process.env.EMAIL_PROVIDER = "brevo";
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    assert.equal((await f.action(applicationId, "select")).status, 200);
+    const count = () => (f.db.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE event_key=?").get(`brand_shipping_ready:${applicationId}`) as { n: number }).n;
+    assert.equal(count(), 1);
+    assert.equal((await f.req("influencer", `/applications/${applicationId}/action`, "POST", {
+      action: "address", recipient_name: "테스트 수령인", phone: "01012345678",
+      postal_code: "06234", address: "서울시 강남구 새 주소 123",
+      participation_confirmed: true, guidelines_confirmed: true, deadline_confirmed: true,
+    })).status, 200);
+    assert.equal(count(), 1);
+  } finally {
+    f.db.close();
+    if (previous === undefined) delete process.env.EMAIL_PROVIDER;
+    else process.env.EMAIL_PROVIDER = previous;
+  }
+});
 test("admins can find and publish a brand's private draft", async () => {
   const f = await fixture();
   try {
@@ -848,7 +870,7 @@ test("selection queues email atomically; mail history and retry are admin-only",
     assert.equal((await action(applicationId, "select")).status, 409);
     assert.equal(
       (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
-      1,
+      2,
     );
     assert.equal((await req("influencer", "/admin/email")).status, 403);
     assert.equal((await req("brand", "/admin/email")).status, 403);
@@ -856,8 +878,8 @@ test("selection queues email atomically; mail history and retry are admin-only",
     const response = await req("admin", "/admin/email");
     assert.equal(response.status, 200);
     const info = (await response.json()) as any;
-    assert.equal(info.messages.length, 1);
-    const id = info.messages[0].id;
+    assert.equal(info.messages.length, 2);
+    const id = (db.prepare("SELECT id FROM email_outbox WHERE event_key=?").get(`selection:${applicationId}`) as { id: number }).id;
     assert.equal(
       (await req("admin", `/admin/email/${id}/retry`, "POST", {})).status,
       409,

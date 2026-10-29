@@ -6,6 +6,7 @@ import {
   emailWorker,
   emailStatus,
   queueSelectionEmail,
+  queueBrandShippingReadyEmail,
 } from "../src/seoul/email.js";
 
 const env = {
@@ -57,6 +58,21 @@ test("selection email is opt-in, unique, and rolls back with the selection trans
     1,
   );
   db.close();
+});
+test("brand receives one shipping request after participation confirmation", () => {
+  const db = fixture();
+  try {
+    assert.equal(queueBrandShippingReadyEmail(db, 1, env), false);
+    db.prepare("UPDATE applications SET participation_confirmed_at=1000,address='Test shipping address' WHERE id=1").run();
+    assert.equal(queueBrandShippingReadyEmail(db, 1, env), true);
+    assert.equal(queueBrandShippingReadyEmail(db, 1, env), false);
+    const row = db.prepare("SELECT recipient,body FROM email_outbox WHERE event_key='brand_shipping_ready:1'").get() as {recipient:string;body:string};
+    assert.equal(row.recipient, "brand@example.com");
+    assert.match(row.body, /배송 정보를 확인한 뒤 제품을 발송해 주세요/);
+    assert.ok(!row.body.includes("Test shipping address"));
+  } finally {
+    db.close();
+  }
 });
 test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping details; no resend on success", async () => {
   const db = fixture();
