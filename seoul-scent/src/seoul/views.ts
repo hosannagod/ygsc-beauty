@@ -9,11 +9,21 @@ const escape = (value: string) =>
         x
       ]!,
   );
+type RecruitingPreview = {
+  id: number;
+  title: string;
+  title_en: string;
+  product: string;
+  brand_name: string;
+  recruit_date: string;
+  thumbnail_id: number | null;
+};
 
 export function page(
   kind: "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "forbidden",
   user?: User,
   lang: Language = "ko",
+  recruitingCampaigns: RecruitingPreview[] = [],
 ) {
   const { t, html } = translator(lang);
   const labels = {
@@ -39,30 +49,38 @@ export function page(
     brand: t("브랜드의 이야기를 함께 전할 인플루언서를 만나세요."),
     influencer: t("나에게 맞는 브랜드를 만나고 새로운 콘텐츠를 만들어 보세요."),
   };
-  return `<!doctype html><html lang="${lang}"><head><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1"><meta charset="utf-8">${socialPreview(lang)}<meta name="viewport" content="width=device-width,initial-scale=1"><title>Seoul Scent · ${auth ? t("계정") : t("대시보드")}</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script><script src="/assets/app.js" defer></script></head><body><div class="language-control"><label for="language-select">Language</label><select id="language-select"><option value="ko" ${lang === "ko" ? "selected" : ""}>한국어</option><option value="en" ${lang === "en" ? "selected" : ""}>English</option></select></div>
+  return `<!doctype html><html lang="${lang}"><head><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1"><meta charset="utf-8">${socialPreview(lang)}<meta name="viewport" content="width=device-width,initial-scale=1"><title>Seoul Scent · ${auth ? t("계정") : t("대시보드")}</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script><script src="/assets/app.js" defer></script></head><body class="${auth ? "auth-page" : ""}"><div class="language-control"><label for="language-select">Language</label><select id="language-select"><option value="ko" ${lang === "ko" ? "selected" : ""}>한국어</option><option value="en" ${lang === "en" ? "selected" : ""}>English</option></select></div>
   ${
     auth
       ? html`<main class="auth-layout">
           <section class="story">
             <a class="logo" href="/"
-              >SEOUL SCENT<span>CREATOR PARTNERSHIPS</span></a
+              >SEOUL <b>SCENT</b><span>K-BEAUTY. GLOBAL CREATORS.</span></a
             >
-            <div>
-              <p class="eyebrow">MAKE CONNECTIONS. CREATE IMPACT.</p>
+            <div class="story-intro">
+              <p class="eyebrow">K-BEAUTY. GLOBAL CREATORS.</p>
               <h1>
-                좋은 브랜드와<br />좋은 크리에이터의<br /><em>새로운 연결.</em>
+                좋은 제품을,<br /><em>진짜 경험으로.</em>
               </h1>
               <p>
-                캠페인의 시작부터 콘텐츠 완성까지.<br />협업의 모든 과정을 Seoul
-                Scent에서 함께하세요.
+                브랜드와 크리에이터가 만나<br />새로운 콘텐츠를 만드는 곳.
               </p>
             </div>
+            ${["login", "register"].includes(kind) ? html`<section class="auth-campaigns" aria-labelledby="auth-campaigns-title">
+              <div class="auth-campaigns-heading"><div><p class="eyebrow">OPEN CAMPAIGNS</p><h2 id="auth-campaigns-title">${t("지금 모집 중인 캠페인")}</h2></div><span>${recruitingCampaigns.length}${t("개 미리보기")}</span></div>
+              ${recruitingCampaigns.length ? `<div class="auth-campaign-list">${recruitingCampaigns.map((campaign) => `<a class="auth-campaign-card" href="/register?campaign=${campaign.id}" aria-label="${escape((lang === "en" && campaign.title_en) || campaign.title)} · ${escape(t("가입하고 지원하기"))}">
+                ${campaign.thumbnail_id ? `<img src="/api/public/campaigns/${campaign.id}/thumbnail" alt="" loading="lazy" decoding="async">` : `<span class="auth-campaign-placeholder" aria-hidden="true">S</span>`}
+                <span class="auth-campaign-copy"><small>${escape(campaign.brand_name)} · ${escape(t("모집 중"))}</small><strong>${escape((lang === "en" && campaign.title_en) || campaign.title)}</strong><small class="auth-campaign-product">${escape(campaign.product)}</small><small>${escape(t("모집 마감"))} ${escape(campaign.recruit_date)}</small></span><span class="auth-campaign-arrow" aria-hidden="true">↗</span>
+              </a>`).join("")}</div>` : `<p class="auth-campaign-empty">${escape(t("새로운 캠페인을 준비 중입니다. 가입하고 다음 모집 소식을 확인해 보세요."))}</p>`}
+              <a class="auth-campaign-more" href="/register">${t("가입하고 캠페인 둘러보기")} <span aria-hidden="true">→</span></a>
+            </section>` : ""}
             <p class="story-footer">
               브랜드 · 크리에이터 · 하나의 워크스페이스
             </p>
           </section>
           <section class="auth-panel">
             <div class="form-wrap">
+              <a class="logo auth-mobile-logo" href="/">SEOUL <b>SCENT</b><span>K-BEAUTY. GLOBAL CREATORS.</span></a>
               <p class="eyebrow">
                 ${register ? "JOIN SEOUL SCENT" : "YOUR WORKSPACE"}
               </p>
@@ -96,9 +114,7 @@ export function page(
                   ${register ? t("계정 만들기") : t("로그인")} <span>→</span>
                 </button>
               </form>
-              <p class="switch">
-                ${register ? t('이미 계정이 있나요? <a href="/login">로그인</a>') : t('처음 방문하셨나요? <a href="/register">회원가입</a>')}
-              </p>
+              ${register ? `<p class="switch">${t('이미 계정이 있나요? <a href="/login">로그인</a>')}</p>` : `<a class="auth-register-cta" href="/register">${t("무료로 가입하고 캠페인 보기")} <span aria-hidden="true">→</span></a>`}
               ${kind === "login" ? html`<p class="switch"><a href="/forgot-password">${t("비밀번호를 잊으셨나요?")}</a></p>` : ""}
               ${register ? t('<p class="note">운영사 계정은 별도로 발급됩니다.</p>') : ""}
               `}

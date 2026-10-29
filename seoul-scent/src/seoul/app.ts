@@ -8,6 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { openDb, hashPassword, verifyPassword, type User } from "./db.js";
 import { emailConfig, sendPasswordResetEmail } from "./email.js";
 import { page } from "./views.js";
+import { continueCampaignPage, publicCampaignsPage, type PublicCampaign } from "./public-campaign-pages.js";
 
 const selectUser = "id, email, name, role, must_change_password, username";
 const roles = ["admin", "brand", "influencer"] as const;
@@ -122,17 +123,58 @@ export function createApp(
     db.prepare("SELECT 1").get();
     return c.json({ status: "ok" });
   });
-  app.get("/", (c) => c.redirect(c.get("user") ? "/dashboard" : "/login"));
+  const recruitingPreviews = () => db.prepare(`SELECT c.id,c.title,c.title_en,c.product,c.recruit_date,u.name AS brand_name,
+    (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id
+    FROM campaigns c JOIN users u ON u.id=c.brand_id
+    WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status='recruiting'
+      AND c.recruit_start<=? AND c.recruit_due>?
+    ORDER BY c.recruit_due DESC,c.id DESC LIMIT 3`).all(Date.now(), Date.now()) as {
+      id: number; title: string; title_en: string; product: string; recruit_date: string; brand_name: string; thumbnail_id: number | null;
+    }[];
+  const publicCampaign = (id: number) => db.prepare(`SELECT c.id,c.title,c.title_en,c.product,c.recruit_date,u.name AS brand_name,
+    (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id
+    FROM campaigns c JOIN users u ON u.id=c.brand_id
+    WHERE c.id=? AND c.deleted_at=0 AND c.is_draft=0`).get(id) as PublicCampaign | undefined;
+  app.get("/", (c) => {
+    if (c.get("user")) return c.redirect("/dashboard");
+    const now = Date.now();
+    const campaigns = db.prepare(`SELECT c.id,c.title,c.title_en,c.product,c.recruit_date,u.name AS brand_name,
+      (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id
+      FROM campaigns c JOIN users u ON u.id=c.brand_id
+      WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status='recruiting' AND c.recruit_start<=? AND c.recruit_due>?
+      ORDER BY c.recruit_due,c.id`).all(now, now) as PublicCampaign[];
+    return c.html(publicCampaignsPage(language(c.req.header("Cookie")), campaigns, campaigns.length));
+  });
+  app.get("/continue/:id", (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isSafeInteger(id) || id < 1) return c.notFound();
+    const campaign = publicCampaign(id);
+    if (!campaign) return c.notFound();
+    if (c.get("user")) return c.redirect(`/campaigns/${id}`);
+    return c.html(continueCampaignPage(language(c.req.header("Cookie")), campaign));
+  });
   app.get("/login", (c) =>
     c.get("user")
       ? c.redirect("/dashboard")
-      : c.html(page("login", undefined, language(c.req.header("Cookie")))),
+      : c.html(page("login", undefined, language(c.req.header("Cookie")), recruitingPreviews())),
   );
   app.get("/register", (c) =>
     c.get("user")
       ? c.redirect("/dashboard")
-      : c.html(page("register", undefined, language(c.req.header("Cookie")))),
+      : c.html(page("register", undefined, language(c.req.header("Cookie")), recruitingPreviews())),
   );
+  app.get("/api/public/campaigns/:id/thumbnail", (c) => {
+    const campaignId = Number(c.req.param("id"));
+    if (!Number.isSafeInteger(campaignId) || campaignId < 1) return c.notFound();
+    const row = db.prepare(`SELECT ci.data FROM campaigns c JOIN campaign_images ci ON ci.id=(
+      SELECT id FROM campaign_images WHERE campaign_id=c.id ORDER BY position,id LIMIT 1)
+      WHERE c.id=? AND c.deleted_at=0 AND c.is_draft=0 AND c.status='recruiting'
+        AND c.recruit_start<=? AND c.recruit_due>?`).get(campaignId, Date.now(), Date.now()) as { data: Buffer } | undefined;
+    if (!row) return c.notFound();
+    return new Response(new Uint8Array(row.data), {
+      headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" },
+    });
+  });
   app.get("/forgot-password", (c) =>
     c.html(page("forgot-password", undefined, language(c.req.header("Cookie")))),
   );
@@ -168,7 +210,7 @@ export function createApp(
   ])
     app.get(path, (c) => {
       const user = c.get("user");
-      if (!user) return c.redirect("/login");
+      if (!user) return c.redirect(path === "/campaigns/:id" ? `/continue/${c.req.param("id")}` : "/login");
       if (
         (path.startsWith("/admin/") && user.role !== "admin") ||
         (path === "/profile" && user.role !== "influencer") ||

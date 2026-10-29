@@ -11,6 +11,12 @@ async function request(path, body) {
   return data;
 }
 const form = document.querySelector("#auth-form");
+const campaignParam = new URLSearchParams(location.search).get("campaign");
+const campaignId = campaignParam && /^[1-9]\d{0,8}$/.test(campaignParam) ? campaignParam : null;
+if (campaignId) {
+  const registerLink = document.querySelector('.auth-register-cta[href="/register"]');
+  if (registerLink) registerLink.href = `/register?campaign=${campaignId}`;
+}
 if (form)
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -23,7 +29,7 @@ if (form)
         `/api/${form.dataset.mode}`,
         Object.fromEntries(new FormData(form)),
       );
-      location.assign(data.redirect);
+      location.assign(campaignId && data.user?.role === "influencer" ? `/campaigns/${campaignId}` : data.redirect);
     } catch (e) {
       error.textContent = e.message;
       error.hidden = false;
@@ -118,6 +124,11 @@ if (counts)
     });
 
 if (form?.dataset.mode === "register") {
+  if (campaignId) {
+    form.querySelector('[name=role][value=influencer]').checked = true;
+    const login = document.querySelector('.switch a[href="/login"]');
+    if (login) login.href = `/login?campaign=${campaignId}`;
+  }
   const update = () => {
     const brand = form.querySelector("[name=role]:checked").value === "brand";
     for (const [id, active] of [
