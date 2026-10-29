@@ -163,6 +163,8 @@ export function registerWorkflow(
       const admin = u.role === "admin";
       if (admin && b.confirm_email !== a.influencer_email)
         fail("동의를 처리할 계정의 이메일을 확인해 주세요.", 409);
+      if (!admin && a.status === "selected" && a.participation_due > 0 && Date.now() >= a.participation_due)
+        fail("참여 확인 기한이 지나 추가 동의를 저장할 수 없습니다.", 409);
       if (
         a.campaign_deleted_at ||
         !["applied", "selected"].includes(a.status) ||
@@ -729,7 +731,7 @@ export function registerWorkflow(
         )
           db.prepare(
             "UPDATE applications SET participation_confirmed_at=0,participation_due=? WHERE campaign_id=? AND status='selected'",
-          ).run(Date.now() + 259200000, campaign.id);
+          ).run(Date.now() + 345600000, campaign.id);
         if (b.publish === true) {
           if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
           recruitmentDates(
@@ -1160,6 +1162,8 @@ export function registerWorkflow(
             if (admin && b.confirm_email !== a.influencer_email)
               fail("배송지를 변경할 계정의 이메일을 확인해 주세요.", 409);
             requireState(["selected"]);
+            if (!admin && a.participation_due > 0 && Date.now() >= a.participation_due)
+              fail("참여 확인 기한이 지나 배송지를 저장할 수 없습니다. 운영사에 문의해 주세요.", 409);
             if (
               !admin &&
               a.consent_version.startsWith("external-form-v2") &&

@@ -73,7 +73,7 @@ export function queueSelectionEmail(
     .get(applicationId) as any;
   if (!row) throw new Error("Selection recipient not found");
   const title = row.title_en || row.title;
-  const due = row.participation_due || now + 259200000;
+  const due = row.participation_due || now + 345600000;
   const dueKo = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", hour12: false }).format(due);
   const dueEn = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: false }).format(due);
   const subject = "[Seoul Scent] Campaign selection / 캠페인 선정 안내";
@@ -83,7 +83,7 @@ Hello ${row.name},
 
 You have been selected for the campaign: ${title}.
 
-Please confirm your participation by ${dueEn} (KST), within 72 hours of selection. If you do not confirm by then, you may be excluded from this shipment.
+Please confirm your participation by ${dueEn} (KST), within 4 days of selection. After the deadline, you cannot confirm participation or edit the shipping address for this campaign, and the product cannot be shipped.
 
 Please sign in and open My Campaigns → Selected Campaigns.
 - Check or update your shipping address for this campaign.
@@ -102,7 +102,7 @@ Even if you have already entered an address, you must confirm it for this campai
 
 ${row.title} 캠페인에 선정되었습니다.
 
-참여 확인 기한: ${dueKo} (한국시간, 선정 후 72시간). 기한까지 확인하지 않으면 이번 배송에서 제외될 수 있습니다.
+참여 확인 기한: ${dueKo} (한국시간, 선정 후 4일). 기한이 지나면 이 캠페인의 참여 확인과 배송지 수정이 마감되며 제품을 발송할 수 없습니다.
 
 로그인 후 내 캠페인 → 선정된 캠페인에서 아래 항목을 확인하고 저장해 주세요.
 - 이번 캠페인의 배송지를 확인하거나 수정해 주세요.

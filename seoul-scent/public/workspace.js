@@ -21,6 +21,7 @@
     not_selected: t("미선정"),
     withdrawn: t("지원 취소"),
     selected: t("선정됨"),
+    confirmation_expired: t("확인 기한 경과"),
     shipping: t("배송 중"),
     draft_submitted: t("초안 검수 대기"),
     revision_requested: t("수정 요청 중"),
@@ -67,7 +68,7 @@
   const badge = (s) =>
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const applicationBadge = (a) =>
-    badge(a.status === "applied" && a.selection_finalized_at ? "not_selected" : a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status);
+    badge(a.status === "applied" && a.selection_finalized_at ? "not_selected" : a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status === "selected" && !a.participation_confirmed_at && a.participation_due > 0 && Date.now() >= a.participation_due ? "confirmation_expired" : a.status);
   const money = (n) =>
     Number(n).toLocaleString(
       window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
@@ -282,7 +283,7 @@
       ${a.feedback ? `<p class="feedback-excerpt">${esc(a.feedback)}</p>` : ""}<a
         class="primary link-button"
         href="/applications/${a.id}"
-        >${{ selected: !a.review_required && a.participation_confirmed_at ? t("최종 URL 제출하기") : t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), draft_submitted: a.review_required ? t("진행 상황 보기") : t("최종 URL 제출하기"), revision_requested: a.review_required ? t("수정 반영하기") : t("최종 URL 제출하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기")}
+        >${a.status === "selected" && a.participation_due > 0 && Date.now() >= a.participation_due ? a.participation_confirmed_at ? t("진행 상황 보기") : t("기한 경과 · 상세 보기") : ({ selected: !a.review_required && a.participation_confirmed_at ? t("최종 URL 제출하기") : t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), draft_submitted: a.review_required ? t("진행 상황 보기") : t("최종 URL 제출하기"), revision_requested: a.review_required ? t("수정 반영하기") : t("최종 URL 제출하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기"))}
         →</a
       >
     </article>`;
@@ -1125,6 +1126,7 @@
         ? savedProfile.profile
         : null;
     const useSavedShipping = !a.shipping_address_at && defaultShipping;
+    const confirmationExpired = a.status === "selected" && a.participation_due > 0 && Date.now() >= a.participation_due;
     let actions = "",
       shippingAddressForm = "";
     if (influencer) {
@@ -1138,11 +1140,13 @@
         );
       if (
         ["applied", "selected"].includes(a.status) &&
+        !confirmationExpired &&
         a.consent_version.startsWith("external-form-v2")
       )
         actions = `<form data-task="import-consent" data-id="${a.id}"><div class="warning">${t("외부 신청서로 등록된 지원입니다. 배송지 등록 전에 필수 동의를 확인해 주세요.")}</div><label class="check"><input type="checkbox" name="secondary_use_consent" required><span>${t("해당 캠페인의 2차 저작물 활용에 동의합니다.")}</span></label><label class="check"><input type="checkbox" name="original_delivery_consent" required><span>${t("고화질 원본 제공에 동의합니다.")}</span></label>${submit(t("추가 동의 저장"))}</form>`;
       if (
         a.status === "selected" &&
+        !confirmationExpired &&
         !a.consent_version.startsWith("external-form-v2")
       )
         shippingAddressForm = actionForm(
@@ -1338,7 +1342,7 @@
                 <dt>연락처</dt>
                 <dd>${esc(a.phone)}</dd>
               </dl>
-              ${shippingAddressForm ? `<details ${!a.address || !a.participation_confirmed_at ? "open" : ""}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}${!a.participation_confirmed_at ? ` · ${t("참여 확인 필요")}` : ""}</summary><p class="note left">${a.participation_due && !a.participation_confirmed_at ? `${t("확인 마감")}: ${datetime(a.participation_due)} · ${t("기한까지 확인하지 않으면 이번 배송에서 제외될 수 있습니다.")}<br>` : ""}${t(useSavedShipping ? "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요." : "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
+              ${confirmationExpired ? `<p class="warning">${t(a.participation_confirmed_at ? "배송지 수정 기한이 지났습니다. 주소 변경이 필요하면 운영사에 문의해 주세요." : "참여 확인 기한이 지났습니다. 이 캠페인의 참여 확인과 배송지 수정이 마감되었습니다. 운영사에 문의해 주세요.")}</p>` : shippingAddressForm ? `<details ${!a.address || !a.participation_confirmed_at ? "open" : ""}><summary>${t(a.address ? "배송지 수정" : "배송지 등록")}${!a.participation_confirmed_at ? ` · ${t("참여 확인 필요")}` : ""}</summary><p class="note left">${a.participation_due ? `${t("확인 마감")}: ${datetime(a.participation_due)} · ${t("기한이 지나면 참여 확인과 배송지 수정이 마감됩니다.")}<br>` : ""}${t(useSavedShipping ? "내 프로필의 기본 배송지를 불러왔습니다. 이 캠페인의 배송지로 사용하려면 저장해 주세요." : "등록된 배송지를 확인하고 수정한 뒤 다시 저장해 주세요. 송장 등록 전까지 수정할 수 있습니다.")}</p>${shippingAddressForm}</details>` : ""}
               <p class="note left">
                 ${a.tracking_url ? t("배송 조회를 누르면 택배사 페이지가 새 탭으로 열립니다. 발송 직후에는 조회 내역이 아직 없을 수 있습니다.") : a.tracking_number ? t("이 택배사는 자동 조회 링크를 지원하지 않습니다. 택배사 홈페이지에서 송장번호로 조회해 주세요.") : t("택배사와 송장번호가 등록되면 배송 조회 링크가 표시됩니다.")}
               </p>
@@ -1347,7 +1351,7 @@
               <h3>동의 기록</h3>
               <p>
                 ${t("이번 캠페인 참여 확인")}:
-                ${a.participation_confirmed_at ? `${t("확인 완료")} · ${datetime(a.participation_confirmed_at)}` : a.status === "selected" ? t("확인 대기") : t("기존 진행 · 확인 기록 없음")}
+                ${a.participation_confirmed_at ? `${t("확인 완료")} · ${datetime(a.participation_confirmed_at)}` : confirmationExpired ? t("확인 기한 경과") : a.status === "selected" ? t("확인 대기") : t("기존 진행 · 확인 기록 없음")}
               </p>
               <p class="small muted">
                 2차 활용:

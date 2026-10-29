@@ -176,6 +176,31 @@ test("new campaigns stay private until reviewed and explicitly published", async
     f.db.close();
   }
 });
+test("participation confirmation and shipping address edits close after four days", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    assert.equal((await f.action(applicationId, "select")).status, 200);
+    f.db.prepare("UPDATE applications SET participation_due=? WHERE id=?")
+      .run(Date.now() - 1, applicationId);
+    const response = await f.req("influencer", `/applications/${applicationId}/action`, "POST", {
+      action: "address",
+      recipient_name: "테스트 수령인",
+      phone: "01012345678",
+      postal_code: "06234",
+      address: "서울시 강남구 새 주소 123",
+      participation_confirmed: true,
+      guidelines_confirmed: true,
+      deadline_confirmed: true,
+    });
+    assert.equal(response.status, 409);
+    const row = f.db.prepare("SELECT address FROM applications WHERE id=?").get(applicationId) as { address: string };
+    assert.equal(row.address, "서울시 강남구 테스트로 123");
+  } finally {
+    f.db.close();
+  }
+});
 test("admins can find and publish a brand's private draft", async () => {
   const f = await fixture();
   try {

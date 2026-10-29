@@ -50,8 +50,8 @@ test("selection email is opt-in, unique, and rolls back with the selection trans
   queueSelectionEmail(db, 1, env);
   queueSelectionEmail(db, 1, env);
   const queued = db.prepare("SELECT body FROM email_outbox WHERE application_id=1").get() as { body: string };
-  assert.match(queued.body, /within 72 hours of selection/);
-  assert.match(queued.body, /선정 후 72시간/);
+  assert.match(queued.body, /within 4 days of selection/);
+  assert.match(queued.body, /선정 후 4일/);
   assert.equal(
     (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
     1,
@@ -75,7 +75,7 @@ test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping
     assert.match(body.textContent, /Check the boxes confirming your participation/);
     assert.match(body.textContent, /기존에 배송지를 등록하셨더라도 이번 캠페인에서 다시 확인해야/);
     assert.match(body.textContent, /콘텐츠 가이드 확인·기한 내 업로드 약속/);
-    assert.match(body.textContent, /72 hours of selection/);
+    assert.match(body.textContent, /4 days of selection/);
     assert.match(
       body.textContent,
       /https:\/\/seoul-scent.onrender.com\/applications\/1/,

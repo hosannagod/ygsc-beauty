@@ -160,6 +160,11 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       "UPDATE applications SET secondary_use_consent=1,original_delivery_consent=1 WHERE consent_version='secondary-use-v1' AND consent_at>0; INSERT OR IGNORE INTO schema_version VALUES(4)",
     );
   })();
+  db.transaction(() => {
+    if (!db.prepare("SELECT 1 FROM schema_version WHERE version=15").get()) {
+      db.exec("UPDATE applications SET participation_due=participation_due+86400000 WHERE status='selected' AND participation_due>0; INSERT INTO schema_version VALUES(15)");
+    }
+  })();
   if (
     !(
       db.prepare("PRAGMA table_info(campaigns)").all() as { name: string }[]

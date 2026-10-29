@@ -60,6 +60,8 @@ test("final selection commits 50 people and queues exactly one email per person;
     );
     assert.equal(count(db, "SELECT COUNT(*) n FROM email_outbox"), 50);
     assert.equal(count(db, "SELECT COUNT(*) n FROM applications WHERE participation_due > 0"), 50);
+    const due = (db.prepare("SELECT participation_due FROM applications WHERE id=?").get(ids[0]) as any).participation_due;
+    assert.ok(due >= Date.now() + 345600000 - 10000 && due <= Date.now() + 345600000);
     assert.equal(count(db, "SELECT COUNT(*) n FROM application_events"), 50);
     assert.throws(() => finalizeSelection(db, actor, campaign, ids));
     assert.equal(count(db, "SELECT COUNT(*) n FROM email_outbox"), 50);
