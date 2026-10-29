@@ -1060,6 +1060,36 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/applications/:id/content-links",
+    wrap(async (c) => {
+      const admin = role(c, "admin"),
+        b = await body(c);
+      const a = applicationFor(db, id(c), admin);
+      if (b.confirm_email?.toLowerCase() !== a.influencer_email.toLowerCase())
+        fail("신청자 이메일을 확인해 주세요.", 409);
+      if (a.campaign_deleted_at || !["final_submitted", "completed"].includes(a.status))
+        fail("최종 콘텐츠를 제출한 신청에만 링크를 추가할 수 있습니다.", 409);
+      const url = externalLink(b.url, false);
+      const result = db.transaction(() => {
+        let links = db.prepare("SELECT url FROM application_content_links WHERE application_id=? ORDER BY id").all(a.id) as { url: string }[];
+        if (!links.length && a.final_url) {
+          db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)")
+            .run(a.id, a.final_url, Date.now(), Date.now());
+          links = [{ url: a.final_url }];
+        }
+        if (links.some((link) => link.url === url)) return { success: true, already_exists: true, count: links.length };
+        if (links.length >= 3) fail("최종 콘텐츠 링크는 캠페인당 최대 3개까지 제출할 수 있습니다.", 409);
+        db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)")
+          .run(a.id, url, Date.now(), Date.now());
+        db.prepare("UPDATE applications SET final_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+          .run(links[0]?.url ?? url, a.id);
+        event(db, a, admin.id, a.status, "관리자가 최종 SNS 게시물 링크를 추가했습니다.", url);
+        return { success: true, already_exists: false, count: links.length + 1 };
+      })();
+      return c.json(result);
+    }),
+  );
+  app.post(
     "/api/work/applications/:id/action",
     wrap(async (c) => {
       const u = current(c),
