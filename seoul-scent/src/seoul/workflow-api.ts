@@ -1090,6 +1090,27 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/applications/:id/withdraw",
+    wrap(async (c) => {
+      const admin = role(c, "admin"),
+        b = await body(c);
+      const a = applicationFor(db, id(c), admin);
+      if (b.confirm_email?.toLowerCase() !== a.influencer_email.toLowerCase())
+        fail("신청자 이메일을 확인해 주세요.", 409);
+      if (a.campaign_deleted_at || a.status !== "selected" || a.tracking_number)
+        fail("배송 전 선정 상태의 신청만 참여 취소할 수 있습니다.", 409);
+      db.transaction(() => {
+        const now = Date.now();
+        db.prepare("UPDATE applications SET status='rejected',participation_confirmed_at=0,withdrawn_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+          .run(now, a.id);
+        event(db, a, admin.id, "withdrawn", "선정자가 참여하지 않겠다고 알려 운영사가 참여 확인을 취소했습니다.");
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(admin.id, a.influencer_id, "application_withdraw", `application:${a.id}`, now);
+      })();
+      return c.json({ success: true });
+    }),
+  );
+  app.post(
     "/api/work/applications/:id/action",
     wrap(async (c) => {
       const u = current(c),
