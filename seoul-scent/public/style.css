@@ -517,7 +517,7 @@ header {
     flex-direction: column;
   }
   .story {
-    order: 1;
+    order: 2;
     min-height: 0;
     padding: 22px 24px 20px;
     gap: 18px;
@@ -526,7 +526,9 @@ header {
   .story-footer {
     display: none;
   }
-  .story > .logo { display: block; font-size: 19px; }
+  .story > .logo { display: none; }
+  .auth-mobile-logo { display: block; font-size: 19px; margin-bottom: 28px; }
+  .auth-mobile-logo span { font-size: 7px; margin-top: 5px; }
   .story > .logo span { font-size: 7px; margin-top: 5px; }
   .auth-campaigns-heading h2 { font-size: 18px; }
   .auth-campaigns-heading .eyebrow { font-size: 9px; }
@@ -537,10 +539,10 @@ header {
   .auth-campaign-product { display: none; }
   .auth-campaign-more { margin-top: 10px; }
   .auth-panel {
-    order: 2;
-    padding: 28px 24px 38px;
+    order: 1;
+    padding: 24px 24px 38px;
   }
-  .auth-page .language-control { color: #f8f7ff; }
+  .auth-page .language-control { color: #26362f; }
   .workspace {
     display: block;
   }

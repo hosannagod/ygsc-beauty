@@ -22,6 +22,8 @@ test("public campaigns lead to the selected campaign after authentication", asyn
     const gateHtml = await gate.text();
     assert.match(gateHtml, new RegExp(`/login\\?campaign=${campaign}`));
     assert.match(gateHtml, new RegExp(`/register\\?campaign=${campaign}`));
+    const selectedLogin = await (await app.request(`/login?campaign=${campaign}`)).text();
+    assert.match(selectedLogin, /Public campaign/);
     assert.equal((await app.request(`/campaigns/${campaign}`)).headers.get("location"), `/continue/${campaign}`);
     assert.equal((await app.request("/continue/999999")).status, 404);
     const login = await app.request("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "creator@test.com", password: "Test-password-123!" }) });

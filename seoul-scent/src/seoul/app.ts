@@ -135,6 +135,13 @@ export function createApp(
     (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id
     FROM campaigns c JOIN users u ON u.id=c.brand_id
     WHERE c.id=? AND c.deleted_at=0 AND c.is_draft=0`).get(id) as PublicCampaign | undefined;
+  const authPreviews = (campaignId?: string) => {
+    if (campaignId && /^[1-9]\d{0,8}$/.test(campaignId)) {
+      const selected = publicCampaign(Number(campaignId));
+      if (selected) return [selected];
+    }
+    return recruitingPreviews();
+  };
   app.get("/", (c) => {
     if (c.get("user")) return c.redirect("/dashboard");
     const now = Date.now();
@@ -156,12 +163,12 @@ export function createApp(
   app.get("/login", (c) =>
     c.get("user")
       ? c.redirect("/dashboard")
-      : c.html(page("login", undefined, language(c.req.header("Cookie")), recruitingPreviews())),
+      : c.html(page("login", undefined, language(c.req.header("Cookie")), authPreviews(c.req.query("campaign")))),
   );
   app.get("/register", (c) =>
     c.get("user")
       ? c.redirect("/dashboard")
-      : c.html(page("register", undefined, language(c.req.header("Cookie")), recruitingPreviews())),
+      : c.html(page("register", undefined, language(c.req.header("Cookie")), authPreviews(c.req.query("campaign")))),
   );
   app.get("/api/public/campaigns/:id/thumbnail", (c) => {
     const campaignId = Number(c.req.param("id"));
