@@ -17,11 +17,17 @@ test("public campaigns lead to the selected campaign after authentication", asyn
     assert.equal(home.status, 200);
     assert.match(homeHtml, /Public campaign/);
     assert.match(homeHtml, new RegExp(`href="/continue/${campaign}"`));
+    assert.match(homeHtml, /id="language-select"/);
+    assert.match(homeHtml, /<option value="ko" selected>/);
     assert.doesNotMatch(homeHtml, /Hidden draft/);
+    const englishHome = await (await app.request("/", { headers: { Cookie: "scent_language=en" } })).text();
+    assert.match(englishHome, /Open campaigns/);
+    assert.match(englishHome, /<option value="en" selected>/);
     const gate = await app.request(`/continue/${campaign}`);
     const gateHtml = await gate.text();
     assert.match(gateHtml, new RegExp(`/login\\?campaign=${campaign}`));
     assert.match(gateHtml, new RegExp(`/register\\?campaign=${campaign}`));
+    assert.match(gateHtml, /id="language-select"/);
     const selectedLogin = await (await app.request(`/login?campaign=${campaign}`)).text();
     assert.match(selectedLogin, /Public campaign/);
     assert.equal((await app.request(`/campaigns/${campaign}`)).headers.get("location"), `/continue/${campaign}`);
