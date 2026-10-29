@@ -837,6 +837,26 @@
         review = applications.filter((a) =>
           ["draft_submitted", "final_submitted"].includes(a.status),
         ).length;
+      const participantRows = (tab) =>
+        applications.filter(
+          (a) =>
+            tab === "all" ||
+            (tab === "applicants" &&
+              ["applied", "rejected"].includes(a.status)) ||
+            (tab === "shipping" &&
+              ["selected", "shipping"].includes(a.status)) ||
+            (tab === "review" &&
+              [
+                "draft_submitted",
+                "revision_requested",
+                "draft_approved",
+                "final_submitted",
+              ].includes(a.status)) ||
+            (tab === "completed" && a.status === "completed") ||
+            (tab === "no_show" && a.status === "no_show"),
+        );
+      const tabCount = (tab) =>
+        `<span class="tab-count">${participantRows(tab).length}</span>`;
       root.innerHTML += html`<div class="section-heading">
           <h2>참여자 관리</h2>
           <span class="muted"
@@ -853,12 +873,12 @@
           ${withoutConfirmationRecord ? `<span>${t("기존 진행 · 확인 기록 없음")} <strong>${withoutConfirmationRecord}</strong></span>` : ""}
         </div>
         <div class="tabs" role="group" aria-label="참여자 단계">
-          <button data-tab="all" class="active">전체</button
-          ><button data-tab="applicants">지원자</button
-          ><button data-tab="shipping">배송</button
-          ><button data-tab="review">검수</button
-          ><button data-tab="completed">완료</button
-          ><button data-tab="no_show">노쇼</button>
+          <button data-tab="all" class="active">전체 ${tabCount("all")}</button
+          ><button data-tab="applicants">지원자 ${tabCount("applicants")}</button
+          ><button data-tab="shipping">배송 ${tabCount("shipping")}</button
+          ><button data-tab="review">검수 ${tabCount("review")}</button
+          ><button data-tab="completed">완료 ${tabCount("completed")}</button
+          ><button data-tab="no_show">노쇼 ${tabCount("no_show")}</button>
         </div>
         <form class="panel" data-task="final-selection" data-id="${id}">
           <h3>최종 선정</h3>
@@ -995,23 +1015,7 @@
         updateSelection();
       };
       function table(tab) {
-        let rows = applications.filter(
-          (a) =>
-            tab === "all" ||
-            (tab === "applicants" &&
-              ["applied", "rejected"].includes(a.status)) ||
-            (tab === "shipping" &&
-              ["selected", "shipping"].includes(a.status)) ||
-            (tab === "review" &&
-              [
-                "draft_submitted",
-                "revision_requested",
-                "draft_approved",
-                "final_submitted",
-              ].includes(a.status)) ||
-            (tab === "completed" && a.status === "completed") ||
-            (tab === "no_show" && a.status === "no_show"),
-        );
+        const rows = participantRows(tab);
         document.querySelector("#applicants-table").innerHTML = rows.length
           ? html`<table>
               <thead>
