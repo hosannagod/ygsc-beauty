@@ -2260,6 +2260,33 @@ test("optional review skips drafts and overdue applications stay active for admi
     f.db.close();
   }
 });
+
+test("admin can record a participant's first and second final links with an audit trail", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create({ review_required: false });
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    await f.action(applicationId, "ship", {
+      carrier: "CJ대한통운",
+      tracking_number: "123456789",
+    });
+    const path = `/admin/applications/${applicationId}/content-links`;
+    const email = "influencer@test.com";
+    const first = "https://www.instagram.com/reel/first/";
+    const second = "https://vt.tiktok.com/second/";
+    assert.equal((await f.req("brand", path, "POST", {confirm_email: email, url: first})).status, 403);
+    assert.equal((await f.req("admin", path, "POST", {confirm_email: "wrong@test.com", url: first})).status, 409);
+    assert.equal((await f.req("admin", path, "POST", {confirm_email: email, url: first})).status, 200);
+    assert.equal((await f.req("admin", path, "POST", {confirm_email: email, url: second})).status, 200);
+    const detail = (await (await f.req("admin", `/applications/${applicationId}`)).json()) as any;
+    assert.equal(detail.application.status, "final_submitted");
+    assert.deepEqual(detail.application.content_links.map((link: any) => link.url), [first, second]);
+    assert.equal((f.db.prepare("SELECT COUNT(*) count FROM admin_audit WHERE action='application_content_link_add' AND target_user_id=?").get(f.ids.influencer) as any).count, 2);
+  } finally {
+    f.db.close();
+  }
+});
 test("drafts accept arbitrary web hosts, ports and fragments but reject unsafe schemes", async () => {
   const f = await fixture();
   try {

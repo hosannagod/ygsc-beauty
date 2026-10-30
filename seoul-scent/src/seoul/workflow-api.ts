@@ -1126,8 +1126,11 @@ export function registerWorkflow(
       const a = applicationFor(db, id(c), admin);
       if (b.confirm_email?.toLowerCase() !== a.influencer_email.toLowerCase())
         fail("신청자 이메일을 확인해 주세요.", 409);
-      if (a.campaign_deleted_at || !["final_submitted", "completed"].includes(a.status))
-        fail("최종 콘텐츠를 제출한 신청에만 링크를 추가할 수 있습니다.", 409);
+      const firstSubmission = !a.final_url && !a.review_required &&
+        a.status === "shipping" && !!a.participation_confirmed_at &&
+        a.campaign_status !== "completed" && Date.now() < a.final_due;
+      if (a.campaign_deleted_at || (!firstSubmission && !["final_submitted", "completed"].includes(a.status)))
+        fail("현재 단계에서는 최종 콘텐츠 링크를 등록할 수 없습니다.", 409);
       const url = externalLink(b.url, false);
       const result = db.transaction(() => {
         let links = db.prepare("SELECT url FROM application_content_links WHERE application_id=? ORDER BY id").all(a.id) as { url: string }[];
@@ -1140,9 +1143,16 @@ export function registerWorkflow(
         if (links.length >= 3) fail("최종 콘텐츠 링크는 캠페인당 최대 3개까지 제출할 수 있습니다.", 409);
         db.prepare("INSERT INTO application_content_links(application_id,url,created_at,updated_at) VALUES(?,?,?,?)")
           .run(a.id, url, Date.now(), Date.now());
-        db.prepare("UPDATE applications SET final_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
-          .run(links[0]?.url ?? url, a.id);
-        event(db, a, admin.id, a.status, "관리자가 최종 SNS 게시물 링크를 추가했습니다.", url);
+        db.prepare("UPDATE applications SET final_url=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+          .run(links[0]?.url ?? url, firstSubmission ? "final_submitted" : a.status, a.id);
+        event(db, a, admin.id, firstSubmission ? "final_submitted" : a.status,
+          firstSubmission ? "관리자가 참여자 요청으로 최종 SNS 게시물 링크를 대리 등록했습니다." : "관리자가 최종 SNS 게시물 링크를 추가했습니다.", url);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(admin.id, a.influencer_id, "application_content_link_add", `application:${a.id};url:${url}`, Date.now());
+        if (firstSubmission) {
+          notify(db, a.brand_id, `${a.title}: 최종 SNS 게시물 링크가 제출되었습니다.`, `/campaigns/${a.campaign_id}`);
+          notify(db, a.influencer_id, `${a.title}: 운영사가 최종 SNS 게시물 링크를 등록했습니다.`, `/applications/${a.id}`);
+        }
         return { success: true, already_exists: false, count: links.length + 1 };
       })();
       return c.json(result);
