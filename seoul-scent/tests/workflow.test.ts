@@ -1209,19 +1209,21 @@ test("Asia/Seoul midnight and safe external link validation", () => {
   assert.ok(externalLink("https://instagram.com/username", false));
   assert.ok(externalLink("https://drive.google.com/open?id=12345", true));
 });
-test("no-show is idempotent, blocks new applications, demotes, blacklists on second campaign", async () => {
+test("only admin can mark no-show; penalties are idempotent and reversible", async () => {
   const f = await fixture();
   try {
     const c = await f.create(),
       a = await f.apply(c);
     await f.action(a, "select");
-    f.db
-      .prepare("UPDATE influencer_profiles SET tier=3 WHERE user_id=?")
+    f.db.prepare("UPDATE influencer_profiles SET completed_count=1000,tier=3 WHERE user_id=?")
       .run(f.ids.influencer);
     const now = Date.now();
     f.db.prepare("UPDATE campaigns SET draft_due=? WHERE id=?").run(now - 1, c);
-    assert.equal(sweepDeadlines(f.db, now).penalized, 1);
     assert.equal(sweepDeadlines(f.db, now).penalized, 0);
+    assert.equal(sweepDeadlines(f.db, now).penalized, 0);
+    assert.equal((await f.action(a, "no_show", { confirm_email: "influencer@test.com", note: "기한 내 콘텐츠 미제출" })).status, 403);
+    assert.equal((await f.action(a, "no_show", { confirm_email: "influencer@test.com", note: "기한 내 콘텐츠 미제출" }, "admin")).status, 200);
+    assert.equal((await f.action(a, "no_show", { confirm_email: "influencer@test.com", note: "기한 내 콘텐츠 미제출" }, "admin")).status, 409);
     let p = f.db
       .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
       .get(f.ids.influencer) as any;
@@ -1247,7 +1249,7 @@ test("no-show is idempotent, blocks new applications, demotes, blacklists on sec
     f.db
       .prepare("UPDATE campaigns SET draft_due=? WHERE id=?")
       .run(now - 1, next);
-    sweepDeadlines(f.db, now);
+    assert.equal((await f.action(b, "no_show", { confirm_email: "influencer@test.com", note: "두 번째 캠페인 미제출" }, "admin")).status, 200);
     p = f.db
       .prepare("SELECT * FROM influencer_profiles WHERE user_id=?")
       .get(f.ids.influencer) as any;
@@ -1263,6 +1265,46 @@ test("no-show is idempotent, blocks new applications, demotes, blacklists on sec
       ).n,
       2,
     );
+    assert.equal((await f.action(b, "restore_no_show", { confirm_email: "influencer@test.com", note: "운영사 재검토 후 취소" }, "admin")).status, 200);
+    p = f.db.prepare("SELECT * FROM influencer_profiles WHERE user_id=?").get(f.ids.influencer) as any;
+    assert.equal(p.no_show_count, 1);
+    assert.equal(p.blacklisted, 0);
+    assert.equal((f.db.prepare("SELECT status FROM applications WHERE id=?").get(b) as any).status, "selected");
+  } finally {
+    f.db.close();
+  }
+});
+test("admin can restore legacy automatic no-shows after extending a campaign", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create({ review_required: false });
+    const selectedId = await f.apply(campaignId);
+    const shippingId = await f.apply(campaignId, "other");
+    await f.action(selectedId, "select");
+    await f.action(shippingId, "select");
+    await f.action(shippingId, "ship", { carrier: "택배사", tracking_number: "123456789" });
+    const now = Date.now();
+    for (const applicationId of [selectedId, shippingId]) {
+      const row = f.db.prepare("SELECT influencer_id FROM applications WHERE id=?").get(applicationId) as any;
+      f.db.prepare("UPDATE applications SET status='no_show' WHERE id=?").run(applicationId);
+      f.db.prepare("UPDATE influencer_profiles SET no_show_count=1,blocked_until=?,blacklisted=1 WHERE user_id=?")
+        .run(now + 86400_000, row.influencer_id);
+      f.db.prepare("INSERT INTO application_events(application_id,actor_id,status,note,created_at) VALUES(?,NULL,'no_show',?,?)")
+        .run(applicationId, "제출 마감일 경과로 자동 노쇼 처리", now);
+    }
+    const restore = (who: string, expected_count: number, dry_run = true) =>
+      f.req(who, `/admin/campaigns/${campaignId}/restore-auto-no-shows`, "POST", { expected_count, dry_run });
+    assert.equal((await restore("brand", 2)).status, 403);
+    assert.equal((await restore("admin", 1)).status, 409);
+    assert.deepEqual(await (await restore("admin", 2)).json(), { eligible: 2, restored: 0, applied: false });
+    assert.deepEqual(await (await restore("admin", 2, false)).json(), { eligible: 2, restored: 2, applied: true });
+    assert.equal((f.db.prepare("SELECT status FROM applications WHERE id=?").get(selectedId) as any).status, "selected");
+    assert.equal((f.db.prepare("SELECT status FROM applications WHERE id=?").get(shippingId) as any).status, "shipping");
+    for (const person of [f.ids.influencer, f.ids.other]) {
+      const profile = f.db.prepare("SELECT no_show_count,blocked_until,blacklisted FROM influencer_profiles WHERE user_id=?").get(person) as any;
+      assert.deepEqual(profile, { no_show_count: 0, blocked_until: 0, blacklisted: 0 });
+    }
+    assert.deepEqual(await (await restore("admin", 0, false)).json(), { eligible: 0, restored: 0, applied: true });
   } finally {
     f.db.close();
   }
@@ -1308,7 +1350,8 @@ test("brand review delay is not no-show; revised deadline and reminder deduplica
       ).n,
       1,
     );
-    assert.equal(sweepDeadlines(f.db, due).penalized, 1);
+    assert.equal(sweepDeadlines(f.db, due).penalized, 0);
+    assert.equal((await f.action(a, "no_show", { confirm_email: "influencer@test.com", note: "수정 기한 내 미제출" }, "admin")).status, 200);
   } finally {
     f.db.close();
   }
@@ -1412,7 +1455,7 @@ test("admin tier settings validate, recalculate and retain penalty history", asy
     f.db.close();
   }
 });
-test("final deadline penalty, manual release authorization and immutable no-show history", async () => {
+test("admin no-show penalty, manual release authorization and immutable no-show history", async () => {
   const f = await fixture();
   try {
     const c = await f.create(),
@@ -1431,7 +1474,8 @@ test("final deadline penalty, manual release authorization and immutable no-show
     await f.action(a, "approve");
     const due = Date.now() - 1;
     f.db.prepare("UPDATE campaigns SET final_due=? WHERE id=?").run(due, c);
-    assert.equal(sweepDeadlines(f.db).penalized, 1);
+    assert.equal(sweepDeadlines(f.db).penalized, 0);
+    assert.equal((await f.action(a, "no_show", { confirm_email: "influencer@test.com", note: "최종 마감일 이후 미제출" }, "admin")).status, 200);
     assert.equal(
       (
         await f.action(
@@ -1484,7 +1528,7 @@ test("final deadline penalty, manual release authorization and immutable no-show
     assert.equal(p.no_show_count, 1);
     assert.equal(
       (f.db.prepare("SELECT COUNT(*) AS n FROM admin_audit").get() as any).n,
-      1,
+      2,
     );
     assert.equal(
       (
@@ -2138,7 +2182,7 @@ test("campaign editing validates all fields, retains participant conditions and 
   }
 });
 
-test("optional review skips drafts and uses final deadline for penalties", async () => {
+test("optional review skips drafts and overdue applications stay active for admin review", async () => {
   const f = await fixture();
   try {
     const c = await f.create({ review_required: false, draft_date: undefined });
@@ -2203,14 +2247,14 @@ test("optional review skips drafts and uses final deadline for penalties", async
     f.db
       .prepare("UPDATE campaigns SET final_due=? WHERE id=?")
       .run(Date.now() - 1, c2);
-    assert.equal(sweepDeadlines(f.db).penalized, 1);
+    assert.equal(sweepDeadlines(f.db).penalized, 0);
     assert.equal(
       (
         f.db
           .prepare("SELECT status FROM applications WHERE id=?")
           .get(a2) as any
       ).status,
-      "no_show",
+      "selected",
     );
   } finally {
     f.db.close();

@@ -1242,6 +1242,8 @@
         actions = `<p class="notice">${t("최종 콘텐츠를 제출하려면 먼저 위 배송 정보에서 참여 의사와 배송지를 확인해 주세요.")}</p>`;
       if (a.content_links?.length)
         actions += `<section class="content-links-editor"><h3>${t("제출한 콘텐츠 링크")}</h3>${a.content_links.map((item, index) => `<div class="content-link-item"><p>${index + 1}. ${link(item.url, t("게시물 열기"))}</p>${actionForm(a, "final", `<input type="hidden" name="link_id" value="${item.id}">${input("url", t("SNS 게시물 URL 수정"), "url", 'required placeholder="https://..."', item.url)}`, t("링크 수정 저장"))}</div>`).join("")}</section>`;
+      if (!a.final_url && Date.now() >= a.final_due && ["selected", "shipping", "draft_approved", "revision_requested"].includes(a.status))
+        actions = `<p class="notice">${t("최종 제출 기한이 지났습니다. 연장이 필요하면 운영사에 문의해 주세요.")}</p>`;
     } else {
       if (a.status === "applied")
         actions = `<div class="review-actions"><p class="note left">${t("캠페인 지원자 목록에서 선택한 뒤 최종 선정해 주세요.")}</p><a class="primary" href="/campaigns/${a.campaign_id}">${t("최종 선정하러 가기")}</a>${actionForm(a, "reject", textarea("note", t("반려 사유 (선택)"), 'maxlength="1000"'), t("지원 반려"), t("이 지원을 반려할까요?"))}</div>`;
@@ -1301,6 +1303,10 @@
           <summary>최종 마감일 연장</summary>
           ${actionForm(a, "extend", input("final_date", t("새 최종 마감일 (캠페인 전체 적용)"), "date", "required"), t("마감 연장"), t("이 캠페인 전체 참여자의 최종 마감일을 연장할까요? 이미 발생한 제재는 취소되지 않습니다."))}
         </details>`;
+      if (role === "admin" && ["selected", "shipping", "revision_requested", "draft_approved"].includes(a.status) && !a.final_url)
+        actions += `<details><summary>${t("노쇼 수동 처리")}</summary><p class="note left">${t("배송 및 참여 상황을 확인한 뒤 운영사가 직접 결정해 주세요. 노쇼 처리 시 지원 제한과 등급 페널티가 적용됩니다.")}</p>${actionForm(a, "no_show", input("confirm_email", t("인플루언서 이메일 재입력"), "email", "required") + textarea("note", t("노쇼 처리 사유"), 'required minlength="5" maxlength="1000" rows="3"'), t("노쇼 처리"), t("이 참여자를 노쇼로 처리하고 제재를 적용할까요?"))}</details>`;
+      if (role === "admin" && a.status === "no_show")
+        actions += `<details><summary>${t("노쇼 처리 취소")}</summary>${actionForm(a, "restore_no_show", input("confirm_email", t("인플루언서 이메일 재입력"), "email", "required") + textarea("note", t("노쇼 취소 사유"), 'required minlength="5" maxlength="1000" rows="3"'), t("노쇼 취소 및 참여 복구"), t("노쇼 기록과 해당 제재를 취소하고 이전 참여 단계로 되돌릴까요?"))}</details>`;
     }
     const effectiveDraft =
       a.status === "revision_requested" && a.revision_due
@@ -1321,7 +1327,7 @@
             >최종 마감 <strong>${esc(a.final_date)}</strong></span
           >
         </div>
-        ${a.status === "no_show" ? t('<div class="warning">제출 마감 경과로 노쇼 처리되었습니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
+        ${a.status === "no_show" ? t('<div class="warning">노쇼 상태입니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
         <div class="detail-grid">
           <div>
             <section class="panel">
@@ -1611,7 +1617,7 @@
       api("/admin/audit"),
     ]);
     root.innerHTML =
-      heading(t("운영 정책"), t("노쇼와 등급 자동 갱신의 기준을 설정하세요.")) +
+      heading(t("운영 정책"), t("운영사가 직접 처리하는 노쇼 제재와 등급 기준을 설정하세요.")) +
       html`<form
           class="panel editor"
           data-task="settings"
@@ -1622,9 +1628,8 @@
             ${input("penalty_days", t("신규 지원 제한 일수"), "number", 'required min="1" max="365"', s.penalty_days)}${input("demotion", t("노쇼당 등급 강등 단계"), "number", 'required min="1" max="2"', s.demotion)}${input("blacklist_after", t("영구 제한 누적 노쇼 횟수"), "number", 'required min="1" max="10"', s.blacklist_after)}
           </div>
           <p class="note left">
-            제출 시각은 서버 시간으로 판단합니다. 검수 대기·최종 제출 완료인
-            참여자는 브랜드 검수 지연만으로 노쇼 처리하지 않습니다. 수정 요청은
-            별도 재제출 마감일을 사용합니다.
+            마감일이 지나도 노쇼는 자동 처리되지 않습니다. 참여자의 배송·제출
+            상황을 확인한 뒤 운영사 계정에서 직접 처리해 주세요.
           </p>
           <h2>${t("등급 기준")}${gradeInfo()}</h2>
           <p class="muted">

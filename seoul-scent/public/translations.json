@@ -765,5 +765,19 @@
   "최종 콘텐츠를 제출하려면 먼저 위 배송 정보에서 참여 의사와 배송지를 확인해 주세요.": "To submit your final content, first confirm your participation and shipping address above.",
   "최종 SNS 게시물 URL (최대 3개)": "Final social post URL (up to 3)",
   "최종 콘텐츠 링크 3개를 모두 제출했습니다. 아래에서 기존 링크를 수정할 수 있습니다.": "You have submitted all 3 content links. You can still edit them below.",
-  "최종 콘텐츠 링크는 캠페인당 최대 3개까지 제출할 수 있습니다.": "You can submit up to 3 final content links per campaign."
+  "최종 콘텐츠 링크는 캠페인당 최대 3개까지 제출할 수 있습니다.": "You can submit up to 3 final content links per campaign.",
+  "최종 제출 기한이 지났습니다. 연장이 필요하면 운영사에 문의해 주세요.": "The final submission deadline has passed. Contact the operator if you need an extension.",
+  "노쇼 수동 처리": "Mark as no-show",
+  "배송 및 참여 상황을 확인한 뒤 운영사가 직접 결정해 주세요. 노쇼 처리 시 지원 제한과 등급 페널티가 적용됩니다.": "Review shipping and participation before making this decision. A no-show applies an application restriction and grade penalty.",
+  "인플루언서 이메일 재입력": "Re-enter influencer email",
+  "노쇼 처리 사유": "Reason for no-show",
+  "노쇼 처리": "Apply no-show",
+  "이 참여자를 노쇼로 처리하고 제재를 적용할까요?": "Mark this participant as a no-show and apply the penalty?",
+  "노쇼 처리 취소": "Undo no-show",
+  "노쇼 취소 사유": "Reason for undoing no-show",
+  "노쇼 취소 및 참여 복구": "Undo no-show and restore participation",
+  "노쇼 기록과 해당 제재를 취소하고 이전 참여 단계로 되돌릴까요?": "Undo the no-show and its penalty, then restore the previous participation stage?",
+  "노쇼 상태입니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.": "This participation is marked as a no-show. Check your profile for the application restriction and grade penalty.",
+  "운영사가 직접 처리하는 노쇼 제재와 등급 기준을 설정하세요.": "Set the penalties for no-shows reviewed by the operator and the grade rules.",
+  "마감일이 지나도 노쇼는 자동 처리되지 않습니다. 참여자의 배송·제출 상황을 확인한 뒤 운영사 계정에서 직접 처리해 주세요.": "No-shows are not applied automatically after a deadline. Review shipping and submission, then mark a no-show from an operator account."
 }

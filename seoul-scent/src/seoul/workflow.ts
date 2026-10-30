@@ -182,16 +182,13 @@ export function recalculateTier(db: DB, user: number) {
 }
 export function sweepDeadlines(db: DB, now = Date.now()) {
   return db.transaction(() => {
-    const rules = db
-      .prepare("SELECT * FROM workflow_settings WHERE id=1")
-      .get() as any;
     const rows = db
       .prepare(
-        `SELECT a.*,c.title,c.brand_id,c.review_required,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
+        `SELECT a.*,c.title,c.review_required,c.draft_due,c.final_due FROM applications a JOIN campaigns c ON c.id=a.campaign_id
       WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status!='completed' AND a.status IN ('selected','shipping','revision_requested','draft_approved')`,
       )
       .all() as any[];
-    let penalized = 0;
+    let overdue = 0;
     for (const a of rows) {
       const due =
         a.status === "draft_approved" || !a.review_required
@@ -211,48 +208,11 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
           );
         continue;
       }
-      db.prepare(
-        "UPDATE applications SET status='no_show',updated_at=CURRENT_TIMESTAMP WHERE id=?",
-      ).run(a.id);
-      db.prepare(
-        `UPDATE influencer_profiles SET no_show_count=no_show_count+1, tier=MAX(0,tier-?),
-        blocked_until=MAX(blocked_until,?), blacklisted=CASE WHEN no_show_count+1>=? THEN 1 ELSE blacklisted END WHERE user_id=?`,
-      ).run(
-        rules.demotion,
-        due + rules.penalty_days * 86400_000,
-        rules.blacklist_after,
-        a.influencer_id,
-      );
-      event(
-        db,
-        a,
-        null,
-        "no_show",
-        "제출 마감일 경과로 자동 노쇼 처리",
-        "",
-        now,
-      );
-      notify(
-        db,
-        a.influencer_id,
-        `${a.title}: 미제출로 노쇼 처리되었습니다. 신규 지원이 제한됩니다.`,
-        `/applications/${a.id}`,
-        `no-show:${a.id}`,
-        now,
-      );
-      notify(
-        db,
-        a.brand_id,
-        `${a.title}: 노쇼가 발생했습니다.`,
-        `/campaigns/${a.campaign_id}`,
-        `brand-no-show:${a.id}`,
-        now,
-      );
-      penalized++;
+      overdue++;
     }
     db.prepare(
       "UPDATE campaigns SET status='closed' WHERE deleted_at=0 AND is_draft=0 AND status='recruiting' AND recruit_due<=?",
     ).run(now);
-    return { penalized };
+    return { penalized: 0, overdue };
   })();
 }

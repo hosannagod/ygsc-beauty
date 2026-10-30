@@ -445,7 +445,7 @@ const { spawn, spawnSync } = require("node:child_process"),
     }
     assert.equal(
       await influencer.locator(".application-group-heading").count(),
-      2,
+      3,
     );
     assert.equal(
       await influencer
@@ -484,7 +484,7 @@ const { spawn, spawnSync } = require("node:child_process"),
       });
     assert.equal(
       await influencer.locator(".application-group-heading").count(),
-      2,
+      3,
     );
     assert.equal(
       await influencer.locator(".application-group-heading").nth(1).innerText(),

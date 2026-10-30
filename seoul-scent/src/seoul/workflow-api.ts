@@ -130,6 +130,34 @@ export function registerWorkflow(
         throw e;
       }
     };
+  const restoreNoShow = (application: any, admin: User, reason: string) => {
+    const previous = db.prepare(
+      `SELECT status FROM application_events WHERE application_id=?
+       AND status IN ('selected','shipping','revision_requested','draft_approved')
+       ORDER BY id DESC LIMIT 1`,
+    ).get(application.id) as { status: string } | undefined;
+    if (!previous) throw new WorkflowError("복구할 이전 참여 단계를 찾을 수 없습니다.", 409);
+    const profile = db.prepare("SELECT no_show_count FROM influencer_profiles WHERE user_id=?")
+      .get(application.influencer_id) as { no_show_count: number } | undefined;
+    if (!profile?.no_show_count) fail("노쇼 제재 이력을 확인해 주세요.", 409);
+    const rules = db.prepare("SELECT blacklist_after FROM workflow_settings WHERE id=1").get() as { blacklist_after: number };
+    const now = Date.now();
+    const restored = db.prepare("UPDATE applications SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='no_show'")
+      .run(previous.status, application.id);
+    if (!restored.changes) fail("이미 노쇼 상태가 해제됐습니다.", 409);
+    db.prepare(`UPDATE influencer_profiles SET no_show_count=no_show_count-1,
+      blocked_until=CASE WHEN no_show_count<=1 THEN 0 ELSE blocked_until END,
+      blacklisted=CASE WHEN no_show_count-1<? THEN 0 ELSE blacklisted END WHERE user_id=?`)
+      .run(rules.blacklist_after, application.influencer_id);
+    recalculateTier(db, application.influencer_id);
+    event(db, application, admin.id, previous.status, `노쇼 처리 취소: ${reason}`, "", now);
+    notify(db, application.influencer_id,
+      `${application.title}: 노쇼 처리가 취소됐습니다. 최종 업로드 마감일 ${application.final_date}까지 참여 내역을 확인해 주세요.`,
+      `/applications/${application.id}`);
+    db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+      .run(admin.id, application.influencer_id, "application_no_show_restore", `application:${application.id};reason:${reason}`, now);
+    return previous.status;
+  };
   app.post(
     "/api/work/admin/projects/second/import",
     wrap(async (c) => {
@@ -457,6 +485,35 @@ export function registerWorkflow(
         ).run(u.id, JSON.stringify({ campaign_id: campaign.id, previous: campaign.final_date, final_date: finalDate, notified: participants.length }), Date.now());
       })();
       return c.json({ success: true, final_date: finalDate });
+    }),
+  );
+  app.post(
+    "/api/work/admin/campaigns/:id/restore-auto-no-shows",
+    wrap(async (c) => {
+      const admin = role(c, "admin"),
+        campaign = campaignFor(db, id(c), admin, true),
+        b = await body(c),
+        expected = integer(b.expected_count, "복구 대상 인원", 0, 500);
+      if (campaign.final_due <= Date.now() || campaign.status === "completed")
+        fail("먼저 캠페인의 최종 업로드 마감일을 연장해 주세요.", 409);
+      return c.json(db.transaction(() => {
+        const rows = db.prepare(
+          `SELECT a.*,c.title,c.final_date FROM applications a JOIN campaigns c ON c.id=a.campaign_id
+           WHERE a.campaign_id=? AND a.status='no_show'
+             AND EXISTS (SELECT 1 FROM application_events e WHERE e.id=(
+               SELECT MAX(last.id) FROM application_events last WHERE last.application_id=a.id
+             ) AND e.status='no_show' AND e.actor_id IS NULL
+               AND e.note='제출 마감일 경과로 자동 노쇼 처리')
+           ORDER BY a.id`,
+        ).all(campaign.id) as any[];
+        if (rows.length !== expected)
+          fail(`복구 대상이 변경됐습니다. 현재 ${rows.length}명입니다.`, 409);
+        if (b.dry_run !== false)
+          return { eligible: rows.length, restored: 0, applied: false };
+        for (const application of rows)
+          restoreNoShow(application, admin, "최종 업로드 마감일 연장에 따른 자동 노쇼 복구");
+        return { eligible: rows.length, restored: rows.length, applied: true };
+      })());
     }),
   );
   app.delete(
@@ -1347,6 +1404,35 @@ export function registerWorkflow(
             db.prepare("UPDATE applications SET final_url=? WHERE id=?").run(first.url, a.id);
             if (a.status !== "completed") status = "final_submitted";
             break;
+          case "no_show": {
+            if (u.role !== "admin") fail("운영사만 노쇼를 처리할 수 있습니다.", 403);
+            requireState(["selected", "shipping", "revision_requested", "draft_approved"]);
+            if (a.final_url) fail("이미 최종 콘텐츠를 제출한 참여자입니다.", 409);
+            if (b.confirm_email?.trim().toLowerCase() !== a.influencer_email.toLowerCase())
+              fail("노쇼 처리할 계정의 이메일을 확인해 주세요.", 409);
+            const reason = text(b.note, "노쇼 처리 사유", 5, 1000),
+              rules = db.prepare("SELECT penalty_days,blacklist_after FROM workflow_settings WHERE id=1").get() as { penalty_days: number; blacklist_after: number },
+              now = Date.now();
+            db.prepare(`UPDATE influencer_profiles SET no_show_count=no_show_count+1,
+              blocked_until=MAX(blocked_until,?),
+              blacklisted=CASE WHEN no_show_count+1>=? THEN 1 ELSE blacklisted END WHERE user_id=?`)
+              .run(now + rules.penalty_days * 86400_000, rules.blacklist_after, a.influencer_id);
+            recalculateTier(db, a.influencer_id);
+            db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+              .run(u.id, a.influencer_id, "application_no_show", `application:${a.id};reason:${reason}`, now);
+            status = "no_show";
+            note = `운영사 노쇼 처리: ${reason}`;
+            notify(db, a.brand_id, `${a.title}: 운영사가 노쇼를 처리했습니다.`, `/campaigns/${a.campaign_id}`);
+            break;
+          }
+          case "restore_no_show": {
+            if (u.role !== "admin") fail("운영사만 노쇼 처리를 취소할 수 있습니다.", 403);
+            requireState(["no_show"]);
+            if (b.confirm_email?.trim().toLowerCase() !== a.influencer_email.toLowerCase())
+              fail("노쇼 처리를 취소할 계정의 이메일을 확인해 주세요.", 409);
+            restoreNoShow(a, u, text(b.note, "노쇼 취소 사유", 5, 1000));
+            return;
+          }
           case "complete": {
             if (!brand) fail("접근 권한이 없습니다.", 403);
             requireState(["final_submitted"]);
