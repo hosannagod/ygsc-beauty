@@ -872,7 +872,7 @@
           ${overdueConfirmation ? `<span>${t("확인 기한 경과")} <strong>${overdueConfirmation}</strong></span>` : ""}
           ${withoutConfirmationRecord ? `<span>${t("기존 진행 · 확인 기록 없음")} <strong>${withoutConfirmationRecord}</strong></span>` : ""}
         </div>
-        <div class="tabs" role="group" aria-label="참여자 단계">
+        <div class="tabs" id="participants" role="group" aria-label="참여자 단계">
           <button data-tab="all" class="active">전체 ${tabCount("all")}</button
           ><button data-tab="applicants">지원자 ${tabCount("applicants")}</button
           ><button data-tab="shipping">배송 ${tabCount("shipping")}</button
@@ -1035,7 +1035,7 @@
                 ${rows
                   .map(
                     (a) =>
-                      html`<tr>
+                      html`<tr data-application-id="${a.id}">
                         <td data-label="${t("선택")}">
                           ${a.status === "applied" && (!c.is_draft || !!c.import_key) ? `<input type="checkbox" data-select-applicant="${a.id}" aria-label="${esc(a.influencer_name)} ${t("선택")}">` : "—"}
                         </td>
@@ -1090,16 +1090,47 @@
             );
         updateSelection();
       }
-      document.querySelectorAll("[data-tab]").forEach(
-        (button) =>
-          (button.onclick = () => {
-            document
-              .querySelectorAll("[data-tab]")
-              .forEach((b) => b.classList.toggle("active", b === button));
-            table(button.dataset.tab);
-          }),
+      const tabs = new Set(["all", "applicants", "shipping", "review", "completed", "no_show"]);
+      const storedTab = new URLSearchParams(location.search).get("tab");
+      let activeTab = tabs.has(storedTab) ? storedTab : "all";
+      function showTab(tab, updateUrl = false) {
+        activeTab = tab;
+        document.querySelectorAll("[data-tab]").forEach((button) =>
+          button.classList.toggle("active", button.dataset.tab === tab),
+        );
+        table(tab);
+        if (updateUrl) {
+          const url = new URL(location.href);
+          url.searchParams.set("tab", tab);
+          history.replaceState(history.state, "", url);
+        }
+      }
+      document.querySelectorAll("[data-tab]").forEach((button) =>
+        (button.onclick = () => showTab(button.dataset.tab, true)),
       );
-      table("all");
+      document.querySelector("#applicants-table").addEventListener("click", (event) => {
+        const detail = event.target.closest('a[href^="/applications/"]');
+        if (!detail) return;
+        sessionStorage.setItem(`seoul-campaign-return:${id}`, JSON.stringify({
+          tab: activeTab,
+          applicationId: Number(detail.getAttribute("href").split("/").pop()),
+        }));
+      });
+      showTab(activeTab);
+      const returnKey = `seoul-campaign-return:${id}`;
+      let returnState = null;
+      try {
+        returnState = JSON.parse(sessionStorage.getItem(returnKey) || "null");
+      } catch {
+        sessionStorage.removeItem(returnKey);
+      }
+      if (returnState && returnState.tab === activeTab) {
+        sessionStorage.removeItem(returnKey);
+        const row = document.querySelector(`#applicants-table [data-application-id="${returnState.applicationId}"]`);
+        requestAnimationFrame(() =>
+          (row || document.querySelector("#participants")).scrollIntoView({block: row ? "center" : "start", inline: "nearest"}),
+        );
+      }
     }
   }
   async function myApplications() {

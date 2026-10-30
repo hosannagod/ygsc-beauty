@@ -609,6 +609,19 @@ const { spawn, spawnSync } = require("node:child_process"),
       .getByText("최종 제출 완료", { exact: true })
       .first()
       .waitFor();
+    await brand.goto(base + "/campaigns/" + campaignId);
+    await brand.locator('[data-tab="review"]').click();
+    assert.match(brand.url(), /[?&]tab=review/);
+    await brand.locator(`#applicants-table [data-application-id="${appId}"] a[href="/applications/${appId}"]`).click();
+    await brand.goBack();
+    await brand.locator('[data-tab="review"].active').waitFor();
+    const returnedRow = brand.locator(`#applicants-table [data-application-id="${appId}"]`);
+    await returnedRow.waitFor();
+    assert.equal(await returnedRow.evaluate((row) => {
+      const rect = row.getBoundingClientRect();
+      return rect.top < window.innerHeight && rect.bottom > 0;
+    }), true);
+    await brand.goto(base + "/applications/" + appId);
     await brand.reload();
     await brand.locator("[name=views]").fill("12500");
     await brand.locator("[name=best]").check();
