@@ -1451,7 +1451,8 @@ export function registerWorkflow(
       if (!emailConfig().configured)
         fail("메일 발송 설정을 확인해 주세요.", 503);
       const finalDate = text(b.final_date, "최종 업로드 마감일", 10, 10),
-        expected = integer(b.expected_count, "발송 대상 인원", 1, 500);
+        expected = integer(b.expected_count, "발송 대상 인원", 1, 500),
+        reminderRound = integer(b.reminder_round ?? 1, "재안내 회차", 1, 10);
       if (campaign.final_date !== finalDate || campaign.final_due <= Date.now())
         fail("캠페인의 최종 업로드 마감일을 다시 확인해 주세요.", 409);
       const recipients = db.prepare(
@@ -1471,7 +1472,11 @@ export function registerWorkflow(
         }).format(new Date(campaign.final_due - 1)),
         dueKo = new Intl.DateTimeFormat("ko-KR", {
           timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric",
-        }).format(new Date(campaign.final_due - 1));
+        }).format(new Date(campaign.final_due - 1)),
+        todayKst = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(now),
+        dueToday = finalDate === todayKst;
       const queued = db.transaction(() => {
         const insert = db.prepare(
           `INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
@@ -1483,7 +1488,7 @@ export function registerWorkflow(
 
 Hello ${recipient.name},
 
-This is a reminder for the ${campaign.title_en || campaign.title} campaign. Please publish your content and submit the final post link by ${dueEn} (KST).
+This is a reminder for the ${campaign.title_en || campaign.title} campaign. Please publish your content and submit the final post link ${dueToday ? `by 11:59 PM today, ${dueEn} (KST)` : `by ${dueEn} (KST)`}.
 
 If you have not received the product, please reply to this email so we can check the delivery.
 
@@ -1493,16 +1498,16 @@ If you have not received the product, please reply to this email so we can check
 
 안녕하세요, ${recipient.name}님.
 
-${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링크를 ${dueKo}까지 제출해 주세요.
+${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링크를 ${dueToday ? `오늘(${dueKo}) 23:59(한국시간)` : dueKo}까지 제출해 주세요.
 
 제품을 아직 받지 못하셨다면 이 메일에 회신해 주시면 배송 상태를 확인하겠습니다.
 
 `;
           count += insert.run(
             recipient.id,
-            `final-reminder:${campaign.id}:${recipient.id}:${finalDate}`,
+            `final-reminder:${campaign.id}:${recipient.id}:${finalDate}${reminderRound > 1 ? `:round-${reminderRound}` : ""}`,
             recipient.email,
-            `[Seoul Scent] ${campaign.title} Final upload reminder / 최종 업로드 안내`,
+            dueToday ? `[Seoul Scent] ${campaign.title} Due today / 오늘 업로드 마감` : `[Seoul Scent] ${campaign.title} Final upload reminder / 최종 업로드 안내`,
             message,
             now,
             now,
@@ -1510,7 +1515,7 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
         }
         db.prepare(
           "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_final_reminder_email',?,?)",
-        ).run(u.id, JSON.stringify({ campaign_id: campaign.id, final_date: finalDate, recipients: recipients.length, queued: count }), now);
+        ).run(u.id, JSON.stringify({ campaign_id: campaign.id, final_date: finalDate, reminder_round: reminderRound, recipients: recipients.length, queued: count }), now);
         return count;
       })();
       return c.json({ recipients: recipients.length, queued, applied: true });

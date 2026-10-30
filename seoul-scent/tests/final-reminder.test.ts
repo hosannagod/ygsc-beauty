@@ -43,8 +43,10 @@ test("final reminder queues one bilingual email per shipped application without 
     assert.deepEqual(await (await send({ final_date: finalDate, expected_count: 1 })).json(), { recipients: 1, queued: 0, applied: false });
     assert.deepEqual(await (await send({ final_date: finalDate, expected_count: 1, dry_run: false })).json(), { recipients: 1, queued: 1, applied: true });
     assert.deepEqual(await (await send({ final_date: finalDate, expected_count: 1, dry_run: false })).json(), { recipients: 1, queued: 0, applied: true });
+    assert.deepEqual(await (await send({ final_date: finalDate, expected_count: 1, reminder_round: 2, dry_run: false })).json(), { recipients: 1, queued: 1, applied: true });
+    assert.deepEqual(await (await send({ final_date: finalDate, expected_count: 1, reminder_round: 2, dry_run: false })).json(), { recipients: 1, queued: 0, applied: true });
     const queued = db.prepare("SELECT recipient,body FROM email_outbox").all() as any[];
-    assert.equal(queued.length, 1);
+    assert.equal(queued.length, 2);
     assert.equal(queued[0].recipient, "creator@example.com");
     assert.match(queued[0].body, /English[\s\S]*한국어/);
     assert.match(queued[0].body, /제품을 아직 받지 못하셨다면/);
