@@ -486,7 +486,8 @@
             const items = filtered.filter((c) => campaignStatus(c) === group);
             if (!items.length) return "";
             if (group === "scheduled") items.sort((a, b) => a.recruit_start - b.recruit_start);
-            if (group === "recruiting") items.sort((a, b) => a.recruit_due - b.recruit_due);
+            if (group === "recruiting")
+              items.sort((a, b) => (b.published_at || 0) - (a.published_at || 0) || b.id - a.id);
             return `<div class="section-heading"><h2>${statusLabels[group]} <span class="muted">${items.length}</span></h2></div><section class="campaign-grid">${items.map(campaignCard).join("")}</section>`;
           }).join("")
         : empty(

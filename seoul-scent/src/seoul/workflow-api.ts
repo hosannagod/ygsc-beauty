@@ -804,8 +804,9 @@ export function registerWorkflow(
             );
           if (final < draft || (review && final === draft))
             fail("캠페인 제출 일정을 확인해 주세요.");
-          db.prepare("UPDATE campaigns SET is_draft=0,status=? WHERE id=?").run(
+          db.prepare("UPDATE campaigns SET is_draft=0,status=?,published_at=? WHERE id=?").run(
             end <= Date.now() ? "closed" : "recruiting",
+            Date.now(),
             campaign.id,
           );
         }

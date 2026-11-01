@@ -135,6 +135,10 @@ test("new campaigns stay private until reviewed and explicitly published", async
       ((await (await f.req("brand", path)).json()) as any).campaign.is_draft,
       1,
     );
+    assert.equal(
+      ((await (await f.req("brand", path)).json()) as any).campaign.published_at,
+      0,
+    );
     assert.equal((await f.req("influencer", path)).status, 404);
     assert.ok(
       !(
@@ -163,10 +167,9 @@ test("new campaigns stay private until reviewed and explicitly published", async
         .status,
       200,
     );
-    assert.equal(
-      ((await (await f.req("influencer", path)).json()) as any).campaign.title,
-      "검토한 캠페인",
-    );
+    const published = ((await (await f.req("influencer", path)).json()) as any).campaign;
+    assert.equal(published.title, "검토한 캠페인");
+    assert.ok(published.published_at > 0);
     assert.equal(
       (await f.req("brand", `${path}/details`, "PUT", { publish: true }))
         .status,

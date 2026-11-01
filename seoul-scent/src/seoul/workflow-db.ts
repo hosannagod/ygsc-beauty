@@ -38,7 +38,8 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
       recruit_date TEXT NOT NULL, draft_date TEXT NOT NULL, final_date TEXT NOT NULL,
       recruit_due INTEGER NOT NULL, draft_due INTEGER NOT NULL, final_due INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'recruiting' CHECK(status IN ('recruiting','closed','completed')),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      published_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS applications (
       id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
@@ -97,6 +98,14 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
     db.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS campaigns_import_key_idx ON campaigns(import_key) WHERE import_key IS NOT NULL; INSERT OR IGNORE INTO schema_version VALUES(13)",
     );
+  })();
+  db.transaction(() => {
+    const columns = db.prepare("PRAGMA table_info(campaigns)").all() as { name: string }[];
+    if (!columns.some((column) => column.name === "published_at"))
+      db.exec("ALTER TABLE campaigns ADD COLUMN published_at INTEGER NOT NULL DEFAULT 0");
+    db.exec(`UPDATE campaigns SET published_at=CAST(strftime('%s',created_at) AS INTEGER)*1000
+      WHERE is_draft=0 AND published_at=0;
+      INSERT OR IGNORE INTO schema_version VALUES(16)`);
   })();
   const columns = db.prepare("PRAGMA table_info(applications)").all() as {
     name: string;

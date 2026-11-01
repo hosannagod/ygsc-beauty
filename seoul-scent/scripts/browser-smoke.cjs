@@ -1174,6 +1174,29 @@ const { spawn, spawnSync } = require("node:child_process"),
       await (await admin.request.get(base + "/api/work/campaigns")).json()
     ).campaigns;
     assert.ok(!visibleCampaigns.some((c) => c.id === batchCampaign));
+    const newestResponse = await brand.request.post(base + "/api/work/campaigns", {
+      data: {
+        title: "최신 모집 테스트",
+        product: "새로운 테스트 제품",
+        description: "새로 게시된 캠페인이 목록 맨 위에 표시되는지 확인합니다.",
+        guidelines: "제품 체험 후 사용 장면을 게시해 주세요.",
+        capacity: 1,
+        pay_type: "gifted",
+        compensation: 0,
+        recruit_start_date: future(0),
+        recruit_date: future(4),
+        draft_date: future(6),
+        final_date: future(10),
+      },
+    });
+    assert.equal(newestResponse.status(), 201);
+    const newest = await newestResponse.json();
+    assert.equal((await brand.request.put(base + `/api/work/campaigns/${newest.id}/details`, {
+      data: { publish: true },
+    })).status(), 200);
+    await brand.goto(base + "/campaigns");
+    await brand.locator("#campaign-results .campaign-card").first().waitFor();
+    assert.match(await brand.locator("#campaign-results .campaign-card").first().innerText(), /최신 모집 테스트/);
     const backup = spawnSync("npm", ["run", "db:backup"], {
       cwd: process.cwd(),
       env: { ...env, BACKUP_PATH: tmp + "/backup.db" },
