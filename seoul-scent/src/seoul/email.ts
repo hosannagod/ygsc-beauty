@@ -73,7 +73,7 @@ export function queueSelectionEmail(
     .get(applicationId) as any;
   if (!row) throw new Error("Selection recipient not found");
   const title = row.title_en || row.title;
-  const due = row.participation_due || now + 345600000;
+  const due = row.participation_due || now + 259200000;
   const dueKo = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", hour12: false }).format(due);
   const dueEn = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: false }).format(due);
   const subject = "[Seoul Scent] Campaign selection / 캠페인 선정 안내";
@@ -83,7 +83,7 @@ Hello ${row.name},
 
 You have been selected for the campaign: ${title}.
 
-Please confirm your participation by ${dueEn} (KST), within 4 days of selection. After the deadline, you cannot confirm participation or edit the shipping address for this campaign, and the product cannot be shipped.
+Please confirm your participation by ${dueEn} (KST), within 3 days of selection. After the deadline, you cannot confirm participation or edit the shipping address for this campaign, and the product cannot be shipped.
 
 Please sign in and open My Campaigns → Selected Campaigns.
 - Check or update your shipping address for this campaign.
@@ -102,7 +102,7 @@ Even if you have already entered an address, you must confirm it for this campai
 
 ${row.title} 캠페인에 선정되었습니다.
 
-참여 확인 기한: ${dueKo} (한국시간, 선정 후 4일). 기한이 지나면 이 캠페인의 참여 확인과 배송지 수정이 마감되며 제품을 발송할 수 없습니다.
+참여 확인 기한: ${dueKo} (한국시간, 선정 후 3일). 기한이 지나면 이 캠페인의 참여 확인과 배송지 수정이 마감되며 제품을 발송할 수 없습니다.
 
 로그인 후 내 캠페인 → 선정된 캠페인에서 아래 항목을 확인하고 저장해 주세요.
 - 이번 캠페인의 배송지를 확인하거나 수정해 주세요.
@@ -126,27 +126,27 @@ ${row.title} 캠페인에 선정되었습니다.
   );
 }
 
-// Queue once when an influencer first confirms participation and a shipping address.
-export function queueBrandShippingReadyEmail(
+// One selection notice per campaign when recruitment closes.
+export function queueBrandCampaignClosedEmail(
   db: DB,
-  applicationId: number,
+  campaignId: number,
   env: Env = process.env,
   now = Date.now(),
 ) {
   if (emailConfig(env).provider !== "brevo") return false;
-  const row = db.prepare(`SELECT a.id,a.status,a.participation_confirmed_at,a.address,
-    c.title,u.name AS influencer_name,b.name AS brand_name,b.email AS brand_email,b.username AS brand_username
-    FROM applications a JOIN campaigns c ON c.id=a.campaign_id
-    JOIN users u ON u.id=a.influencer_id JOIN users b ON b.id=c.brand_id
-    WHERE a.id=? AND c.deleted_at=0`).get(applicationId) as any;
-  if (!row || row.status !== "selected" || !row.participation_confirmed_at || !row.address ||
+  const row = db.prepare(`SELECT c.title,c.status,c.is_draft,c.deleted_at,
+    b.name AS brand_name,b.email AS brand_email,b.username AS brand_username,
+    (SELECT MIN(id) FROM applications WHERE campaign_id=c.id) AS application_id,
+    (SELECT COUNT(*) FROM applications WHERE campaign_id=c.id AND status='applied') AS applicant_count
+    FROM campaigns c JOIN users b ON b.id=c.brand_id WHERE c.id=?`).get(campaignId) as any;
+  if (!row || row.status !== "closed" || row.is_draft || row.deleted_at || !row.application_id ||
       !validEmail(row.brand_email) || row.brand_email === row.brand_username) return false;
-  const subject = `[Seoul Scent] 배송 준비 요청 / Ready to ship · ${row.title}`;
+  const subject = `[Seoul Scent] 모집 마감·선정 안내 / Selection needed · ${row.title}`;
   const body = `English
 
 Hello ${row.brand_name},
 
-${row.influencer_name} has confirmed participation in ${row.title} and saved a shipping address. Please open the application below, review the delivery details, and arrange shipment. Enter the carrier and tracking number after dispatch.
+Recruitment for ${row.title} has closed. ${row.applicant_count} applicant(s) are awaiting selection. Please review the applicants and select your creators. Each selected creator has 3 days to confirm participation and their shipping address. Please wait for the separate shipping summary before dispatching products.
 
 --------------------
 
@@ -154,11 +154,56 @@ ${row.influencer_name} has confirmed participation in ${row.title} and saved a s
 
 안녕하세요, ${row.brand_name} 담당자님.
 
-${row.influencer_name}님이 ${row.title} 캠페인 참여와 배송지를 확인했습니다. 아래 신청 내역에서 배송 정보를 확인한 뒤 제품을 발송해 주세요. 발송 후 택배사와 송장번호를 등록해 주세요.
+${row.title} 캠페인 모집이 마감되었습니다. 현재 미선정 지원자는 ${row.applicant_count}명입니다. 지원자를 검토하고 선정해 주세요. 선정된 인플루언서는 3일 동안 참여 의사와 배송지를 확인합니다. 제품은 별도로 보내드릴 배송 안내 메일을 확인한 뒤 발송해 주세요.
 
-신청 내역: `;
+캠페인 관리: `;
   return db.prepare(`INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
-    VALUES(?,?,?,?,?,?,?)`).run(applicationId, `brand_shipping_ready:${applicationId}`,
+    VALUES(?,?,?,?,?,?,?)`).run(row.application_id, `brand_campaign_closed:${campaignId}`,
+    row.brand_email, subject, body, now, now).changes > 0;
+}
+
+// One shipping summary per campaign after the confirmation windows have ended.
+export function queueBrandCampaignShippingEmail(
+  db: DB,
+  campaignId: number,
+  env: Env = process.env,
+  now = Date.now(),
+) {
+  if (emailConfig(env).provider !== "brevo") return false;
+  const closedNotice = db.prepare("SELECT created_at FROM email_outbox WHERE event_key=?")
+    .get(`brand_campaign_closed:${campaignId}`) as { created_at: number } | undefined;
+  if (!closedNotice || now < closedNotice.created_at + 259200000) return false;
+  const row = db.prepare(`SELECT c.title,c.status,c.deleted_at,b.name AS brand_name,
+    b.email AS brand_email,b.username AS brand_username,
+    (SELECT MIN(id) FROM applications WHERE campaign_id=c.id) AS application_id,
+    COUNT(a.id) AS selected_count,
+    COALESCE(SUM(CASE WHEN a.participation_confirmed_at>0 AND a.address<>'' AND a.tracking_number='' THEN 1 ELSE 0 END),0) AS ready_count,
+    COALESCE(SUM(CASE WHEN a.tracking_number<>'' THEN 1 ELSE 0 END),0) AS shipped_count,
+    COALESCE(MAX(a.participation_due),0) AS latest_due
+    FROM campaigns c JOIN users b ON b.id=c.brand_id
+    LEFT JOIN applications a ON a.campaign_id=c.id AND a.status NOT IN ('applied','rejected','no_show')
+    WHERE c.id=? GROUP BY c.id`).get(campaignId) as any;
+  if (!row || row.status !== "closed" || row.deleted_at || !row.application_id ||
+      !row.selected_count || now < row.latest_due || !validEmail(row.brand_email) ||
+      row.brand_email === row.brand_username) return false;
+  const subject = `[Seoul Scent] 배송 대상 확인 / Shipping summary · ${row.title}`;
+  const body = `English
+
+Hello ${row.brand_name},
+
+The participation confirmation period for ${row.title} has ended. ${row.ready_count} creator(s) have confirmed and are ready for shipment; ${row.shipped_count} have tracking numbers already. Please check the campaign page and ship only to confirmed creators with an address. Enter the carrier and tracking number after dispatch. Do not ship to creators who have not confirmed.
+
+--------------------
+
+한국어
+
+안녕하세요, ${row.brand_name} 담당자님.
+
+${row.title} 캠페인의 참여 확인 기간이 끝났습니다. 현재 배송 가능한 확인 완료자는 ${row.ready_count}명이며, ${row.shipped_count}명은 송장번호가 등록되어 있습니다. 캠페인 관리에서 참여 확인과 배송지를 확인하고 확정된 분에게만 발송해 주세요. 발송 후 택배사와 송장번호를 등록해 주세요. 확인하지 않은 분에게는 발송하지 마세요.
+
+캠페인 관리: `;
+  return db.prepare(`INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+    VALUES(?,?,?,?,?,?,?)`).run(row.application_id, `brand_campaign_shipping:${campaignId}`,
     row.brand_email, subject, body, now, now).changes > 0;
 }
 
@@ -185,10 +230,11 @@ export async function deliverEmail(row: any, env: Env, request: Fetch = fetch) {
   if (!config.configured) throw new DeliveryError("configuration_missing");
   if (!validEmail(row.recipient))
     throw new DeliveryError("invalid_recipient", true);
+  const campaignMail = /^brand_campaign_(?:closed|shipping):(\d+)$/.exec(String(row.event_key));
   const text =
     row.body +
-    new URL(`/applications/${row.application_id}`, config.origin).href +
-    (String(row.event_key).startsWith("brand_shipping_ready:")
+    new URL(campaignMail ? `/campaigns/${campaignMail[1]}` : `/applications/${row.application_id}`, config.origin).href +
+    (campaignMail
       ? "\n\nSeoul Scent\nThis email relates to a campaign you manage. / 운영 중인 캠페인의 진행 안내입니다."
       : "\n\nSeoul Scent\nThis email relates to a campaign you applied for. / 지원한 캠페인의 진행 안내입니다.");
   const signal = AbortSignal.timeout(20_000);

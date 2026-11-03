@@ -179,7 +179,7 @@ test("new campaigns stay private until reviewed and explicitly published", async
     f.db.close();
   }
 });
-test("participation confirmation and shipping address edits close after four days", async () => {
+test("participation confirmation and shipping address edits close after three days", async () => {
   const f = await fixture();
   try {
     const campaignId = await f.create();
@@ -204,22 +204,40 @@ test("participation confirmation and shipping address edits close after four day
     f.db.close();
   }
 });
-test("first participation confirmation queues one brand shipping email", async () => {
+test("brand mail is campaign-wide after close and after the confirmation window", async () => {
   const previous = process.env.EMAIL_PROVIDER;
   process.env.EMAIL_PROVIDER = "brevo";
   const f = await fixture();
   try {
     const campaignId = await f.create();
     const applicationId = await f.apply(campaignId);
+    const secondApplicationId = await f.apply(campaignId, "other");
     assert.equal((await f.action(applicationId, "select")).status, 200);
-    const count = () => (f.db.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE event_key=?").get(`brand_shipping_ready:${applicationId}`) as { n: number }).n;
-    assert.equal(count(), 1);
+    assert.equal((await f.action(secondApplicationId, "select")).status, 200);
+    const count = (eventKey: string) => (f.db.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE event_key=?").get(eventKey) as { n: number }).n;
+    assert.equal(count(`brand_shipping_ready:${applicationId}`), 0);
     assert.equal((await f.req("influencer", `/applications/${applicationId}/action`, "POST", {
       action: "address", recipient_name: "테스트 수령인", phone: "01012345678",
       postal_code: "06234", address: "서울시 강남구 새 주소 123",
       participation_confirmed: true, guidelines_confirmed: true, deadline_confirmed: true,
     })).status, 200);
-    assert.equal(count(), 1);
+    assert.equal(count(`brand_shipping_ready:${applicationId}`), 0);
+    assert.equal((await f.req("brand", `/campaigns/${campaignId}/close`, "POST", {confirm_close: true})).status, 200);
+    assert.equal(count(`brand_campaign_closed:${campaignId}`), 1);
+    const due = (f.db.prepare("SELECT MAX(participation_due) AS due FROM applications WHERE campaign_id=?").get(campaignId) as any).due;
+    const closedAt = (f.db.prepare("SELECT created_at FROM email_outbox WHERE event_key=?").get(`brand_campaign_closed:${campaignId}`) as any).created_at;
+    const shippingAt = Math.max(due, closedAt + 259200000);
+    sweepDeadlines(f.db, shippingAt - 1);
+    assert.equal(count(`brand_campaign_shipping:${campaignId}`), 0);
+    sweepDeadlines(f.db, shippingAt);
+    sweepDeadlines(f.db, shippingAt);
+    assert.equal(count(`brand_campaign_shipping:${campaignId}`), 1);
+    const autoCloseCampaign = await f.create();
+    await f.apply(autoCloseCampaign);
+    f.db.prepare("UPDATE campaigns SET recruit_due=? WHERE id=?").run(Date.now() - 1, autoCloseCampaign);
+    sweepDeadlines(f.db);
+    sweepDeadlines(f.db);
+    assert.equal(count(`brand_campaign_closed:${autoCloseCampaign}`), 1);
   } finally {
     f.db.close();
     if (previous === undefined) delete process.env.EMAIL_PROVIDER;
@@ -873,7 +891,7 @@ test("selection queues email atomically; mail history and retry are admin-only",
     assert.equal((await action(applicationId, "select")).status, 409);
     assert.equal(
       (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
-      2,
+      1,
     );
     assert.equal((await req("influencer", "/admin/email")).status, 403);
     assert.equal((await req("brand", "/admin/email")).status, 403);
@@ -881,7 +899,7 @@ test("selection queues email atomically; mail history and retry are admin-only",
     const response = await req("admin", "/admin/email");
     assert.equal(response.status, 200);
     const info = (await response.json()) as any;
-    assert.equal(info.messages.length, 2);
+    assert.equal(info.messages.length, 1);
     const id = (db.prepare("SELECT id FROM email_outbox WHERE event_key=?").get(`selection:${applicationId}`) as { id: number }).id;
     assert.equal(
       (await req("admin", `/admin/email/${id}/retry`, "POST", {})).status,

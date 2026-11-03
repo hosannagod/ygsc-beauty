@@ -5,7 +5,7 @@ import { tierLabel } from "./tier.js";
 import { importActivities, historicalActivities } from "./activity-import.js";
 import { importInfluencers } from "./influencer-import.js";
 import { mergeInfluencers } from "./influencer-merge.js";
-import { queueSelectionEmail, queueBrandShippingReadyEmail, emailStatus, emailConfig } from "./email.js";
+import { queueSelectionEmail, queueBrandCampaignClosedEmail, emailStatus, emailConfig } from "./email.js";
 import {
   profileComplete,
   socialProfileUrl,
@@ -788,7 +788,7 @@ export function registerWorkflow(
         )
           db.prepare(
             "UPDATE applications SET participation_confirmed_at=0,participation_due=? WHERE campaign_id=? AND status='selected'",
-          ).run(Date.now() + 345600000, campaign.id);
+          ).run(Date.now() + 259200000, campaign.id);
         if (b.publish === true) {
           if (!campaign.is_draft) fail("이미 공개된 캠페인입니다.", 409);
           recruitmentDates(
@@ -1024,6 +1024,7 @@ export function registerWorkflow(
         db.prepare("UPDATE campaigns SET status='closed' WHERE id=?").run(
           campaign.id,
         );
+        queueBrandCampaignClosedEmail(db, campaign.id);
         db.prepare(
           "INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'campaign_close',?,?)",
         ).run(
@@ -1270,8 +1271,6 @@ export function registerWorkflow(
               Date.now(),
               a.id,
             );
-            if (influencer && !a.participation_confirmed_at)
-              queueBrandShippingReadyEmail(db, a.id);
             note = admin
               ? "운영사가 배송지를 수정했습니다."
               : "배송지가 등록되었습니다.";

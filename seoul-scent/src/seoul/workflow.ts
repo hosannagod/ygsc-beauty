@@ -1,4 +1,5 @@
 import type { openDb, User } from "./db.js";
+import { queueBrandCampaignClosedEmail, queueBrandCampaignShippingEmail } from "./email.js";
 export type DB = ReturnType<typeof openDb>;
 export class WorkflowError extends Error {
   constructor(
@@ -210,9 +211,16 @@ export function sweepDeadlines(db: DB, now = Date.now()) {
       }
       overdue++;
     }
-    db.prepare(
-      "UPDATE campaigns SET status='closed' WHERE deleted_at=0 AND is_draft=0 AND status='recruiting' AND recruit_due<=?",
-    ).run(now);
+    const closed = db.prepare(
+      "UPDATE campaigns SET status='closed' WHERE deleted_at=0 AND is_draft=0 AND status='recruiting' AND recruit_due<=? RETURNING id",
+    ).all(now) as { id: number }[];
+    for (const campaign of closed) queueBrandCampaignClosedEmail(db, campaign.id, process.env, now);
+    const waiting = db.prepare(`SELECT c.id FROM campaigns c
+      JOIN email_outbox closed_mail ON closed_mail.event_key='brand_campaign_closed:' || c.id
+      LEFT JOIN email_outbox shipping_mail ON shipping_mail.event_key='brand_campaign_shipping:' || c.id
+      WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status='closed'
+        AND closed_mail.created_at<=? AND shipping_mail.id IS NULL`).all(now - 259200000) as { id: number }[];
+    for (const campaign of waiting) queueBrandCampaignShippingEmail(db, campaign.id, process.env, now);
     return { penalized: 0, overdue };
   })();
 }

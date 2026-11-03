@@ -211,6 +211,13 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   ); CREATE INDEX IF NOT EXISTS email_outbox_pending ON email_outbox(status,next_attempt);
   CREATE TABLE IF NOT EXISTS email_attempts(id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES email_outbox(id),created_at INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS email_attempts_time ON email_attempts(created_at);`);
+  db.transaction(() => {
+    if (!db.prepare("SELECT 1 FROM schema_version WHERE version=17").get()) {
+      db.exec(`UPDATE email_outbox SET status='failed',last_error='replaced_by_campaign_summary'
+        WHERE event_key LIKE 'brand_shipping_ready:%' AND status IN ('pending','sending');
+        INSERT INTO schema_version VALUES(17)`);
+    }
+  })();
   db.exec(`CREATE TABLE IF NOT EXISTS application_content_links (
     id INTEGER PRIMARY KEY,
     application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,

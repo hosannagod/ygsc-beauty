@@ -1,12 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openDb } from "../src/seoul/db.js";
 import {
   emailConfig,
   emailWorker,
   emailStatus,
   queueSelectionEmail,
-  queueBrandShippingReadyEmail,
+  queueBrandCampaignClosedEmail,
+  queueBrandCampaignShippingEmail,
 } from "../src/seoul/email.js";
 
 const env = {
@@ -51,27 +55,66 @@ test("selection email is opt-in, unique, and rolls back with the selection trans
   queueSelectionEmail(db, 1, env);
   queueSelectionEmail(db, 1, env);
   const queued = db.prepare("SELECT body FROM email_outbox WHERE application_id=1").get() as { body: string };
-  assert.match(queued.body, /within 4 days of selection/);
-  assert.match(queued.body, /선정 후 4일/);
+  assert.match(queued.body, /within 3 days of selection/);
+  assert.match(queued.body, /선정 후 3일/);
   assert.equal(
     (db.prepare("SELECT COUNT(*) AS n FROM email_outbox").get() as any).n,
     1,
   );
   db.close();
 });
-test("brand receives one shipping request after participation confirmation", () => {
+test("brand receives one selection notice and one shipping summary per campaign", async () => {
   const db = fixture();
   try {
-    assert.equal(queueBrandShippingReadyEmail(db, 1, env), false);
-    db.prepare("UPDATE applications SET participation_confirmed_at=1000,address='Test shipping address' WHERE id=1").run();
-    assert.equal(queueBrandShippingReadyEmail(db, 1, env), true);
-    assert.equal(queueBrandShippingReadyEmail(db, 1, env), false);
-    const row = db.prepare("SELECT recipient,body FROM email_outbox WHERE event_key='brand_shipping_ready:1'").get() as {recipient:string;body:string};
-    assert.equal(row.recipient, "brand@example.com");
-    assert.match(row.body, /배송 정보를 확인한 뒤 제품을 발송해 주세요/);
-    assert.ok(!row.body.includes("Test shipping address"));
+    const start = 1_000_000;
+    assert.equal(queueBrandCampaignClosedEmail(db, 1, env, start), false);
+    db.prepare("UPDATE campaigns SET status='closed' WHERE id=1").run();
+    assert.equal(queueBrandCampaignClosedEmail(db, 1, env, start), true);
+    assert.equal(queueBrandCampaignClosedEmail(db, 1, env, start), false);
+    db.prepare("UPDATE applications SET participation_due=?,participation_confirmed_at=?,address='Test shipping address' WHERE id=1")
+      .run(start + 259200000, start + 1000);
+    assert.equal(queueBrandCampaignShippingEmail(db, 1, env, start + 259200000 - 1), false);
+    assert.equal(queueBrandCampaignShippingEmail(db, 1, env, start + 259200000), true);
+    assert.equal(queueBrandCampaignShippingEmail(db, 1, env, start + 259200000), false);
+    const rows = db.prepare("SELECT event_key,recipient,body FROM email_outbox WHERE event_key LIKE 'brand_campaign_%' ORDER BY id").all() as {event_key:string;recipient:string;body:string}[];
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map(row => row.event_key), ['brand_campaign_closed:1','brand_campaign_shipping:1']);
+    assert.ok(rows.every(row => row.recipient === 'brand@example.com'));
+    assert.match(rows[1].body, /배송 가능한 확인 완료자는 1명/);
+    assert.ok(!rows[1].body.includes('Test shipping address'));
+    const sent: string[] = [];
+    const worker = emailWorker(db, env, (async (_url, options) => {
+      const message = JSON.parse(String(options?.body));
+      sent.push(message.textContent);
+      return Response.json({ messageId: `accepted-${sent.length}` }, { status: 201 });
+    }) as typeof fetch);
+    await worker(start + 259200000);
+    await worker(start + 259200000 + 1);
+    await worker(start + 259200000 + 2);
+    assert.equal(sent.length, 2);
+    assert.ok(sent.every(body => body.includes('https://seoul-scent.onrender.com/campaigns/1')));
   } finally {
     db.close();
+  }
+});
+test("startup cancels unsent per-creator brand shipping emails from the old flow", () => {
+  const dir = mkdtempSync(join(tmpdir(), "seoul-brand-mail-"));
+  try {
+    let db = openDb(join(dir, "mail.sqlite"));
+    db.prepare("INSERT INTO users(id,email,name,role,password_hash) VALUES(1,'brand@example.com','Brand','brand','unused'),(2,'creator@example.com','Jane','influencer','unused')").run();
+    db.prepare(`INSERT INTO campaigns(id,brand_id,title,product,description,guidelines,capacity,pay_type,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due)
+      VALUES(1,1,'Test','Product','Description','Guidelines',1,'gifted','2099-01-01','2099-01-03','2099-01-05',1,2,3)`).run();
+    db.prepare("INSERT INTO applications(id,campaign_id,influencer_id,consent_at,phone,address) VALUES(1,1,2,1,'','')").run();
+    db.prepare(`INSERT INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+      VALUES(1,'brand_shipping_ready:1','brand@example.com','Old','Old',1,1)`).run();
+    db.prepare("DELETE FROM schema_version WHERE version=17").run();
+    db.close();
+    db = openDb(join(dir, "mail.sqlite"));
+    const oldMail = db.prepare("SELECT status,last_error FROM email_outbox WHERE event_key='brand_shipping_ready:1'").get() as any;
+    assert.deepEqual(oldMail, {status: "failed", last_error: "replaced_by_campaign_summary"});
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping details; no resend on success", async () => {
@@ -91,7 +134,7 @@ test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping
     assert.match(body.textContent, /Check the boxes confirming your participation/);
     assert.match(body.textContent, /기존에 배송지를 등록하셨더라도 이번 캠페인에서 다시 확인해야/);
     assert.match(body.textContent, /콘텐츠 가이드 확인·기한 내 업로드 약속/);
-    assert.match(body.textContent, /4 days of selection/);
+    assert.match(body.textContent, /3 days of selection/);
     assert.match(
       body.textContent,
       /https:\/\/seoul-scent.onrender.com\/applications\/1/,
