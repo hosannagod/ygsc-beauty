@@ -1689,7 +1689,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       db.transaction(() => {
         const result = db
           .prepare(
-            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0)",
+            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed' AND event_key NOT LIKE 'brand_shipping_ready:%' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0)",
           )
           .run(Date.now(), id(c));
         if (!result.changes) fail("실패한 메일만 재시도할 수 있습니다.", 409);

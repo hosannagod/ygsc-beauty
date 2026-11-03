@@ -916,6 +916,10 @@ test("selection queues email atomically; mail history and retry are admin-only",
       (await req("admin", `/admin/email/${id}/retry`, "POST", {})).status,
       200,
     );
+    const legacy = db.prepare(`INSERT INTO email_outbox(application_id,event_key,recipient,subject,body,status,next_attempt,created_at)
+      VALUES(?,?,'brand@test.com','Old shipping request','Old','failed',0,0)`)
+      .run(applicationId, `brand_shipping_ready:${applicationId}`);
+    assert.equal((await req("admin", `/admin/email/${legacy.lastInsertRowid}/retry`, "POST", {})).status, 409);
     assert.equal(
       (db.prepare("SELECT status FROM email_outbox WHERE id=?").get(id) as any)
         .status,

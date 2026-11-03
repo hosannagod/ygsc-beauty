@@ -274,7 +274,7 @@ export function emailStatus(db: DB, env: Env = process.env) {
       .all(),
     messages: db
       .prepare(
-        `SELECT id,application_id,recipient,status,attempts,last_error,created_at,sent_at
+        `SELECT id,application_id,event_key,recipient,status,attempts,last_error,created_at,sent_at
       FROM email_outbox ORDER BY id DESC LIMIT 50`,
       )
       .all(),
@@ -306,7 +306,7 @@ export function emailWorker(
         if (recent.n >= emailConfig(env).dailyLimit) return null;
         const row = db
           .prepare(
-            "SELECT * FROM email_outbox WHERE status='pending' AND next_attempt<=? AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0) ORDER BY id LIMIT 1",
+            "SELECT * FROM email_outbox WHERE status='pending' AND next_attempt<=? AND event_key NOT LIKE 'brand_shipping_ready:%' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0) ORDER BY id LIMIT 1",
           )
           .get(now) as any;
         if (!row) return null;
