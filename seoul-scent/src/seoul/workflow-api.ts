@@ -1492,7 +1492,7 @@ export function registerWorkflow(
       const admin = role(c, "admin"), b = await body(c);
       if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
       const recipients = (db.prepare(`SELECT u.id,u.email FROM users u
-        WHERE u.role='influencer' AND u.suspended_at=0 AND u.email!=u.username
+        WHERE u.role='influencer' AND u.suspended_at=0 AND (u.username IS NULL OR u.email!=u.username)
           AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
         ORDER BY u.id`).all() as { id: number; email: string }[])
         .filter(u => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(u.email));
