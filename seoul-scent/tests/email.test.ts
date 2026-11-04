@@ -117,6 +117,24 @@ test("startup cancels unsent per-creator brand shipping emails from the old flow
     rmSync(dir, { recursive: true, force: true });
   }
 });
+test("queued email is cancelled if its recipient is suppressed before delivery", async () => {
+  const db = fixture();
+  try {
+    queueSelectionEmail(db, 1, env, 1000);
+    db.prepare("INSERT INTO blocked_emails(email,created_at,actor_id) VALUES('creator@example.com',1001,1)").run();
+    let sent = 0;
+    const worker = emailWorker(db, env, (async () => {
+      sent++;
+      return Response.json({messageId: 'unexpected'}, {status: 201});
+    }) as typeof fetch);
+    await worker(1001);
+    assert.equal(sent, 0);
+    assert.deepEqual(db.prepare("SELECT status,last_error FROM email_outbox WHERE application_id=1").get(),
+      {status: 'failed', last_error: 'recipient_suppressed'});
+  } finally {
+    db.close();
+  }
+});
 test("Brevo receives bilingual text, authenticated URL, reply-to and no shipping details; no resend on success", async () => {
   const db = fixture();
   queueSelectionEmail(db, 1, env, 1000);

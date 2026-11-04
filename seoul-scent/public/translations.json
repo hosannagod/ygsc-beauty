@@ -779,5 +779,6 @@
   "노쇼 기록과 해당 제재를 취소하고 이전 참여 단계로 되돌릴까요?": "Undo the no-show and its penalty, then restore the previous participation stage?",
   "노쇼 상태입니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.": "This participation is marked as a no-show. Check your profile for the application restriction and grade penalty.",
   "운영사가 직접 처리하는 노쇼 제재와 등급 기준을 설정하세요.": "Set the penalties for no-shows reviewed by the operator and the grade rules.",
-  "마감일이 지나도 노쇼는 자동 처리되지 않습니다. 참여자의 배송·제출 상황을 확인한 뒤 운영사 계정에서 직접 처리해 주세요.": "No-shows are not applied automatically after a deadline. Review shipping and submission, then mark a no-show from an operator account."
+  "마감일이 지나도 노쇼는 자동 처리되지 않습니다. 참여자의 배송·제출 상황을 확인한 뒤 운영사 계정에서 직접 처리해 주세요.": "No-shows are not applied automatically after a deadline. Review shipping and submission, then mark a no-show from an operator account.",
+  "계정 정지 · 메일 제외": "Account suspended · Email excluded"
 }

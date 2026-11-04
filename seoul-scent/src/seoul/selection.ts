@@ -36,10 +36,10 @@ export function finalizeSelection(
         fail("이 캠페인의 미선정 지원자만 선택할 수 있습니다.", 409);
       const p = db
         .prepare(
-          "SELECT blacklisted,blocked_until FROM influencer_profiles WHERE user_id=?",
+          "SELECT p.blacklisted,p.blocked_until,u.suspended_at FROM influencer_profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=?",
         )
         .get(a.influencer_id) as any;
-      if (p.blacklisted || p.blocked_until > Date.now())
+      if (p.suspended_at || p.blacklisted || p.blocked_until > Date.now())
         fail("선택한 지원자 중 현재 제재 중인 인플루언서가 있습니다.", 409);
     }
     const count = (

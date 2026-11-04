@@ -1543,7 +1543,7 @@
     managedUsers = users;
     const stats = () => {
       const influencers = users.filter((u) => u.role === "influencer");
-      return `${kpi(t("전체 인플루언서"), influencers.length)}${kpi(t("캠페인 지원 가능"), influencers.filter((u) => u.can_apply).length)}${kpi(t("홍보 인증 검토 대기"), onboarding.submissions.filter((s) => s.status === "pending").length)}${kpi(t("지원 제한 중"), influencers.filter((u) => u.blacklisted || u.blocked_until > Date.now()).length)}`;
+      return `${kpi(t("전체 인플루언서"), influencers.length)}${kpi(t("캠페인 지원 가능"), influencers.filter((u) => u.can_apply).length)}${kpi(t("홍보 인증 검토 대기"), onboarding.submissions.filter((s) => s.status === "pending").length)}${kpi(t("지원 제한 중"), influencers.filter((u) => u.suspended_at || u.blacklisted || u.blocked_until > Date.now()).length)}`;
     };
     root.innerHTML =
       heading(
@@ -1576,7 +1576,7 @@
             (u.role === "influencer" && grade === gradeFilter)) &&
           (statusFilter === "all" ||
             (statusFilter === "restricted" &&
-              (u.blacklisted || u.blocked_until > Date.now())) ||
+              (u.suspended_at || u.blacklisted || u.blocked_until > Date.now())) ||
             (statusFilter === "pending" &&
               onboarding.submissions.some(
                 (s) => s.user_id === u.id && s.status === "pending",
@@ -1610,7 +1610,7 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(t(u.nationality || (u.role === "influencer" ? "미등록" : "—")))}</td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">${t("이력·수료증 보기")}</button>${u.blacklisted || u.blocked_until > Date.now() ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
+          ${rows.map((u) => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email || u.username || "—")}</small></td><td>${esc(t(u.nationality || (u.role === "influencer" ? "미등록" : "—")))}</td><td>${esc(u.phone || "—")}${u.social_url ? `<small>${link(u.social_url, t("SNS 프로필 보기"))}</small>` : ""}${u.role === "influencer" ? `<small>${t("팔로워")} ${money(u.followers)}</small>` : ""}</td><td>${{ admin: t("운영사"), brand: t("브랜드"), influencer: t("인플루언서") }[u.role]}</td><td>${u.role === "influencer" ? html`${tierName(u.tier, u.completed_count, u.onboarding_approved)} · ${u.completed_count}회<br />${t("진행 중")} ${u.active_count}건<br />${money(u.total_views)} 조회` : "—"}</td><td>${u.role === "influencer" ? u.suspended_at ? t("계정 정지 · 메일 제외") : html`${u.no_show_count}회 · ${u.blacklisted ? t("영구 제한") : u.blocked_until > Date.now() ? date(u.blocked_until) + t("까지") : t("없음")}` : "—"}</td><td>${u.role === "influencer" ? html`<button class="secondary" data-history="${u.id}">${t("이력·수료증 보기")}</button>${!u.suspended_at && (u.blacklisted || u.blocked_until > Date.now()) ? html`<button class="secondary" data-release="${u.id}">제재 검토</button>` : ""}` : "—"}</td></tr>`).join("")}
         </tbody>
       </table>`;
     };

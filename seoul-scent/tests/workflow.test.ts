@@ -2312,6 +2312,40 @@ test("admin can record a participant's first and second final links with an audi
     f.db.close();
   }
 });
+
+test("admin suspension revokes access and excludes a creator from future email while preserving history", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    f.db.prepare("UPDATE influencer_profiles SET completed_count=1 WHERE user_id=?").run(f.ids.influencer);
+    f.db.prepare(`INSERT INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+      VALUES(?,?,'influencer@test.com','Pending','Pending',0,0)`)
+      .run(applicationId, `test-pending:${applicationId}`);
+    const path = `/admin/users/${f.ids.influencer}/suspend`;
+    assert.equal((await f.req("brand", path, "POST", {confirm_email: "influencer@test.com", reason: "계정 삭제 요청"})).status, 403);
+    assert.equal((await f.req("admin", path, "POST", {confirm_email: "wrong@test.com", reason: "계정 삭제 요청"})).status, 409);
+    const suspended = await f.req("admin", path, "POST", {confirm_email: "influencer@test.com", reason: "계정 삭제 요청"});
+    assert.equal(suspended.status, 200);
+    assert.equal((await f.req("influencer", "/profile")).status, 401);
+    const login = await f.app.request("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email: "influencer@test.com", password})});
+    assert.equal(login.status, 403);
+    assert.equal((await f.action(applicationId, "select")).status, 409);
+    const mail = f.db.prepare("SELECT status,last_error FROM email_outbox WHERE event_key=?").get(`test-pending:${applicationId}`) as any;
+    assert.deepEqual(mail, {status: "failed", last_error: "recipient_suppressed"});
+    const mailId = (f.db.prepare("SELECT id FROM email_outbox WHERE event_key=?").get(`test-pending:${applicationId}`) as any).id;
+    assert.equal((await f.req("admin", `/admin/email/${mailId}/retry`, "POST", {})).status, 409);
+    assert.ok(f.db.prepare("SELECT 1 FROM blocked_emails WHERE email='influencer@test.com'").get());
+    assert.equal((f.db.prepare("SELECT completed_count FROM influencer_profiles WHERE user_id=?").get(f.ids.influencer) as any).completed_count, 1);
+    const users = (await (await f.req("admin", "/admin/users")).json()) as any;
+    const user = users.users.find((item: any) => item.id === f.ids.influencer);
+    assert.ok(user.suspended_at > 0);
+    assert.equal(user.can_apply, false);
+  } finally {
+    f.db.close();
+  }
+});
 test("drafts accept arbitrary web hosts, ports and fragments but reject unsafe schemes", async () => {
   const f = await fixture();
   try {

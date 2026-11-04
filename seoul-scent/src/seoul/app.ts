@@ -10,7 +10,7 @@ import { emailConfig, sendPasswordResetEmail } from "./email.js";
 import { page } from "./views.js";
 import { continueCampaignPage, publicCampaignsPage, type PublicCampaign } from "./public-campaign-pages.js";
 
-const selectUser = "id, email, name, role, must_change_password, username";
+const selectUser = "id, email, name, role, must_change_password, username, suspended_at";
 const roles = ["admin", "brand", "influencer"] as const;
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");
@@ -67,7 +67,7 @@ export function createApp(
                 .map((x) => "u." + x)
                 .join(
                   ", ",
-                )} FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`,
+                )} FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.suspended_at=0`,
             )
             .get(digest(token), Date.now()) as User) || null
         : null,
@@ -473,6 +473,8 @@ export function createApp(
         401,
       );
     }
+    if (user.suspended_at)
+      return c.json({ error: "사용이 중지된 계정입니다." }, 403);
     db.prepare("DELETE FROM login_attempts WHERE email=?").run(email);
     const safeUser: User = {
       id: user.id,
@@ -502,7 +504,7 @@ export function createApp(
     const now = Date.now();
     const emailHash = digest(email);
     const user = db
-      .prepare("SELECT id,email FROM users WHERE lower(email)=? AND role IN ('brand','influencer')")
+      .prepare("SELECT id,email FROM users WHERE lower(email)=? AND role IN ('brand','influencer') AND suspended_at=0")
       .get(email) as { id: number; email: string } | undefined;
     const config = emailConfig();
     const token = db.transaction(() => {

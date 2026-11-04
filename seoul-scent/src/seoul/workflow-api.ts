@@ -1501,6 +1501,7 @@ export function registerWorkflow(
           .prepare(
             `SELECT a.id,u.email FROM applications a JOIN users u ON u.id=a.influencer_id
            WHERE a.campaign_id=? AND a.status='shipping' AND a.tracking_number!=''
+             AND u.suspended_at=0 AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
            ORDER BY a.id`,
           )
           .all(campaign.id) as { id: number; email: string }[];
@@ -1556,6 +1557,7 @@ export function registerWorkflow(
          JOIN users u ON u.id=a.influencer_id
          WHERE a.campaign_id=? AND a.status='shipping'
            AND a.tracking_number!='' AND a.final_url=''
+           AND u.suspended_at=0 AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
          ORDER BY a.id`,
       ).all(campaign.id) as { id: number; email: string; name: string }[];
       if (recipients.length !== expected)
@@ -1627,7 +1629,8 @@ ${campaign.title} 캠페인의 콘텐츠를 게시한 뒤 최종 게시물 링�
       const date = text(b.final_date, "최종 업로드 마감일", 10, 10);
       if (campaign.final_date !== date) fail("마감일이 변경됐습니다. 다시 확인해 주세요.", 409);
       const recipients = db.prepare(`SELECT a.id,u.email,u.name FROM applications a JOIN users u ON u.id=a.influencer_id
-        WHERE a.campaign_id=? AND a.status=? AND a.final_url='' AND (?='selected' OR a.tracking_number!='') ORDER BY a.id`)
+        WHERE a.campaign_id=? AND a.status=? AND a.final_url='' AND (?='selected' OR a.tracking_number!='')
+          AND u.suspended_at=0 AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email)) ORDER BY a.id`)
         .all(campaign.id, b.audience, b.audience) as { id: number; email: string; name: string }[];
       if (recipients.length !== expected) fail(`발송 대상이 변경됐습니다. 현재 ${recipients.length}명입니다.`, 409);
       if (b.dry_run !== false) return c.json({ recipients: recipients.length, queued: 0, applied: false });
@@ -1689,7 +1692,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       db.transaction(() => {
         const result = db
           .prepare(
-            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed' AND event_key NOT LIKE 'brand_shipping_ready:%' AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0)",
+            "UPDATE email_outbox SET status='pending',attempts=0,next_attempt=?,last_error='' WHERE id=? AND status='failed' AND event_key NOT LIKE 'brand_shipping_ready:%' AND lower(recipient) NOT IN (SELECT email FROM blocked_emails) AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0)",
           )
           .run(Date.now(), id(c));
         if (!result.changes) fail("실패한 메일만 재시도할 수 있습니다.", 409);
@@ -1810,13 +1813,14 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.campaign_access_granted,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.suspended_at,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.campaign_access_granted,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({
             ...u,
             can_apply:
               u.role === "influencer" &&
+              !u.suspended_at &&
               !u.must_change_password &&
               profileComplete(u) &&
               campaignEligible(u) &&
@@ -2083,7 +2087,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       role(c, "admin");
       const rows = db
         .prepare(
-          `SELECT u.id,u.name,u.email,p.phone,p.nationality,p.social_url,p.followers,p.tier,p.completed_count,p.onboarding_approved
+          `SELECT u.id,u.name,u.email,u.suspended_at,p.phone,p.nationality,p.social_url,p.followers,p.tier,p.completed_count,p.onboarding_approved
          FROM users u JOIN influencer_profiles p ON p.user_id=u.id
          WHERE u.role='influencer' ORDER BY p.followers DESC,u.id ASC`,
         )
@@ -2118,9 +2122,12 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       ];
       const output = rows.map((r) => ({
         ...r,
+        email: r.suspended_at ? "" : r.email,
         grade: tierLabel(r.tier, r.completed_count, r.onboarding_approved),
         status:
-          r.followers > 0
+          r.suspended_at
+            ? "계정 정지·메일 제외"
+            : r.followers > 0
             ? "수치 등록됨"
             : r.social_url
               ? "팔로워 수 확인 필요"
@@ -2246,6 +2253,36 @@ My Campaigns: https://seoul-scent.onrender.com/applications
           "Cache-Control": "no-store",
         },
       });
+    }),
+  );
+  app.post(
+    "/api/work/admin/users/:id/suspend",
+    wrap(async (c) => {
+      const actor = role(c, "admin"),
+        target = id(c),
+        b = await body(c);
+      const user = db.prepare("SELECT id,email,role,suspended_at FROM users WHERE id=?")
+        .get(target) as { id: number; email: string; role: string; suspended_at: number } | undefined;
+      if (!user || user.role !== "influencer") return fail("인플루언서 계정을 찾을 수 없습니다.", 404);
+      if (typeof b.confirm_email !== "string" || b.confirm_email.trim().toLowerCase() !== user.email.toLowerCase())
+        fail("정지할 계정의 이메일을 확인해 주세요.", 409);
+      const reason = text(b.reason, "계정 정지 사유", 5, 500);
+      const result = db.transaction(() => {
+        const now = Date.now();
+        db.prepare("INSERT OR IGNORE INTO blocked_emails(email,created_at,actor_id) VALUES(?,?,?)")
+          .run(user.email.toLowerCase(), now, actor.id);
+        db.prepare("UPDATE users SET suspended_at=? WHERE id=? AND suspended_at=0").run(now, target);
+        const sessions = db.prepare("DELETE FROM sessions WHERE user_id=?").run(target).changes;
+        db.prepare("DELETE FROM password_reset_tokens WHERE user_id=?").run(target);
+        const cancelled = db.prepare(`UPDATE email_outbox SET status='failed',last_error='recipient_suppressed'
+          WHERE lower(recipient)=? AND status IN ('pending','sending')`)
+          .run(user.email.toLowerCase()).changes;
+        if (!user.suspended_at)
+          db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+            .run(actor.id, target, "account_suspend", JSON.stringify({reason, sessions_revoked: sessions, emails_cancelled: cancelled}), now);
+        return { success: true, already_suspended: !!user.suspended_at, sessions_revoked: sessions, emails_cancelled: cancelled };
+      })();
+      return c.json(result);
     }),
   );
   app.post(
