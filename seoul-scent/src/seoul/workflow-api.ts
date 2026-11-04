@@ -1487,6 +1487,37 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/november-invitation",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      const recipients = (db.prepare(`SELECT u.id,u.email FROM users u
+        WHERE u.role='influencer' AND u.suspended_at=0 AND u.email!=u.username
+          AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
+        ORDER BY u.id`).all() as { id: number; email: string }[])
+        .filter(u => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(u.email));
+      const existing = db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE 'november-2026-invitation:%'").get() as { count: number };
+      const split = Math.ceil(recipients.length / 2);
+      if (b.dry_run !== false) return c.json({ count: recipients.length, today: split, tomorrow: recipients.length - split, existing: existing.count });
+      const expected = integer(b.expected_count, "발송 대상 인원", 1, 2000);
+      if (expected !== recipients.length || existing.count) fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
+      const now = Date.now();
+      const kstDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+      if (kstDate !== "2026-11-04") fail("오늘 발송 예약 가능 시간이 지났습니다.", 409);
+      const tomorrow = Date.parse("2026-11-05T17:00:00+09:00");
+      const subject = "[Seoul Scent] 11월 캠페인 참여 안내 / November Campaigns Are Open";
+      const message = `English\n\nHello Global Ambassadors,\nThis is Eunchong Kim from Seoul Scent.\n\nNew campaigns are open. Please explore the opportunities and apply to the ones that interest you:\nhttps://seoul-scent.onrender.com/campaigns\n\nIf you are selected, please join our KakaoTalk Open Chat to confirm your participation and receive campaign updates.\nOpen Chat: https://open.kakao.com/o/gKM5lLKi\nEntry code: 1101\n\nAccounts with no campaign applications by November 30 will be subject to future application restrictions. We also plan to make future paid collaboration campaigns available to Silver-tier members and above.\n\nWe look forward to working with you.\nEunchong Kim\nSeoul Scent\n\n--------------------\n\n한국어\n\n글로벌 앰버서더 여러분, 안녕하세요. Seoul Scent 운영자 김은총입니다.\n\n현재 다양한 캠페인의 참여자를 모집하고 있습니다. 관심 있는 캠페인을 확인하고 지원해 주세요.\nhttps://seoul-scent.onrender.com/campaigns\n\n선정되신 분은 활동 참여 확정과 캠페인 안내를 위해 카카오톡 오픈채팅방에 입장해 주세요.\n오픈채팅방: https://open.kakao.com/o/gKM5lLKi\n참여 코드: 1101\n\n11월 30일까지 캠페인 신청 이력이 없는 계정은 향후 지원이 제한될 예정입니다. 또한 앞으로 진행할 유료 협업 캠페인은 실버 등급 이상부터 참여할 수 있도록 운영할 예정입니다.\n\n많은 참여 부탁드립니다.\n김은총 드림\nSeoul Scent`;
+      db.transaction(() => {
+        const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        recipients.forEach((u, i) => insert.run(u.id, `november-2026-invitation:${u.id}`, u.email, subject, message, i < split ? now : tomorrow, now));
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'november_influencer_invitation',?,?)")
+          .run(admin.id, JSON.stringify({ total: recipients.length, today: split, tomorrow: recipients.length - split, tomorrow_at: tomorrow }), now);
+      })();
+      return c.json({ queued: recipients.length, today: split, tomorrow: recipients.length - split, tomorrow_at: tomorrow });
+    }),
+  );
+  app.post(
     "/api/work/admin/campaigns/:id/guide-email",
     wrap(async (c) => {
       const u = role(c, "admin"),

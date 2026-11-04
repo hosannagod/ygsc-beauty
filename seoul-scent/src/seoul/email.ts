@@ -233,7 +233,7 @@ export async function deliverEmail(row: any, env: Env, request: Fetch = fetch) {
   if (!validEmail(row.recipient))
     throw new DeliveryError("invalid_recipient", true);
   const campaignMail = /^brand_campaign_(?:closed|shipping):(\d+)$/.exec(String(row.event_key));
-  const text =
+  const text = row.broadcast ? row.body :
     row.body +
     new URL(campaignMail ? `/campaigns/${campaignMail[1]}` : `/applications/${row.application_id}`, config.origin).href +
     (campaignMail
@@ -269,11 +269,18 @@ export function emailStatus(db: DB, env: Env = process.env) {
     provider: config.provider,
     configured: config.configured,
     daily_limit: config.dailyLimit,
+    attempts_last_24h: (db.prepare(`SELECT
+      (SELECT COUNT(*) FROM email_attempts WHERE created_at>?) +
+      (SELECT COUNT(*) FROM password_reset_mail_attempts WHERE created_at>?) +
+      (SELECT COUNT(*) FROM broadcast_email_attempts WHERE created_at>?) AS n`)
+      .get(Date.now() - 86400_000, Date.now() - 86400_000, Date.now() - 86400_000) as { n: number }).n,
     counts: db
       .prepare(
         "SELECT status,COUNT(*) AS count FROM email_outbox GROUP BY status",
       )
       .all(),
+    broadcast_counts: db.prepare("SELECT status,COUNT(*) AS count FROM broadcast_email_outbox GROUP BY status").all(),
+    november_broadcast: db.prepare("SELECT CASE WHEN next_attempt<? THEN 'today' ELSE 'tomorrow' END AS batch,status,COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE 'november-2026-invitation:%' GROUP BY batch,status").all(Date.parse("2026-11-05T00:00:00+09:00")),
     messages: db
       .prepare(
         `SELECT id,application_id,event_key,recipient,status,attempts,last_error,created_at,sent_at
@@ -302,37 +309,51 @@ export function emailWorker(
         ).run();
         db.prepare(`UPDATE email_outbox SET status='failed',last_error='recipient_suppressed'
           WHERE status IN ('pending','sending') AND lower(recipient) IN (SELECT email FROM blocked_emails)`).run();
+        db.prepare("UPDATE broadcast_email_outbox SET status='pending' WHERE status='sending' AND last_attempt<?").run(now - 15 * 60_000);
+        db.prepare(`UPDATE broadcast_email_outbox SET status='failed',last_error='recipient_suppressed'
+          WHERE status IN ('pending','sending') AND (lower(recipient) IN (SELECT email FROM blocked_emails)
+            OR user_id IN (SELECT id FROM users WHERE suspended_at>0))`).run();
         const recent = db
           .prepare(
-          "SELECT (SELECT COUNT(*) FROM email_attempts WHERE created_at>?) + (SELECT COUNT(*) FROM password_reset_mail_attempts WHERE created_at>?) AS n",
+          "SELECT (SELECT COUNT(*) FROM email_attempts WHERE created_at>?) + (SELECT COUNT(*) FROM password_reset_mail_attempts WHERE created_at>?) + (SELECT COUNT(*) FROM broadcast_email_attempts WHERE created_at>?) AS n",
           )
-          .get(now - 86400_000, now - 86400_000) as any;
+          .get(now - 86400_000, now - 86400_000, now - 86400_000) as any;
         if (recent.n >= emailConfig(env).dailyLimit) return null;
         const row = db
           .prepare(
             "SELECT * FROM email_outbox WHERE status='pending' AND next_attempt<=? AND event_key NOT LIKE 'brand_shipping_ready:%' AND lower(recipient) NOT IN (SELECT email FROM blocked_emails) AND application_id IN (SELECT a.id FROM applications a JOIN campaigns c ON c.id=a.campaign_id WHERE c.deleted_at=0) ORDER BY id LIMIT 1",
           )
           .get(now) as any;
-        if (!row) return null;
-        db.prepare(
-          "UPDATE email_outbox SET status='sending',attempts=attempts+1,last_attempt=? WHERE id=?",
-        ).run(now, row.id);
-        db.prepare(
-          "INSERT INTO email_attempts(email_id,created_at) VALUES(?,?)",
-        ).run(row.id, now);
-        return { ...row, attempts: row.attempts + 1 };
+        if (row) {
+          db.prepare("UPDATE email_outbox SET status='sending',attempts=attempts+1,last_attempt=? WHERE id=?").run(now, row.id);
+          db.prepare("INSERT INTO email_attempts(email_id,created_at) VALUES(?,?)").run(row.id, now);
+          return { ...row, attempts: row.attempts + 1, broadcast: false };
+        }
+        const broadcast = db.prepare(`SELECT b.*,u.email AS current_email FROM broadcast_email_outbox b JOIN users u ON u.id=b.user_id
+          WHERE b.status='pending' AND b.next_attempt<=? AND u.role='influencer' AND u.suspended_at=0
+          AND lower(u.email) NOT IN (SELECT email FROM blocked_emails)
+          ORDER BY b.next_attempt,b.id LIMIT 1`).get(now) as any;
+        if (!broadcast) return null;
+        db.prepare("UPDATE broadcast_email_outbox SET status='sending',recipient=?,attempts=attempts+1,last_attempt=? WHERE id=?")
+          .run(broadcast.current_email, now, broadcast.id);
+        db.prepare("INSERT INTO broadcast_email_attempts(email_id,created_at) VALUES(?,?)").run(broadcast.id, now);
+        return { ...broadcast, recipient: broadcast.current_email, attempts: broadcast.attempts + 1, broadcast: true };
       });
       const row = claim();
       if (!row) return;
-      if (db.prepare("SELECT 1 FROM blocked_emails WHERE email=lower(?)").get(row.recipient)) {
-        db.prepare("UPDATE email_outbox SET status='failed',last_error='recipient_suppressed' WHERE id=?")
+      const outbox = row.broadcast ? "broadcast_email_outbox" : "email_outbox";
+      const suppressed = row.broadcast
+        ? db.prepare("SELECT 1 FROM users WHERE id=? AND suspended_at>0").get(row.user_id)
+        : false;
+      if (suppressed || db.prepare("SELECT 1 FROM blocked_emails WHERE email=lower(?)").get(row.recipient)) {
+        db.prepare(`UPDATE ${outbox} SET status='failed',last_error='recipient_suppressed' WHERE id=?`)
           .run(row.id);
         return;
       }
       try {
         const providerId = await deliverEmail(row, env, request);
         db.prepare(
-          "UPDATE email_outbox SET status='sent',provider_id=?,sent_at=?,last_error='' WHERE id=?",
+          `UPDATE ${outbox} SET status='sent',provider_id=?,sent_at=?,last_error='' WHERE id=?`,
         ).run(providerId, now, row.id);
       } catch (error) {
         const code =
@@ -341,7 +362,7 @@ export function emailWorker(
           row.attempts >= 5 ||
           (error instanceof DeliveryError && error.permanent);
         db.prepare(
-          "UPDATE email_outbox SET status=?,last_error=?,next_attempt=? WHERE id=?",
+          `UPDATE ${outbox} SET status=?,last_error=?,next_attempt=? WHERE id=?`,
         ).run(
           failed ? "failed" : "pending",
           code,

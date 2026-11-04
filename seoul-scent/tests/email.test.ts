@@ -209,6 +209,31 @@ test("rolling daily cap includes retries, missing settings do not send, concurre
   assert.equal(calls, 2);
   db.close();
 });
+test("scheduled broadcast waits for its time, counts toward the daily cap, and suppresses suspended users", async () => {
+  const db = fixture();
+  try {
+    const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+      VALUES(?,?,?,?,?,?,?)`);
+    insert.run(2, "november-2026-invitation:2", "creator@example.com", "Invitation", "Campaigns: https://example.com/campaigns", 2000, 1000);
+    const sent: string[] = [];
+    const worker = emailWorker(db, { ...env, EMAIL_DAILY_LIMIT: "1" }, (async (_url, options) => {
+      sent.push(JSON.parse(String(options?.body)).textContent);
+      return Response.json({ messageId: "accepted" }, { status: 201 });
+    }) as typeof fetch);
+    await worker(1999);
+    assert.equal(sent.length, 0);
+    await worker(2000);
+    assert.deepEqual(sent, ["Campaigns: https://example.com/campaigns"]);
+    assert.equal((db.prepare("SELECT status FROM broadcast_email_outbox WHERE user_id=2").get() as any).status, "sent");
+    insert.run(2, "november-2026-invitation:retry", "creator@example.com", "Invitation", "Second", 2001, 1000);
+    await worker(2001);
+    assert.equal(sent.length, 1);
+    db.prepare("UPDATE users SET suspended_at=1 WHERE id=2").run();
+    await worker(86_403_000);
+    assert.equal((db.prepare("SELECT status FROM broadcast_email_outbox WHERE event_key='november-2026-invitation:retry'").get() as any).status, "failed");
+    assert.equal(sent.length, 1);
+  } finally { db.close(); }
+});
 test("permanent provider errors stop retries and abandoned sending claims recover after restart", async () => {
   const db = fixture();
   queueSelectionEmail(db, 1, env, 1000);

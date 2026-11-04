@@ -211,6 +211,16 @@ export function initializeWorkflow(db: ReturnType<typeof openDb>) {
   ); CREATE INDEX IF NOT EXISTS email_outbox_pending ON email_outbox(status,next_attempt);
   CREATE TABLE IF NOT EXISTS email_attempts(id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES email_outbox(id),created_at INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS email_attempts_time ON email_attempts(created_at);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS broadcast_email_outbox (
+    id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_key TEXT NOT NULL UNIQUE, recipient TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','failed')),
+    attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL, last_attempt INTEGER,
+    last_error TEXT NOT NULL DEFAULT '', provider_id TEXT NOT NULL DEFAULT '', sent_at INTEGER, created_at INTEGER NOT NULL
+  ); CREATE INDEX IF NOT EXISTS broadcast_email_pending ON broadcast_email_outbox(status,next_attempt);
+  CREATE TABLE IF NOT EXISTS broadcast_email_attempts (
+    id INTEGER PRIMARY KEY,email_id INTEGER NOT NULL REFERENCES broadcast_email_outbox(id) ON DELETE CASCADE,created_at INTEGER NOT NULL
+  ); CREATE INDEX IF NOT EXISTS broadcast_email_attempts_time ON broadcast_email_attempts(created_at);`);
   db.transaction(() => {
     if (!db.prepare("SELECT 1 FROM schema_version WHERE version=17").get()) {
       db.exec(`UPDATE email_outbox SET status='failed',last_error='replaced_by_campaign_summary'
