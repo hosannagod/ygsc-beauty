@@ -2,6 +2,38 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openDb, hashPassword, verifyPassword } from "../src/seoul/db.js";
 import { createApp } from "../src/seoul/app.js";
+test("one-time owner recovery is limited to Minseon's existing admin account", async () => {
+  const db = openDb(":memory:");
+  try {
+    const hash = hashPassword("Old-strong-password-123!");
+    db.prepare("INSERT INTO users(id,email,name,role,password_hash) VALUES(1,'hosannagod@gmail.com','Owner','admin',?),(2,'other-admin@test.com','Other','admin',?),(318,'minseon413@gmail.com','길민선','admin',?)")
+      .run(hash, hash, hash);
+    const app = createApp(db);
+    const login = (email: string, password: string) => app.request("/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
+    });
+    const cookie = async (email: string) => (await login(email, "Old-strong-password-123!")).headers.get("set-cookie")!.split(";")[0];
+    const owner = await cookie("hosannagod@gmail.com");
+    const other = await cookie("other-admin@test.com");
+    const oldMinseon = await cookie("minseon413@gmail.com");
+    const post = (auth: string, confirmEmail = "minseon413@gmail.com") => app.request("/api/work/admin/recover-minseon-password", {
+      method: "POST", headers: { Cookie: auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm_email: confirmEmail, temporary_password: "0000" }),
+    });
+    assert.equal((await post(other)).status, 403);
+    assert.equal((await post(owner, "wrong@test.com")).status, 409);
+    assert.equal((await post(owner)).status, 200);
+    assert.equal((await post(owner)).status, 409);
+    assert.equal((await app.request("/api/me", { headers: { Cookie: oldMinseon } })).status, 401);
+    const row = db.prepare("SELECT role,password_hash,must_change_password FROM users WHERE id=318").get() as any;
+    assert.equal(row.role, "admin");
+    assert.equal(row.must_change_password, 1);
+    assert.ok(verifyPassword("0000", row.password_hash));
+    assert.equal((await login("minseon413@gmail.com", "0000")).status, 200);
+    const audit = db.prepare("SELECT note FROM admin_audit WHERE action='minseon_admin_recovery_2026_11'").get() as any;
+    assert.ok(!audit.note.includes("0000"));
+  } finally { db.close(); }
+});
 test("admin reset requires exact account identity, revokes sessions/locks and forces a new password without altering profile or history", async () => {
   const db = openDb(":memory:");
   try {

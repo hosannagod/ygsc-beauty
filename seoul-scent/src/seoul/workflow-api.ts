@@ -2367,6 +2367,38 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       });
     }),
   );
+  app.post(
+    "/api/work/admin/recover-minseon-password",
+    wrap(async (c) => {
+      const actor = role(c, "admin"), b = await body(c);
+      if (actor.id !== 1 || actor.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 복구할 수 있습니다.", 403);
+      if (b.confirm_email !== "minseon413@gmail.com")
+        fail("복구 대상 이메일을 확인해 주세요.", 409);
+      const temporary = text(b.temporary_password, "임시 비밀번호", 4, 128);
+      if (temporary !== "0000") fail("요청된 임시 비밀번호를 확인해 주세요.", 409);
+      const hash = hashPassword(temporary);
+      const result = db.transaction(() => {
+        const target = db.prepare("SELECT id,email,role,username FROM users WHERE id=318")
+          .get() as { id: number; email: string; role: string; username: string | null };
+        if (!target || target.email.toLowerCase() !== "minseon413@gmail.com" || target.role !== "admin")
+          fail("복구 대상 관리자 계정이 변경되었습니다.", 409);
+        if (db.prepare("SELECT 1 FROM admin_audit WHERE action='minseon_admin_recovery_2026_11' LIMIT 1").get())
+          fail("이미 완료된 복구 요청입니다.", 409);
+        db.prepare("UPDATE users SET password_hash=?,must_change_password=1 WHERE id=?")
+          .run(hash, target.id);
+        const sessions = db.prepare("DELETE FROM sessions WHERE user_id=?").run(target.id).changes;
+        db.prepare("DELETE FROM password_reset_tokens WHERE user_id=?").run(target.id);
+        for (const key of [target.email, target.username, `login:${target.id}`, `account:${target.id}`])
+          if (key) db.prepare("DELETE FROM login_attempts WHERE email=?").run(key);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(actor.id, target.id, "minseon_admin_recovery_2026_11", JSON.stringify({ sessions_revoked: sessions, must_change_password: true }), Date.now());
+        return { success: true, must_change_password: true, sessions_revoked: sessions };
+      })();
+      c.header("Cache-Control", "no-store");
+      return c.json(result);
+    }),
+  );
   app.get(
     "/api/work/admin/users/:id/login-status",
     wrap((c) => {
