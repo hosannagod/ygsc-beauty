@@ -281,6 +281,7 @@ export function emailStatus(db: DB, env: Env = process.env) {
       .all(),
     broadcast_counts: db.prepare("SELECT status,COUNT(*) AS count FROM broadcast_email_outbox GROUP BY status").all(),
     november_broadcast: db.prepare("SELECT CASE WHEN next_attempt<? THEN 'today' ELSE 'tomorrow' END AS batch,status,COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE 'november-2026-invitation:%' GROUP BY batch,status").all(Date.parse("2026-11-05T00:00:00+09:00")),
+    campaign_update_broadcast: db.prepare("SELECT CASE WHEN event_key LIKE 'campaign-update-2026-11-09:today:%' THEN 'today' ELSE 'tomorrow' END AS batch,status,COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE 'campaign-update-2026-11-09:%' GROUP BY batch,status").all(),
     messages: db
       .prepare(
         `SELECT id,application_id,event_key,recipient,status,attempts,last_error,created_at,sent_at

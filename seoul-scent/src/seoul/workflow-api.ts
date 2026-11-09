@@ -1487,6 +1487,41 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/november-campaign-update",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 발송할 수 있습니다.", 403);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      const recipients = (db.prepare(`SELECT u.id,u.email FROM users u
+        WHERE u.role='influencer' AND u.suspended_at=0 AND (u.username IS NULL OR u.email!=u.username)
+          AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
+        ORDER BY u.id`).all() as { id: number; email: string }[])
+        .filter(u => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(u.email));
+      const existing = db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE 'campaign-update-2026-11-09:%'").get() as { count: number };
+      const today = Math.ceil(recipients.length / 2);
+      if (b.dry_run !== false)
+        return c.json({ count: recipients.length, today, tomorrow: recipients.length - today, existing: existing.count });
+      const expected = integer(b.expected_count, "발송 대상 인원", 1, 2000);
+      if (expected !== recipients.length || existing.count)
+        fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
+      const now = Date.now();
+      const kstDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+      if (kstDate !== "2026-11-09") fail("오늘 발송 예약 가능 시간이 지났습니다.", 409);
+      const tomorrow = Date.parse("2026-11-10T19:00:00+09:00");
+      const subject = "Which campaign will you apply for next? 💜 / 이번엔 어떤 캠페인에 지원해 볼까요? 💜";
+      const message = `English\n\nHi creators!\n\nNew campaigns are up on Seoul Scent. Have a look around, and if a product or experience catches your eye, apply for a project that fits your channel.\n\n👉 Explore the campaigns: https://seoul-scent.onrender.com/campaigns\n\nPlease check each campaign’s requirements and deadline before applying. We can’t wait to see what you create next! ✨\n\nThe Seoul Scent Team\n\n--------------------\n\n한국어\n\n안녕하세요, 크리에이터 여러분!\n\n서울센트에 새로운 캠페인들이 올라왔어요. 관심 가는 제품이나 체험이 있다면 둘러보시고, 내 채널과 잘 맞는 프로젝트에 지원해 보세요.\n\n👉 캠페인 둘러보기: https://seoul-scent.onrender.com/campaigns\n\n지원하시기 전에 각 캠페인의 조건과 마감일을 확인해 주세요. 여러분의 다음 콘텐츠가 기대됩니다! ✨\n\n서울센트 팀 드림`;
+      db.transaction(() => {
+        const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        recipients.forEach((u, i) => insert.run(u.id, `campaign-update-2026-11-09:${i < today ? "today" : "tomorrow"}:${u.id}`, u.email, subject, message, i < today ? now : tomorrow, now));
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'november_campaign_update_email',?,?)")
+          .run(admin.id, JSON.stringify({ total: recipients.length, today, tomorrow: recipients.length - today, tomorrow_at: tomorrow }), now);
+      })();
+      return c.json({ queued: recipients.length, today, tomorrow: recipients.length - today, tomorrow_at: tomorrow });
+    }),
+  );
+  app.post(
     "/api/work/admin/november-invitation",
     wrap(async (c) => {
       const admin = role(c, "admin"), b = await body(c);
