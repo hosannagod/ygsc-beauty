@@ -2313,6 +2313,28 @@ test("admin can record a participant's first and second final links with an audi
   }
 });
 
+test("admin can record a confirmed participant's late final links and complete without extending the whole campaign", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create({ review_required: false });
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    await f.action(applicationId, "ship", { carrier: "CJ대한통운", tracking_number: "123456789" });
+    f.db.prepare("UPDATE campaigns SET final_date='2026-01-01',final_due=? WHERE id=?")
+      .run(Date.now() - 86400_000, campaignId);
+    const path = `/admin/applications/${applicationId}/content-links`;
+    const first = { confirm_email: "influencer@test.com", url: "https://vt.tiktok.com/late-post/" };
+    assert.equal((await f.req("admin", path, "POST", first)).status, 409);
+    assert.equal((await f.req("admin", path, "POST", { ...first, allow_late: true })).status, 200);
+    assert.equal((await f.req("admin", path, "POST", { ...first, allow_late: true, url: "https://www.instagram.com/p/late-post/" })).status, 200);
+    assert.equal((await f.action(applicationId, "complete", { views: 0, best: false })).status, 200);
+    const detail = (await (await f.req("admin", `/applications/${applicationId}`)).json()) as any;
+    assert.equal(detail.application.status, "completed");
+    assert.equal(detail.application.content_links.length, 2);
+    assert.equal((f.db.prepare("SELECT final_date FROM campaigns WHERE id=?").get(campaignId) as any).final_date, "2026-01-01");
+  } finally { f.db.close(); }
+});
+
 test("admin suspension revokes access and excludes a creator from future email while preserving history", async () => {
   const f = await fixture();
   try {
