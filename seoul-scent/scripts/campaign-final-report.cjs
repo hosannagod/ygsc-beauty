@@ -7,6 +7,7 @@ const ExcelJS = require('exceljs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 
 const args = process.argv.slice(2);
 const option = (flag, fallback = '') => {
@@ -18,12 +19,14 @@ const outputDir = path.resolve(option('--out', path.join(process.cwd(), 'reports
 const profileDir = option('--profile');
 const metricsXlsx = option('--metrics-xlsx');
 const collect = args.includes('--collect');
+const capture = args.includes('--capture');
 const approved = args.includes('--approve');
 const base = process.env.SEOUL_SCENT_ORIGIN || 'https://seoul-scent.onrender.com';
 if (!Number.isSafeInteger(campaignId) || campaignId < 1) {
-  console.error('Usage: node scripts/campaign-final-report.cjs --campaign ID [--collect] [--profile CHROME_PROFILE_DIR] [--metrics-xlsx EDITED_XLSX] [--approve] [--out DIR]');
+  console.error('Usage: node scripts/campaign-final-report.cjs --campaign ID [--collect] [--capture --profile CHROME_PROFILE_DIR] [--metrics-xlsx EDITED_XLSX] [--approve] [--out DIR]');
   process.exit(2);
 }
+if (capture && !profileDir) throw Error('--capture requires an explicitly supplied signed-in --profile directory');
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const asNumber = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.floor(Number(value)) : null;
 const platform = raw => {
@@ -120,7 +123,7 @@ async function collectTikTok(url, browser) {
 }
 
 async function gatherMetrics(posts, metrics) {
-  if (!collect) return metrics;
+  if (!collect && !capture) return metrics;
   const temporaryProfile = profileDir ? null : await fs.mkdtemp(path.join(os.tmpdir(),'seoul-report-browser-'));
   const browser = await chromium.launchPersistentContext(profileDir || temporaryProfile, {
     executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox'],
@@ -129,11 +132,25 @@ async function gatherMetrics(posts, metrics) {
   try {
     const unique = [...new Map(posts.map(p=>[p.key,p])).values()];
     for (const [index,post] of unique.entries()) {
-      if (metrics[post.key]?.checked_at || post.platform !== 'TikTok') continue;
+      if (metrics[post.key]?.checked_at) continue;
+      if (post.platform !== 'TikTok' && !capture) continue;
       try {
-        metrics[post.key] = await collectTikTok(post.url,browser);
+        if (post.platform === 'TikTok' && collect) {
+          metrics[post.key] = await collectTikTok(post.url,browser);
+        } else if (capture) {
+          const page = await browser.newPage();
+          try {
+            await page.goto(post.url,{waitUntil:'domcontentloaded',timeout:25000});
+            await page.waitForTimeout(2500);
+            const evidenceDir=path.join(outputDir,`campaign-${campaignId}-evidence`);
+            await fs.mkdir(evidenceDir,{recursive:true});
+            const evidenceFile=path.join(evidenceDir,`${crypto.createHash('sha256').update(post.key).digest('hex').slice(0,16)}.png`);
+            await page.screenshot({path:evidenceFile,fullPage:true});
+            metrics[post.key]={...metrics[post.key],evidence_file:evidenceFile,source:'browser screenshot awaiting review'};
+          } finally { await page.close(); }
+        }
       } catch (error) {
-        metrics[post.key] = {error:String(error.message).slice(0,140),checked_at:null};
+        metrics[post.key] = {...metrics[post.key],error:String(error.message).slice(0,140),checked_at:null};
       }
       if ((index+1)%10===0) console.log(`Checked ${index+1}/${unique.length} posts`);
     }
@@ -224,10 +241,10 @@ async function main() {
     {header:'지원 ID',key:'applicationId',width:12},{header:'계정',key:'name',width:25},{header:'등록 국적',key:'country',width:20},
     {header:'채널',key:'platform',width:16},{header:'게시물 URL',key:'url',width:65},{header:'원본 콘텐츠 그룹',key:'originalGroup',width:22},{header:'조회수',key:'views',width:13},
     {header:'좋아요',key:'likes',width:13},{header:'댓글',key:'comments',width:13},{header:'공유',key:'shares',width:13},
-    {header:'확인 시각 (KST)',key:'checkedAt',width:25},{header:'확인 출처',key:'source',width:25},{header:'확인 상태',key:'status',width:30},
+    {header:'확인 시각 (KST)',key:'checkedAt',width:25},{header:'확인 출처',key:'source',width:25},{header:'화면 근거 파일',key:'evidence',width:45},{header:'확인 상태',key:'status',width:30},
   ];
-  sheet.addRows(posts.map(p=>{const m=metrics[p.key]||{};return {...p,originalGroup:m.original_group||'',views:m.views??null,likes:m.likes??null,comments:m.comments??null,shares:m.shares??null,checkedAt:m.checked_at?inputStamp(m.checked_at):'',source:m.source||'',status:m.checked_at?'확인':m.error||'미확인'};}));
-  sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:'A1',to:'M1'};
+  sheet.addRows(posts.map(p=>{const m=metrics[p.key]||{};return {...p,originalGroup:m.original_group||'',views:m.views??null,likes:m.likes??null,comments:m.comments??null,shares:m.shares??null,checkedAt:m.checked_at?inputStamp(m.checked_at):'',source:m.source||'',evidence:m.evidence_file||'',status:m.checked_at?'확인':m.error||'미확인'};}));
+  sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:'A1',to:'N1'};
   const xlsxPath=path.join(outputDir,`${stem}.xlsx`);
   await book.xlsx.writeFile(xlsxPath);
   const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});

@@ -16,8 +16,12 @@ credentials to a spreadsheet or source file.
 likes, comments, and shares alongside the capture time and source. It uses an
 ephemeral browser profile unless `--profile PATH` is provided. A dedicated
 signed-in browser profile can be used when access to a post requires login.
-Instagram, Facebook, Threads, and YouTube figures remain blank unless a reviewer
-can verify them in a browser. Do not guess hidden values.
+Use `--capture --profile PATH` to open other posts in that signed-in browser and
+save screenshots under `campaign-ID-evidence`. Codex or an operator can review
+those screens and record visible figures in the XLSX. The browser profile and
+screenshots stay local; never send browser cookies or passwords in chat.
+Instagram, Facebook, Threads, and YouTube figures remain blank until reviewed.
+Do not guess hidden values.
 
 To add manually checked figures, edit a copy of the generated XLSX. Enter the
 visible numeric values and `확인 시각 (KST)` in `YYYY-MM-DD HH:MM` format. Use
