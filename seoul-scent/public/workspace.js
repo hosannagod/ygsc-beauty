@@ -843,9 +843,11 @@
           (a) =>
             tab === "all" ||
             (tab === "applicants" &&
-              ["applied", "rejected"].includes(a.status)) ||
+              (["applied", "rejected"].includes(a.status) ||
+                (a.status === "selected" && !a.participation_confirmed_at))) ||
             (tab === "shipping" &&
-              ["selected", "shipping"].includes(a.status)) ||
+              (a.status === "shipping" ||
+                (a.status === "selected" && !!a.participation_confirmed_at))) ||
             (tab === "review" &&
               [
                 "draft_submitted",
@@ -873,6 +875,7 @@
           ${overdueConfirmation ? `<span>${t("확인 기한 경과")} <strong>${overdueConfirmation}</strong></span>` : ""}
           ${withoutConfirmationRecord ? `<span>${t("기존 진행 · 확인 기록 없음")} <strong>${withoutConfirmationRecord}</strong></span>` : ""}
         </div>
+        <p class="muted">${t("확인 대기자는 지원자 수에 포함하고, 배송에는 확인 완료자만 표시합니다.")}</p>
         <div class="tabs" id="participants" role="group" aria-label="참여자 단계">
           <button data-tab="all" class="active">전체 ${tabCount("all")}</button
           ><button data-tab="applicants">지원자 ${tabCount("applicants")}</button
