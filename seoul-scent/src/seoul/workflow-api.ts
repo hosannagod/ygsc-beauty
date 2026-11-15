@@ -1164,6 +1164,35 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/applications/:id/reopen-participation",
+    wrap(async (c) => {
+      const admin = role(c, "admin"),
+        b = await body(c),
+        a = applicationFor(db, id(c), admin),
+        now = Date.now();
+      if (b.confirm_email?.trim().toLowerCase() !== a.influencer_email.toLowerCase())
+        fail("신청자 이메일을 확인해 주세요.", 409);
+      if (a.campaign_deleted_at || a.status !== "selected" || a.participation_confirmed_at || a.tracking_number)
+        fail("참여 확인을 다시 열 수 없는 신청입니다.", 409);
+      if (a.final_due <= now)
+        fail("최종 제출 마감일이 지났습니다. 먼저 캠페인 마감일을 연장해 주세요.", 409);
+      if (a.participation_due >= now)
+        return c.json({ success: true, already_open: true, participation_due: a.participation_due });
+      const due = Math.min(now + 259200000, a.final_due);
+      db.transaction(() => {
+        db.prepare("UPDATE applications SET participation_due=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+          .run(due, a.id);
+        event(db, a, admin.id, "selected", "운영사가 참여 확인 기한을 다시 열었습니다. 최종 제출 마감 전까지 배송지와 필수 항목을 확인해 주세요.");
+        notify(db, a.influencer_id,
+          `${a.title}: 참여 확인을 다시 할 수 있습니다. ${a.final_date}까지 배송지와 필수 항목을 확인하고 최종 콘텐츠 링크를 제출해 주세요.`,
+          `/applications/${a.id}`);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(admin.id, a.influencer_id, "application_participation_reopen", `application:${a.id};due:${due}`, now);
+      })();
+      return c.json({ success: true, already_open: false, participation_due: due });
+    }),
+  );
+  app.post(
     "/api/work/admin/applications/:id/withdraw",
     wrap(async (c) => {
       const admin = role(c, "admin"),

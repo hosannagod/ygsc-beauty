@@ -1306,6 +1306,8 @@
                 ),
               t("배송정보 등록"),
             );
+      if (role === "admin" && confirmationExpired && !a.participation_confirmed_at && !a.tracking_number && Date.now() < a.final_due)
+        actions += `<details><summary>${t("참여 확인 다시 열기")}</summary><p class="note left">${t("이 신청의 참여 확인을 최종 업로드 마감일까지 다시 열어 줍니다. 인플루언서가 직접 배송지와 필수 항목을 확인해야 합니다.")}</p><form class="action-form" data-task="reopen-participation" data-id="${a.id}" data-confirm="${esc(t("이 신청의 참여 확인 기한을 다시 열까요?"))}">${input("confirm_email", t("인플루언서 이메일 재입력"), "email", "required")}${submit(t("참여 확인 다시 열기"))}</form></details>`;
       if (a.status === "draft_submitted")
         actions = `<div class="review-actions">${actionForm(a, "approve", "", t("초안 승인"), t("초안을 승인하고 SNS 업로드를 요청할까요?"))}${actionForm(a, "revision", textarea("feedback", t("수정 요청 사유"), 'required minlength="5" maxlength="3000" rows="4"') + input("revision_date", t("수정 초안 제출 마감일"), "date", "required"), t("수정 요청"))}</div>`;
       if (a.status === "final_submitted")
@@ -1936,6 +1938,9 @@
           break;
         case "release":
           await api(`/admin/users/${form.dataset.id}/release`, "POST", data);
+          break;
+        case "reopen-participation":
+          await api(`/admin/applications/${form.dataset.id}/reopen-participation`, "POST", data);
           break;
         case "action":
           await api(`/applications/${form.dataset.id}/action`, "POST", {
