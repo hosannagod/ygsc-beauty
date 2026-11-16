@@ -101,6 +101,60 @@
   };
   const input = (name, label, type = "text", attrs = "", value = "") =>
     `<label>${label}<input name="${name}" type="${type}" ${attrs} value="${esc(value)}"></label>`;
+  const addressLookupFields = (postal, address, detail) =>
+    `<div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 입력해 주세요. 해외 배송지는 운영사에 문의해 주세요.")}</p>`;
+  let postcodeScriptPromise;
+  const loadPostcodeScript = () => {
+    if (window.daum?.Postcode) return Promise.resolve();
+    if (!postcodeScriptPromise)
+      postcodeScriptPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+        script.onload = () => {
+          if (window.daum?.Postcode) resolve();
+          else {
+            script.remove();
+            postcodeScriptPromise = null;
+            reject(new Error("Postcode unavailable"));
+          }
+        };
+        script.onerror = () => {
+          script.remove();
+          postcodeScriptPromise = null;
+          reject(new Error("Postcode unavailable"));
+        };
+        document.head.append(script);
+      });
+    return postcodeScriptPromise;
+  };
+  async function openAddressLookup(button) {
+    const form = button.closest("form");
+    if (!form) return;
+    const dialog = document.createElement("dialog");
+    dialog.className = "postcode-dialog";
+    dialog.innerHTML = `<div class="postcode-heading"><h2>${t("우편번호·주소 검색")}</h2><button type="button" class="secondary" data-postcode-close>${t("닫기")}</button></div><div class="postcode-frame"><p class="muted">${t("주소 검색을 불러오는 중입니다.")}</p></div>`;
+    document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    dialog.querySelector("[data-postcode-close]").onclick = () => dialog.close();
+    dialog.showModal();
+    try {
+      await loadPostcodeScript();
+      if (!dialog.open) return;
+      new window.daum.Postcode({
+        oncomplete(data) {
+          form.querySelector('[name="postal_code"]').value = data.zonecode;
+          form.querySelector('[name="address"]').value = data.address || data.roadAddress || data.jibunAddress;
+          const detail = form.querySelector('[name="address_detail"]');
+          detail.value = "";
+          dialog.close();
+          detail.focus();
+        },
+      }).embed(dialog.querySelector(".postcode-frame"));
+    } catch {
+      dialog.close();
+      throw new Error(t("주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."));
+    }
+  }
   const textarea = (name, label, attrs = "", value = "") =>
     `<label>${label}<textarea name="${name}" ${attrs}>${esc(value)}</textarea></label>`;
   const error = '<p class="form-error" role="alert" hidden></p>';
@@ -1209,28 +1263,10 @@
                 ? defaultShipping.shipping_phone || a.phone
                 : a.phone,
             ) +
-            input(
-              "postal_code",
-              t("우편번호"),
-              "text",
-              'required minlength="3" maxlength="12"',
+            addressLookupFields(
               useSavedShipping ? defaultShipping.postal_code : a.postal_code,
-            ) +
-            input(
-              "address",
-              t("주소"),
-              "text",
-              'required minlength="5" maxlength="200"',
               useSavedShipping ? defaultShipping.address : a.address,
-            ) +
-            input(
-              "address_detail",
-              t("상세주소 (선택)"),
-              "text",
-              'maxlength="150"',
-              useSavedShipping
-                ? defaultShipping.address_detail
-                : a.address_detail,
+              useSavedShipping ? defaultShipping.address_detail : a.address_detail,
             ) +
             `<div class="notice"><strong>${t("이번 캠페인 참여 확인")}</strong><p>${t("배송지를 확인한 뒤 아래 항목을 모두 체크해 주세요. 기존에 저장한 주소를 사용해도 이번 캠페인에 대한 확인이 필요합니다.")}</p>${a.guidelines ? `<p class="preline">${esc(a.guidelines)}</p>` : ""}${a.guidelines_url ? `<p>${link(a.guidelines_url, t("콘텐츠 가이드 문서 열기"))}</p>` : ""}<p>${t("최종 업로드 마감")}: ${esc(a.final_date)}</p></div><label class="check"><input type="checkbox" name="participation_confirmed" required><span>${t("이번 캠페인에 참여할 의사가 있습니다.")}</span></label><label class="check"><input type="checkbox" name="guidelines_confirmed" required><span>${t("콘텐츠 가이드를 확인했습니다.")}</span></label><label class="check"><input type="checkbox" name="deadline_confirmed" required><span>${t("안내된 기간 내 콘텐츠를 성실하게 업로드하겠습니다.")}</span></label>`,
           t("배송지 저장"),
@@ -1490,7 +1526,7 @@
           <p class="note left">
             ${t("선정된 캠페인에서 기본 배송지를 불러옵니다. 실제 배송지는 참여 내역에서 확인하고 저장해 주세요.")}
           </p>
-          ${input("recipient_name", t("수령인"), "text", 'required minlength="2" maxlength="60"', p.recipient_name || userName)}${input("shipping_phone", t("배송 연락처"), "tel", 'required minlength="8" maxlength="30"', p.shipping_phone || p.phone)}${input("postal_code", t("우편번호"), "text", 'required minlength="3" maxlength="12"', p.postal_code)}${input("address", t("주소"), "text", 'required minlength="5" maxlength="200"', p.address)}${input("address_detail", t("상세주소 (선택)"), "text", 'maxlength="150"', p.address_detail)}
+          ${input("recipient_name", t("수령인"), "text", 'required minlength="2" maxlength="60"', p.recipient_name || userName)}${input("shipping_phone", t("배송 연락처"), "tel", 'required minlength="8" maxlength="30"', p.shipping_phone || p.phone)}${addressLookupFields(p.postal_code, p.address, p.address_detail)}
           ${submit(t("기본 배송지 저장"))}
         </form>`;
   }
@@ -1779,6 +1815,13 @@
       form
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
+      if (
+        (form.dataset.task === "profile-shipping" ||
+          (form.dataset.task === "action" && form.dataset.action === "address")) &&
+        (!/^\d{5}$/.test(data.postal_code || "") ||
+          !/[가-힣]{2,}/.test(data.address || ""))
+      )
+        throw new Error(t("주소 검색으로 5자리 우편번호와 한국어 주소를 선택해 주세요."));
       switch (form.dataset.task) {
         case "finalize-selection": {
           if (!(await confirmAction(t("남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.")))) return;
@@ -1962,6 +2005,10 @@
     const button = event.target.closest("button");
     if (!button) return;
     try {
+      if ("addressSearch" in button.dataset) {
+        await openAddressLookup(button);
+        return;
+      }
       if (button.dataset.deleteCampaign) {
         if (
           !(await confirmAction(

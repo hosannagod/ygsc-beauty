@@ -862,6 +862,48 @@ nav {
   font-size: 13px;
   font-weight: 600;
 }
+.address-lookup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 20px 0;
+}
+.address-lookup-row label {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.address-lookup-row button {
+  min-height: 49px;
+  white-space: nowrap;
+}
+.editor input[readonly],
+.action-form input[readonly] {
+  background: #f4f6f2;
+}
+.postcode-dialog {
+  width: min(600px, 96vw);
+  max-width: none;
+  max-height: 94vh;
+  padding: 18px;
+}
+.postcode-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.postcode-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.postcode-frame {
+  height: min(68vh, 600px);
+  min-height: 370px;
+  margin-top: 15px;
+  overflow: hidden;
+}
 .form-grid > label {
   min-width: 0;
 }
