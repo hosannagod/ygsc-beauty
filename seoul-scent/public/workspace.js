@@ -1486,6 +1486,12 @@
     history.length
       ? `<section class="panel"><h2>${t("기존 프로젝트 이력")}</h2>${history.map((a) => `<div class="alert-row"><div><strong>${esc(a.title)}</strong><p>${t("완료")}${a.submitted_at ? " · " + esc(a.submitted_at) : ""}</p>${a.links.map((url) => link(url, t("콘텐츠 링크"))).join("<br>")}</div></div>`).join("")}</section>`
       : "";
+  function addressTest() {
+    root.innerHTML = heading(
+      t("주소 검색 테스트"),
+      t("실제 배송지를 바꾸지 않고 카카오 주소 검색과 한글 상세주소 안내를 확인할 수 있습니다."),
+    ) + `<form class="panel editor" data-task="address-demo"><p class="note left">${t("검색 결과에서 주소를 선택한 뒤 상세주소도 입력해 보세요. 이 페이지의 내용은 저장되지 않습니다.")}</p>${addressLookupFields("", "", "")}${submit(t("입력 확인"))}<p class="notice" id="address-demo-result" role="status" hidden></p></form>`;
+  }
   async function profile() {
     const [
       { profile: p, history, user_name: userName },
@@ -1754,6 +1760,7 @@
       else if (path === "/profile") await profile();
       else if (path === "/account") await account();
       else if (path === "/notifications") await notifications();
+      else if (path === "/admin/address-test" && role === "admin") addressTest();
       else if (path === "/admin/users") await users();
       else if (path === "/admin/settings") await settings();
       else
@@ -1771,7 +1778,7 @@
   root.addEventListener("input", (event) => {
     const field = event.target,
       action = field.form?.dataset.action;
-    if (field.name === "address_detail" && (field.form?.dataset.task === "profile-shipping" || action === "address")) {
+    if (field.name === "address_detail" && (field.form?.dataset.task === "profile-shipping" || field.form?.dataset.task === "address-demo" || action === "address")) {
       field.setCustomValidity(/[A-Za-z]/.test(field.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
       return;
     }
@@ -1819,7 +1826,7 @@
       form
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
-      if (form.dataset.task === "profile-shipping" || (form.dataset.task === "action" && form.dataset.action === "address")) {
+      if (form.dataset.task === "profile-shipping" || form.dataset.task === "address-demo" || (form.dataset.task === "action" && form.dataset.action === "address")) {
         const detail = form.querySelector('[name="address_detail"]');
         detail.setCustomValidity(/[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
         if (!detail.checkValidity()) {
@@ -1830,6 +1837,13 @@
           throw new Error(t("주소 검색으로 5자리 우편번호와 한국어 주소를 선택해 주세요."));
       }
       switch (form.dataset.task) {
+        case "address-demo": {
+          const result = form.querySelector("#address-demo-result");
+          result.textContent = `${data.postal_code} ${data.address} ${data.address_detail || ""}`.trim();
+          result.hidden = false;
+          toast(t("주소 검색이 정상 동작합니다. 입력 내용은 저장되지 않았습니다."));
+          return;
+        }
         case "finalize-selection": {
           if (!(await confirmAction(t("남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.")))) return;
           await api(`/campaigns/${form.dataset.id}/finalize-selection`, "POST", {});

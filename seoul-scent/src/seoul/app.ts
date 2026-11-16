@@ -214,6 +214,7 @@ export function createApp(
     "/notifications",
     "/admin/users",
     "/admin/settings",
+    "/admin/address-test",
   ])
     app.get(path, (c) => {
       const user = c.get("user");
