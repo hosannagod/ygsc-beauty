@@ -102,7 +102,7 @@
   const input = (name, label, type = "text", attrs = "", value = "") =>
     `<label>${label}<input name="${name}" type="${type}" ${attrs} value="${esc(value)}"></label>`;
   const addressLookupFields = (postal, address, detail) =>
-    `<div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 입력해 주세요. 해외 배송지는 운영사에 문의해 주세요.")}</p>`;
+    `<div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요. 해외 배송지는 운영사에 문의해 주세요.")}</p>`;
   let postcodeScriptPromise;
   const loadPostcodeScript = () => {
     if (window.daum?.Postcode) return Promise.resolve();
@@ -1771,6 +1771,10 @@
   root.addEventListener("input", (event) => {
     const field = event.target,
       action = field.form?.dataset.action;
+    if (field.name === "address_detail" && (field.form?.dataset.task === "profile-shipping" || action === "address")) {
+      field.setCustomValidity(/[A-Za-z]/.test(field.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
+      return;
+    }
     if (field.name !== "url" || !["draft", "final"].includes(action)) return;
     let valid = false;
     try {
@@ -1815,13 +1819,16 @@
       form
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
-      if (
-        (form.dataset.task === "profile-shipping" ||
-          (form.dataset.task === "action" && form.dataset.action === "address")) &&
-        (!/^\d{5}$/.test(data.postal_code || "") ||
-          !/[가-힣]{2,}/.test(data.address || ""))
-      )
-        throw new Error(t("주소 검색으로 5자리 우편번호와 한국어 주소를 선택해 주세요."));
+      if (form.dataset.task === "profile-shipping" || (form.dataset.task === "action" && form.dataset.action === "address")) {
+        const detail = form.querySelector('[name="address_detail"]');
+        detail.setCustomValidity(/[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
+        if (!detail.checkValidity()) {
+          detail.reportValidity();
+          return;
+        }
+        if (!/^\d{5}$/.test(data.postal_code || "") || !/[가-힣]{2,}/.test(data.address || ""))
+          throw new Error(t("주소 검색으로 5자리 우편번호와 한국어 주소를 선택해 주세요."));
+      }
       switch (form.dataset.task) {
         case "finalize-selection": {
           if (!(await confirmAction(t("남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.")))) return;
