@@ -2313,6 +2313,28 @@ test("admin can record a participant's first and second final links with an audi
   }
 });
 
+test("admin can record final content after participation confirmation before tracking is registered", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create({ review_required: false });
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    const path = `/admin/applications/${applicationId}/content-links`;
+    const url = "https://www.instagram.com/reel/confirmed-no-tracking/";
+    const response = await f.req("admin", path, "POST", {
+      confirm_email: "influencer@test.com",
+      url,
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const detail = (await (await f.req("admin", `/applications/${applicationId}`)).json()) as any;
+    assert.equal(detail.application.status, "final_submitted");
+    assert.equal(detail.application.tracking_number, "");
+    assert.deepEqual(detail.application.content_links.map((link: any) => link.url), [url]);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("admin can record a confirmed participant's late final links and complete without extending the whole campaign", async () => {
   const f = await fixture();
   try {

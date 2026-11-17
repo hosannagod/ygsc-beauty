@@ -1130,7 +1130,7 @@ export function registerWorkflow(
         fail("신청자 이메일을 확인해 주세요.", 409);
       const lateSubmission = Date.now() >= a.final_due;
       const firstSubmission = !a.final_url && !a.review_required &&
-        a.status === "shipping" && !!a.participation_confirmed_at &&
+        ["selected", "shipping"].includes(a.status) && !!a.participation_confirmed_at &&
         a.campaign_status !== "completed" && (!lateSubmission || b.allow_late === true);
       if (!a.final_url && lateSubmission && b.allow_late !== true)
         fail("제출 기한이 지났습니다. 기한 경과 후 대리 등록을 명시해 주세요.", 409);
