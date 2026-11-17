@@ -124,6 +124,30 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("admin creates a private campaign for a brand and can reassign it before applications", async () => {
+  const f = await fixture();
+  try {
+    const brands = await (await f.req("admin", "/admin/brands")).json() as any;
+    assert.deepEqual(brands.brands.map((brand: any) => brand.id), [f.ids.brand, f.ids.otherbrand]);
+    assert.equal((await f.req("brand", "/admin/brands")).status, 403);
+    assert.equal((await f.req("admin", "/campaigns", "POST", { ...campaign, brand_id: f.ids.influencer })).status, 400);
+    const created = await f.req("admin", "/campaigns", "POST", { ...campaign, brand_id: f.ids.brand });
+    assert.equal(created.status, 201, await created.clone().text());
+    const campaignId = ((await created.json()) as any).id;
+    assert.equal((await f.req("brand", `/campaigns/${campaignId}`)).status, 200);
+    assert.equal((await f.req("otherbrand", `/campaigns/${campaignId}`)).status, 403);
+    assert.equal((f.db.prepare("SELECT is_draft FROM campaigns WHERE id=?").get(campaignId) as any).is_draft, 1);
+    assert.equal((await f.req("brand", `/admin/campaigns/${campaignId}/brand`, "PUT", { brand_id: f.ids.otherbrand })).status, 403);
+    assert.equal((await f.req("admin", `/admin/campaigns/${campaignId}/brand`, "PUT", { brand_id: f.ids.otherbrand })).status, 200);
+    assert.equal((await f.req("brand", `/campaigns/${campaignId}`)).status, 403);
+    assert.equal((await f.req("otherbrand", `/campaigns/${campaignId}`)).status, 200);
+    assert.equal((await f.req("admin", `/campaigns/${campaignId}/details`, "PUT", { publish: true })).status, 200);
+    await f.apply(campaignId);
+    assert.equal((await f.req("admin", `/admin/campaigns/${campaignId}/brand`, "PUT", { brand_id: f.ids.brand })).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
 test("new campaigns stay private until reviewed and explicitly published", async () => {
   const f = await fixture();
   try {

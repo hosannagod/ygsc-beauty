@@ -223,7 +223,7 @@ export function createApp(
         (path.startsWith("/admin/") && user.role !== "admin") ||
         (path === "/profile" && user.role !== "influencer") ||
         (path === "/applications" && user.role !== "influencer") ||
-        (path === "/campaigns/new" && user.role !== "brand")
+        (path === "/campaigns/new" && !["brand", "admin"].includes(user.role))
       )
         return c.html(
           page("forbidden", user, language(c.req.header("Cookie"))),

@@ -476,7 +476,7 @@
       heading(
         html`${esc(me.user.name)}님, 안녕하세요`,
         t("오늘의 협업 현황을 확인하세요."),
-        role === "brand"
+        role === "brand" || role === "admin"
           ? t(
               '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>',
             )
@@ -492,7 +492,7 @@
       heading(
         role === "influencer" ? t("나에게 맞는 캠페인") : t("캠페인 관리"),
         t("브랜드와 크리에이터의 새로운 협업을 시작하세요."),
-        role === "brand"
+        role === "brand" || role === "admin"
           ? t(
               '<a class="primary link-button" href="/campaigns/new">+ 캠페인 만들기</a>',
             )
@@ -652,13 +652,18 @@
   function englishEditor(c = {}) {
     return `<details><summary>English campaign content (optional)</summary><p class="note left">Leave blank for automatic English translation. Enter English text to override the translation.</p>${input("title_en", "Campaign title (English)", "text", 'maxlength="400"', c.title_en || "")}${input("product_en", "Product name (English)", "text", 'maxlength="400"', c.product_en || "")}${textarea("description_en", "Product description (English)", 'maxlength="8000" rows="4"', c.description_en || "")}${textarea("guidelines_en", "Content guidelines (English)", 'maxlength="12000" rows="5"', c.guidelines_en || "")}</details>`;
   }
-  function campaignForm() {
+  const brandOptions = (brands, selected) => brands.map((brand) =>
+    `<option value="${brand.id}" ${brand.id === selected ? "selected" : ""}>${esc(brand.name)} · ${esc(brand.email || brand.username)}</option>`
+  ).join("");
+  async function campaignForm() {
+    const brands = role === "admin" ? (await api("/admin/brands")).brands : [];
     root.innerHTML =
       heading(
         t("새 캠페인 만들기"),
         t("모집부터 최종 업로드까지의 기준을 설정해 주세요."),
       ) +
       html`<form class="panel editor" data-task="campaign">
+        ${role === "admin" ? `<label>${t("담당 브랜드")}<select name="brand_id" required><option value="">${t("브랜드를 선택해 주세요")}</option>${brandOptions(brands)}</select></label><p class="note left">${t("선택한 브랜드 계정에 비공개 초안이 표시됩니다. 내용을 검토한 뒤 게시해 주세요.")}</p>` : ""}
         <h2>제품과 협업 정보</h2>
         ${input("title", t("캠페인명"), "text", 'required minlength="2" maxlength="100"')}${input("product", t("제품명"), "text", 'required minlength="2" maxlength="200"')}${input("product_url", t("제품·브랜드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://example.com/product"')}${textarea("description", t("제품 소개"), 'required minlength="10" maxlength="4000" rows="4"')}${textarea("guidelines", t("콘텐츠 가이드라인"), 'maxlength="6000" rows="5"')}${input("guidelines_url", t("콘텐츠 가이드 링크 (선택)"), "url", 'maxlength="2000" placeholder="https://docs.google.com/document/d/..."')}
         <p class="note left">
@@ -707,6 +712,7 @@
   }
   async function campaignDetail(id) {
     const { campaign: c, applications } = await api(`/campaigns/${id}`);
+    const brands = role === "admin" ? (await api("/admin/brands")).brands : [];
     root.innerHTML =
       heading(
         esc(c.title),
@@ -804,6 +810,8 @@
                       >${submit(t("지원하기"))}
                     </form>`;
     } else {
+      if (role === "admin" && applications.length === 0)
+        root.innerHTML += `<form class="panel editor" data-task="campaign-brand" data-id="${id}"><h2>${t("담당 브랜드")}</h2><label>${t("브랜드 계정")}<select name="brand_id" required>${brandOptions(brands, c.brand_id)}</select></label><p class="note left">${t("지원자가 생기기 전까지 담당 브랜드를 변경할 수 있습니다.")}</p>${submit(t("담당 브랜드 저장"))}</form>`;
       if (c.status !== "completed") {
         const locked =
           !c.is_draft && (applications.length > 0 || c.status !== "recruiting");
@@ -1750,7 +1758,7 @@
       if (document.body.dataset.mustChange !== "1" && path !== "/account")
         gradeRules = await api("/grade-guide");
       if (path.startsWith("/dashboard")) await dashboard();
-      else if (path === "/campaigns/new") campaignForm();
+      else if (path === "/campaigns/new") await campaignForm();
       else if (/^\/campaigns\/\d+$/.test(path))
         await campaignDetail(path.split("/")[2]);
       else if (path === "/campaigns") await campaigns();
@@ -1957,6 +1965,10 @@
           location.assign("/campaigns/" + r.id);
           return;
         }
+        case "campaign-brand":
+          await api(`/admin/campaigns/${form.dataset.id}/brand`, "PUT", data);
+          await render();
+          return;
         case "import-consent":
           await api(`/applications/${form.dataset.id}/consent`, "POST", data);
           break;

@@ -539,8 +539,12 @@ export function registerWorkflow(
   app.post(
     "/api/work/campaigns",
     wrap(async (c) => {
-      const u = role(c, "brand"),
+      const u = current(c),
         b = await body(c);
+      if (!["brand", "admin"].includes(u.role)) fail("접근 권한이 없습니다.", 403);
+      const brandId = u.role === "admin" ? integer(b.brand_id, "브랜드", 1) : u.id;
+      if (u.role === "admin" && !db.prepare("SELECT 1 FROM users WHERE id=? AND role='brand' AND suspended_at=0").get(brandId))
+        fail("활성 브랜드 계정을 선택해 주세요.");
       const title = text(b.title, "캠페인명", 2, 100),
         product = text(b.product, "제품", 2, 200),
         description = text(b.description, "제품 소개", 10, 4000),
@@ -595,7 +599,7 @@ export function registerWorkflow(
             `INSERT INTO campaigns(brand_id,title,product,description,guidelines,capacity,pay_type,compensation,recruit_date,draft_date,final_date,recruit_due,draft_due,final_due,product_url,recruit_start_date,recruit_start,review_required,guidelines_url,is_draft,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           )
           .run(
-            u.id,
+            brandId,
             title,
             product,
             description,
@@ -627,6 +631,33 @@ export function registerWorkflow(
         return newId;
       })();
       return c.json({ id: campaignId }, 201);
+    }),
+  );
+  app.get(
+    "/api/work/admin/brands",
+    wrap((c) => {
+      role(c, "admin");
+      return c.json({ brands: db.prepare("SELECT id,name,email,username FROM users WHERE role='brand' AND suspended_at=0 ORDER BY name,id").all() });
+    }),
+  );
+  app.put(
+    "/api/work/admin/campaigns/:id/brand",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      const brandId = integer(b.brand_id, "브랜드", 1);
+      const brand = db.prepare("SELECT id FROM users WHERE id=? AND role='brand' AND suspended_at=0").get(brandId) as { id: number } | undefined;
+      if (!brand) fail("활성 브랜드 계정을 선택해 주세요.");
+      const campaign = campaignFor(db, id(c), admin, true);
+      if (db.prepare("SELECT 1 FROM applications WHERE campaign_id=? LIMIT 1").get(campaign.id))
+        fail("지원자가 있는 캠페인의 담당 브랜드는 변경할 수 없습니다.", 409);
+      if (campaign.brand_id === brandId) return c.json({ success: true });
+      db.transaction(() => {
+        db.prepare("UPDATE campaigns SET brand_id=? WHERE id=?").run(brandId, campaign.id);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,'campaign_brand_change',?,?)")
+          .run(admin.id, brandId, JSON.stringify({ campaign_id: campaign.id, previous_brand_id: campaign.brand_id }), Date.now());
+        notify(db, brandId, `${campaign.title}: 담당 브랜드로 지정되었습니다.`, `/campaigns/${campaign.id}`);
+      })();
+      return c.json({ success: true });
     }),
   );
   app.put(

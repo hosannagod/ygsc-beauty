@@ -797,5 +797,11 @@
   "노쇼 상태입니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.": "This participation is marked as a no-show. Check your profile for the application restriction and grade penalty.",
   "운영사가 직접 처리하는 노쇼 제재와 등급 기준을 설정하세요.": "Set the penalties for no-shows reviewed by the operator and the grade rules.",
   "마감일이 지나도 노쇼는 자동 처리되지 않습니다. 참여자의 배송·제출 상황을 확인한 뒤 운영사 계정에서 직접 처리해 주세요.": "No-shows are not applied automatically after a deadline. Review shipping and submission, then mark a no-show from an operator account.",
-  "계정 정지 · 메일 제외": "Account suspended · Email excluded"
+  "계정 정지 · 메일 제외": "Account suspended · Email excluded",
+  "담당 브랜드": "Assigned brand",
+  "브랜드를 선택해 주세요": "Select a brand",
+  "선택한 브랜드 계정에 비공개 초안이 표시됩니다. 내용을 검토한 뒤 게시해 주세요.": "The private draft will appear in the selected brand's account. Review it before publishing.",
+  "브랜드 계정": "Brand account",
+  "지원자가 생기기 전까지 담당 브랜드를 변경할 수 있습니다.": "You can change the assigned brand before anyone applies.",
+  "담당 브랜드 저장": "Save assigned brand"
 }
