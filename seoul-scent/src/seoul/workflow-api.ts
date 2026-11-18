@@ -1249,6 +1249,27 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/applications/:id/unselect",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      const a = applicationFor(db, id(c), admin);
+      if (b.confirm_email?.trim().toLowerCase() !== a.influencer_email.toLowerCase())
+        fail("신청자 이메일을 확인해 주세요.", 409);
+      if (a.campaign_deleted_at || a.campaign_status === "completed" || a.status !== "selected" || a.tracking_number || a.final_url)
+        fail("배송 또는 콘텐츠 제출 전의 선정 상태만 취소할 수 있습니다.", 409);
+      db.transaction(() => {
+        const now = Date.now();
+        db.prepare("UPDATE applications SET status='rejected',participation_confirmed_at=0,participation_due=0,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(a.id);
+        db.prepare("UPDATE email_outbox SET status='failed',last_error='selection_revoked' WHERE application_id=? AND status='pending'").run(a.id);
+        event(db, a, admin.id, "rejected", "운영사가 캠페인 선정을 취소했습니다.");
+        notify(db, a.influencer_id, `${a.title}: 캠페인 선정이 취소되었습니다.`, `/applications/${a.id}`);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(admin.id, a.influencer_id, "application_unselect", `application:${a.id}`, now);
+      })();
+      return c.json({ success: true });
+    }),
+  );
+  app.post(
     "/api/work/applications/:id/action",
     wrap(async (c) => {
       const u = current(c),

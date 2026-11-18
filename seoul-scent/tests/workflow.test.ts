@@ -2379,6 +2379,26 @@ test("admin can record posted content for an unconfirmed participant without inv
   }
 });
 
+test("admin can revoke a selected participant before shipping without recording a withdrawal", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    const path = `/admin/applications/${applicationId}/unselect`;
+    const payload = { confirm_email: "influencer@test.com" };
+    assert.equal((await f.req("brand", path, "POST", payload)).status, 403);
+    assert.equal((await f.req("admin", path, "POST", { confirm_email: "wrong@test.com" })).status, 409);
+    assert.equal((await f.req("admin", path, "POST", payload)).status, 200);
+    const a = f.db.prepare("SELECT status,participation_confirmed_at,withdrawn_at FROM applications WHERE id=?").get(applicationId) as any;
+    assert.deepEqual(a, { status: "rejected", participation_confirmed_at: 0, withdrawn_at: 0 });
+    assert.equal((f.db.prepare("SELECT action FROM admin_audit WHERE action='application_unselect' AND target_user_id=?").get(f.ids.influencer) as any).action, "application_unselect");
+    assert.equal((await f.req("admin", path, "POST", payload)).status, 409);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("admin can record a confirmed participant's late final links and complete without extending the whole campaign", async () => {
   const f = await fixture();
   try {
