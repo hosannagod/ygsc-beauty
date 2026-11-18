@@ -2359,6 +2359,26 @@ test("admin can record final content after participation confirmation before tra
   }
 });
 
+test("admin can record posted content for an unconfirmed participant without inventing confirmation", async () => {
+  const f = await fixture();
+  try {
+    const campaignId = await f.create({ review_required: false });
+    const applicationId = await f.apply(campaignId);
+    await f.action(applicationId, "select");
+    f.db.prepare("UPDATE applications SET participation_confirmed_at=0 WHERE id=?").run(applicationId);
+    const path = `/admin/applications/${applicationId}/content-links`;
+    const request = { confirm_email: "influencer@test.com", url: "https://www.instagram.com/reel/unconfirmed-post/" };
+    assert.equal((await f.req("admin", path, "POST", request)).status, 409);
+    assert.equal((await f.req("admin", path, "POST", { ...request, allow_unconfirmed: true })).status, 200);
+    const detail = (await (await f.req("admin", `/applications/${applicationId}`)).json()) as any;
+    assert.equal(detail.application.status, "final_submitted");
+    assert.equal(detail.application.participation_confirmed_at, 0);
+    assert.deepEqual(detail.application.content_links.map((link: any) => link.url), [request.url]);
+  } finally {
+    f.db.close();
+  }
+});
+
 test("admin can record a confirmed participant's late final links and complete without extending the whole campaign", async () => {
   const f = await fixture();
   try {

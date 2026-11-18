@@ -1160,8 +1160,12 @@ export function registerWorkflow(
       if (b.confirm_email?.toLowerCase() !== a.influencer_email.toLowerCase())
         fail("신청자 이메일을 확인해 주세요.", 409);
       const lateSubmission = Date.now() >= a.final_due;
+      const unconfirmedOverride = b.allow_unconfirmed === true &&
+        !a.participation_confirmed_at && !!a.address && !!a.phone &&
+        !!a.secondary_use_consent && !!a.original_delivery_consent;
       const firstSubmission = !a.final_url && !a.review_required &&
-        ["selected", "shipping"].includes(a.status) && !!a.participation_confirmed_at &&
+        ["selected", "shipping"].includes(a.status) &&
+        (!!a.participation_confirmed_at || unconfirmedOverride) &&
         a.campaign_status !== "completed" && (!lateSubmission || b.allow_late === true);
       if (!a.final_url && lateSubmission && b.allow_late !== true)
         fail("제출 기한이 지났습니다. 기한 경과 후 대리 등록을 명시해 주세요.", 409);
@@ -1182,7 +1186,7 @@ export function registerWorkflow(
         db.prepare("UPDATE applications SET final_url=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
           .run(links[0]?.url ?? url, firstSubmission ? "final_submitted" : a.status, a.id);
         event(db, a, admin.id, firstSubmission ? "final_submitted" : a.status,
-          firstSubmission ? `관리자가 참여자 요청으로 최종 SNS 게시물 링크를 ${lateSubmission ? "기한 경과 후 " : ""}대리 등록했습니다.` : "관리자가 최종 SNS 게시물 링크를 추가했습니다.", url);
+          firstSubmission ? `관리자가 참여자 요청으로 최종 SNS 게시물 링크를 ${lateSubmission ? "기한 경과 후 " : ""}${unconfirmedOverride ? "참여 확인 미완료 상태에서 " : ""}대리 등록했습니다.` : "관리자가 최종 SNS 게시물 링크를 추가했습니다.", url);
         db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
           .run(admin.id, a.influencer_id, "application_content_link_add", `application:${a.id};url:${url}`, Date.now());
         if (firstSubmission) {
