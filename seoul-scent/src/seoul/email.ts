@@ -1,4 +1,5 @@
 import type { openDb } from "./db.js";
+import { overdueFinalPrefix, overdueFinalRows, overdueFinalBody } from "./overdue-final-email.js";
 type DB = ReturnType<typeof openDb>;
 type Env = Record<string, string | undefined>;
 type Fetch = typeof fetch;
@@ -350,6 +351,15 @@ export function emailWorker(
         db.prepare(`UPDATE ${outbox} SET status='failed',last_error='recipient_suppressed' WHERE id=?`)
           .run(row.id);
         return;
+      }
+      if (row.broadcast && String(row.event_key).startsWith(overdueFinalPrefix)) {
+        const remaining = overdueFinalRows(db, row.user_id);
+        if (!remaining.length) {
+          db.prepare("UPDATE broadcast_email_outbox SET status='failed',last_error='no_longer_overdue' WHERE id=?").run(row.id);
+          return;
+        }
+        row.body = overdueFinalBody(remaining);
+        db.prepare("UPDATE broadcast_email_outbox SET body=? WHERE id=?").run(row.body, row.id);
       }
       try {
         const providerId = await deliverEmail(row, env, request);

@@ -22,6 +22,7 @@ import {
   campaignImages,
 } from "./campaign-images.js";
 import { shippingTrackingUrl } from "./shipping-tracking.js";
+import { overdueFinalAt, overdueFinalPrefix, overdueFinalSubject, overdueFinalRows, overdueFinalBody } from "./overdue-final-email.js";
 import { contentTranslator, englishFields } from "./content-translation.js";
 import { validateWorkbookArchive } from "./xlsx-safety.js";
 import type { Hono, Context } from "hono";
@@ -1714,6 +1715,46 @@ The Seoul Scent Team`;
           .run(admin.id, JSON.stringify({ total: recipients.length, batches, schedule }), now);
       })();
       return c.json({ queued: recipients.length, batches, schedule });
+    }),
+  );
+  app.post(
+    "/api/work/admin/overdue-final-upload-email",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 발송할 수 있습니다.", 403);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      const recipients = overdueFinalRows(db);
+      const byUser = new Map<number, typeof recipients>();
+      for (const a of recipients) byUser.set(a.influencer_id, [...(byUser.get(a.influencer_id) || []), a]);
+      const campaigns = [...recipients.reduce((groups, a) => {
+        const group = groups.get(a.campaign_id) || { id: a.campaign_id, title: a.title, final_date: a.final_date, count: 0 };
+        group.count++;
+        groups.set(a.campaign_id, group);
+        return groups;
+      }, new Map<number, { id: number; title: string; final_date: string; count: number }>()).values()];
+      const existing = (db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE ?")
+        .get(`${overdueFinalPrefix}%`) as { count: number }).count;
+      if (b.dry_run !== false)
+        return c.json({ applications: recipients.length, recipients: byUser.size, campaigns, scheduled_at: overdueFinalAt, existing,
+          sample_subject: byUser.size ? overdueFinalSubject : "",
+          sample_body: byUser.size ? overdueFinalBody(byUser.values().next().value!) : "" });
+      const expected = integer(b.expected_count, "발송 대상 인원", 1, 2000),
+        expectedApplications = integer(b.expected_applications, "미제출 신청 건수", 1, 2000);
+      if (expected !== byUser.size || expectedApplications !== recipients.length || existing)
+        fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
+      if (Date.now() >= overdueFinalAt) fail("예약 시간이 지났습니다.", 409);
+      const now = Date.now();
+      db.transaction(() => {
+        const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        for (const [userId, rows] of byUser)
+          insert.run(userId, `${overdueFinalPrefix}${userId}`, rows[0].email,
+            overdueFinalSubject, overdueFinalBody(rows), overdueFinalAt, now);
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'overdue_final_upload_email',?,?)")
+          .run(admin.id, JSON.stringify({ recipients: byUser.size, applications: recipients.length, campaigns, scheduled_at: overdueFinalAt }), now);
+      })();
+      return c.json({ queued: byUser.size, applications: recipients.length, campaigns, scheduled_at: overdueFinalAt });
     }),
   );
   app.post(
