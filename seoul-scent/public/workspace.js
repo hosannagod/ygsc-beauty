@@ -1834,6 +1834,7 @@
       form
         .querySelectorAll("[type=checkbox]:not(:disabled)")
         .forEach((n) => (data[n.name] = n.checked));
+      if (data.brand_id !== undefined) data.brand_id = Number(data.brand_id);
       if (form.dataset.task === "profile-shipping" || form.dataset.task === "address-demo" || (form.dataset.task === "action" && form.dataset.action === "address")) {
         const detail = form.querySelector('[name="address_detail"]');
         detail.setCustomValidity(/[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");

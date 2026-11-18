@@ -542,7 +542,7 @@ export function registerWorkflow(
       const u = current(c),
         b = await body(c);
       if (!["brand", "admin"].includes(u.role)) fail("접근 권한이 없습니다.", 403);
-      const brandId = u.role === "admin" ? integer(b.brand_id, "브랜드", 1) : u.id;
+      const brandId = u.role === "admin" ? integer(Number(b.brand_id), "브랜드", 1) : u.id;
       if (u.role === "admin" && !db.prepare("SELECT 1 FROM users WHERE id=? AND role='brand' AND suspended_at=0").get(brandId))
         fail("활성 브랜드 계정을 선택해 주세요.");
       const title = text(b.title, "캠페인명", 2, 100),
@@ -644,7 +644,7 @@ export function registerWorkflow(
     "/api/work/admin/campaigns/:id/brand",
     wrap(async (c) => {
       const admin = role(c, "admin"), b = await body(c);
-      const brandId = integer(b.brand_id, "브랜드", 1);
+      const brandId = integer(Number(b.brand_id), "브랜드", 1);
       const brand = db.prepare("SELECT id FROM users WHERE id=? AND role='brand' AND suspended_at=0").get(brandId) as { id: number } | undefined;
       if (!brand) fail("활성 브랜드 계정을 선택해 주세요.");
       const campaign = campaignFor(db, id(c), admin, true);
