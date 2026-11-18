@@ -19,7 +19,7 @@ export type OverdueFinalRow = {
 export function overdueFinalRows(db: DB, userId?: number): OverdueFinalRow[] {
   return (db.prepare(`SELECT a.id,a.influencer_id,u.email,u.name,c.id AS campaign_id,c.title,c.title_en,c.final_date
     FROM applications a JOIN campaigns c ON c.id=a.campaign_id JOIN users u ON u.id=a.influencer_id
-    WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status!='completed' AND c.final_due<=?
+    WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status!='completed' AND c.id!=5 AND c.final_due<=?
       AND a.status IN ('selected','shipping','draft_submitted','revision_requested','draft_approved')
       AND a.participation_confirmed_at>0 AND a.final_url=''
       AND u.suspended_at=0 AND (u.username IS NULL OR u.email!=u.username)

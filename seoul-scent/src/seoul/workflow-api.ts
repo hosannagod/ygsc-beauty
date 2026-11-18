@@ -1758,6 +1758,35 @@ The Seoul Scent Team`;
     }),
   );
   app.post(
+    "/api/work/admin/overdue-final-upload-email/refresh",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 수정할 수 있습니다.", 403);
+      if (Date.now() >= overdueFinalAt) fail("예약 시간이 지났습니다.", 409);
+      const pending = db.prepare("SELECT id,user_id FROM broadcast_email_outbox WHERE event_key LIKE ? AND status='pending' ORDER BY id")
+        .all(`${overdueFinalPrefix}%`) as { id: number; user_id: number }[];
+      const expected = integer(b.expected_pending, "기존 예약 건수", 1, 2000);
+      if (pending.length !== expected) fail("예약 건수가 변경되었습니다.", 409);
+      let active = 0, canceled = 0;
+      db.transaction(() => {
+        const update = db.prepare("UPDATE broadcast_email_outbox SET body=? WHERE id=? AND status='pending'");
+        const cancel = db.prepare("UPDATE broadcast_email_outbox SET status='failed',last_error='campaign_excluded' WHERE id=? AND status='pending'");
+        for (const item of pending) {
+          const remaining = overdueFinalRows(db, item.user_id);
+          if (remaining.length) {
+            active += update.run(overdueFinalBody(remaining), item.id).changes;
+          } else {
+            canceled += cancel.run(item.id).changes;
+          }
+        }
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'overdue_final_upload_email_refresh',?,?)")
+          .run(admin.id, JSON.stringify({ pending_before: pending.length, active, canceled, excluded_campaign_id: 5 }), Date.now());
+      })();
+      return c.json({ pending_before: pending.length, active, canceled, remaining_applications: overdueFinalRows(db).length });
+    }),
+  );
+  app.post(
     "/api/work/admin/campaigns/:id/guide-email",
     wrap(async (c) => {
       const u = role(c, "admin"),
