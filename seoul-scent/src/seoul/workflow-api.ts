@@ -1641,6 +1641,82 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/new-campaigns-three-day-email",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 발송할 수 있습니다.", 403);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      const recipients = (db.prepare(`SELECT u.id,u.email FROM users u
+        WHERE u.role='influencer' AND u.suspended_at=0 AND (u.username IS NULL OR u.email!=u.username)
+          AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))
+        ORDER BY u.id`).all() as { id: number; email: string }[])
+        .filter(u => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(u.email));
+      const eventPrefix = "new-campaigns-2026-11-18:";
+      const existing = (db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE ?")
+        .get(`${eventPrefix}%`) as { count: number }).count;
+      const base = Math.floor(recipients.length / 3), extra = recipients.length % 3;
+      const batches = [0, 1, 2].map(i => base + (i < extra ? 1 : 0));
+      const schedule = [
+        Date.parse("2026-11-18T19:00:00+09:00"),
+        Date.parse("2026-11-19T19:00:00+09:00"),
+        Date.parse("2026-11-20T19:00:00+09:00"),
+      ];
+      const subject = "[Seoul Scent] 새 캠페인 오픈! 지금 지원하세요 💜 / New campaigns are open";
+      const message = `글로벌 앰버서더 여러분, 안녕하세요. 서울센트 운영자 김은총입니다.
+
+새로운 캠페인이 열렸습니다. 관심 있는 캠페인의 조건과 일정을 확인하고 지원해 주세요.
+캠페인 보기: https://seoul-scent.onrender.com/campaigns
+
+[참여 전 확인]
+1. 가입/로그인 후 프로필과 배송지를 정확히 입력해 주세요. 계정과 브론즈 등급이 확인되면 캠페인에 지원할 수 있습니다.
+   사이트: https://seoul-scent.onrender.com/
+2. 카카오톡 오픈채팅방에 입장해 주세요. 참여 코드: 1101
+   https://open.kakao.com/o/gKM5lLKi
+   채팅 프로필 이름은 신청 시 사용한 이름과 동일하게 설정해 주세요.
+
+참여가 어렵다면 이 메일에 "참여 불가"라고 회신해 주세요.
+서울센트 팀 드림
+
+--------------------
+
+Hi creators, this is Eunchong Kim from Seoul Scent.
+
+New campaigns are open! Check the requirements and deadlines, then apply to those that fit your channel.
+Explore campaigns: https://seoul-scent.onrender.com/campaigns
+
+[Required Actions]
+1. Sign up or log in and check that your profile and shipping address are accurate. You can apply once your account and Bronze tier are verified.
+   Website: https://seoul-scent.onrender.com/
+2. Join our KakaoTalk Open Chat. Passcode: 1101
+   https://open.kakao.com/o/gKM5lLKi
+   Use the exact name from your application as your chat profile name.
+
+If you cannot participate, reply "Unable to participate" to this email.
+The Seoul Scent Team`;
+      if (b.dry_run !== false)
+        return c.json({ count: recipients.length, batches, schedule, existing, subject, body: message });
+      const expected = integer(b.expected_count, "발송 대상 인원", 1, 2000);
+      if (expected !== recipients.length || existing)
+        fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
+      const now = Date.now();
+      const kstDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+      if (kstDate !== "2026-11-18" || now >= schedule[0])
+        fail("첫 발송 예약 시간이 지났습니다.", 409);
+      db.transaction(() => {
+        const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        recipients.forEach((u, i) => {
+          const batch = i < batches[0] ? 0 : i < batches[0] + batches[1] ? 1 : 2;
+          insert.run(u.id, `${eventPrefix}${u.id}`, u.email, subject, message, schedule[batch], now);
+        });
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'new_campaigns_three_day_email',?,?)")
+          .run(admin.id, JSON.stringify({ total: recipients.length, batches, schedule }), now);
+      })();
+      return c.json({ queued: recipients.length, batches, schedule });
+    }),
+  );
+  app.post(
     "/api/work/admin/campaigns/:id/guide-email",
     wrap(async (c) => {
       const u = role(c, "admin"),
