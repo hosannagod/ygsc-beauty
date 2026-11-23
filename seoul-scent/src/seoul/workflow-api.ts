@@ -1576,6 +1576,53 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/targeted-email",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 발송할 수 있습니다.", 403);
+      if (!emailConfig().configured) fail("메일 발송 설정을 확인해 주세요.", 503);
+      const batchKey = text(b.batch_key, "발송 키", 8, 80);
+      if (!/^[a-z0-9-]+$/.test(batchKey)) fail("발송 키 형식을 확인해 주세요.");
+      if (!Array.isArray(b.user_ids) || b.user_ids.length < 1 || b.user_ids.length > 100)
+        fail("발송 대상은 1~100명이어야 합니다.");
+      const ids = b.user_ids.map((value: unknown) => integer(value, "인플루언서 ID", 1));
+      if (new Set(ids).size !== ids.length) fail("발송 대상이 중복되었습니다.");
+      const subject = text(b.subject, "제목", 5, 180);
+      const message = text(b.body, "본문", 20, 12000);
+      const recipients = ids.map((userId: number) => {
+        const row = db.prepare(`SELECT u.id,u.email FROM users u
+          WHERE u.id=? AND u.role='influencer' AND u.suspended_at=0
+            AND (u.username IS NULL OR u.email!=u.username)
+            AND NOT EXISTS (SELECT 1 FROM blocked_emails WHERE email=lower(u.email))`)
+          .get(userId) as { id: number; email: string } | undefined;
+        if (!row || !/^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(row.email))
+          fail("발송 불가 계정이 포함되어 있습니다.", 409);
+        return row;
+      });
+      if (!Array.isArray(b.expected_emails) || b.expected_emails.length !== recipients.length ||
+          recipients.some((row: { email: string }, i: number) => row.email.toLowerCase() !== b.expected_emails[i]?.toLowerCase()))
+        fail("발송 대상 이메일이 변경되었습니다.", 409);
+      const prefix = `targeted:${batchKey}:`;
+      const existing = (db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE ?")
+        .get(`${prefix}%`) as { count: number }).count;
+      if (b.dry_run !== false)
+        return c.json({ count: recipients.length, recipients, existing, subject, body: message });
+      if (integer(b.expected_count, "발송 대상 인원", 1, 100) !== recipients.length || existing)
+        fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
+      const now = Date.now();
+      db.transaction(() => {
+        const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
+          VALUES(?,?,?,?,?,?,?)`);
+        for (const row of recipients)
+          insert.run(row.id, `${prefix}${row.id}`, row.email, subject, message, now, now);
+        db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'targeted_email',?,?)")
+          .run(admin.id, JSON.stringify({ batch_key: batchKey, user_ids: ids, count: recipients.length }), now);
+      })();
+      return c.json({ queued: recipients.length, batch_key: batchKey });
+    }),
+  );
+  app.post(
     "/api/work/admin/november-campaign-update",
     wrap(async (c) => {
       const admin = role(c, "admin"), b = await body(c);
