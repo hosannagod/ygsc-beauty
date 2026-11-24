@@ -1661,6 +1661,19 @@ export function registerWorkflow(
       return c.json({ cancelled, statuses });
     }),
   );
+  app.get(
+    "/api/work/admin/targeted-email/status/:batchKey",
+    wrap((c) => {
+      const admin = role(c, "admin");
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 조회할 수 있습니다.", 403);
+      const batchKey = text(c.req.param("batchKey"), "발송 키", 8, 80);
+      if (!/^[a-z0-9-]+$/.test(batchKey)) fail("발송 키 형식을 확인해 주세요.");
+      const recipients = db.prepare("SELECT user_id,recipient,status,last_error FROM broadcast_email_outbox WHERE event_key LIKE ? ORDER BY id")
+        .all(`targeted:${batchKey}:%`);
+      return c.json({ batch_key: batchKey, recipients });
+    }),
+  );
   app.post(
     "/api/work/admin/november-campaign-update",
     wrap(async (c) => {
