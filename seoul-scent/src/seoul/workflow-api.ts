@@ -1644,6 +1644,24 @@ export function registerWorkflow(
     }),
   );
   app.post(
+    "/api/work/admin/targeted-email/cancel",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      if (admin.id !== 1 || admin.email.toLowerCase() !== "hosannagod@gmail.com")
+        fail("운영자 계정만 취소할 수 있습니다.", 403);
+      const batchKey = text(b.batch_key, "발송 키", 8, 80);
+      if (!/^[a-z0-9-]+$/.test(batchKey)) fail("발송 키 형식을 확인해 주세요.");
+      const prefix = `targeted:${batchKey}:%`;
+      const cancelled = db.prepare("UPDATE broadcast_email_outbox SET status='failed',last_error='operator_cancelled' WHERE event_key LIKE ? AND status='pending'")
+        .run(prefix).changes;
+      const statuses = db.prepare("SELECT status,COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE ? GROUP BY status")
+        .all(prefix);
+      db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'targeted_email_cancel',?,?)")
+        .run(admin.id, JSON.stringify({ batch_key: batchKey, cancelled }), Date.now());
+      return c.json({ cancelled, statuses });
+    }),
+  );
+  app.post(
     "/api/work/admin/november-campaign-update",
     wrap(async (c) => {
       const admin = role(c, "admin"), b = await body(c);
