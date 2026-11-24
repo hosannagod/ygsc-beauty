@@ -2160,7 +2160,7 @@ My Campaigns: https://seoul-scent.onrender.com/applications
       return c.json({
         users: db
           .prepare(
-            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.suspended_at,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.campaign_access_granted,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
+            `SELECT u.id,u.name,CASE WHEN u.email=u.username THEN '' ELSE u.email END AS email,u.username,u.phone,u.must_change_password,u.suspended_at,u.role,u.created_at,p.social_url,p.nationality,p.import_review_required,p.followers,p.tier,p.completed_count,p.onboarding_approved,p.campaign_access_granted,p.total_views,p.no_show_count,p.blocked_until,p.blacklisted,(SELECT COUNT(*) FROM applications WHERE influencer_id=u.id) AS application_count,(SELECT COUNT(*) FROM applications ongoing JOIN campaigns active_campaign ON active_campaign.id=ongoing.campaign_id WHERE active_campaign.deleted_at=0 AND ongoing.influencer_id=u.id AND ongoing.status NOT IN ('applied','rejected','completed','no_show')) AS active_count FROM users u LEFT JOIN influencer_profiles p ON p.user_id=u.id ORDER BY u.id DESC`,
           )
           .all()
           .map((u: any) => ({
