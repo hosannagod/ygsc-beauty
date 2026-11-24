@@ -641,6 +641,27 @@ export function registerWorkflow(
       return c.json({ brands: db.prepare("SELECT id,name,email,username FROM users WHERE role='brand' AND suspended_at=0 ORDER BY name,id").all() });
     }),
   );
+  app.post(
+    "/api/work/admin/brands/managed",
+    wrap(async (c) => {
+      const admin = role(c, "admin"), b = await body(c);
+      const name = text(b.name, "브랜드명", 2, 60);
+      const username = text(b.username, "관리용 아이디", 3, 40).toLowerCase();
+      if (!/^[a-z0-9_-]+$/.test(username)) fail("관리용 아이디 형식을 확인해 주세요.");
+      if (db.prepare("SELECT id FROM users WHERE email=? OR username=?").get(username, username))
+        fail("이미 사용 중인 관리용 아이디입니다.", 409);
+      const brandId = db.transaction(() => {
+        const result = db.prepare(
+          "INSERT INTO users(email,name,role,password_hash,brand_name,username) VALUES(?,?,'brand',?,?,?)",
+        ).run(username, name, hashPassword(randomBytes(32).toString("base64url")), name, username);
+        const id = Number(result.lastInsertRowid);
+        db.prepare("INSERT INTO admin_audit(actor_id,target_user_id,action,note,created_at) VALUES(?,?,?,?,?)")
+          .run(admin.id, id, "managed_brand_create", JSON.stringify({ name, username }), Date.now());
+        return id;
+      })();
+      return c.json({ id: brandId, name, username, managed: true }, 201);
+    }),
+  );
   app.put(
     "/api/work/admin/campaigns/:id/brand",
     wrap(async (c) => {
