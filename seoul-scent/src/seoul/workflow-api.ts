@@ -1644,20 +1644,23 @@ export function registerWorkflow(
       const prefix = `targeted:${batchKey}:`;
       const existing = (db.prepare("SELECT COUNT(*) AS count FROM broadcast_email_outbox WHERE event_key LIKE ?")
         .get(`${prefix}%`) as { count: number }).count;
+      const now = Date.now();
+      const scheduledAt = b.scheduled_at === undefined ? now : b.scheduled_at;
+      if (!Number.isSafeInteger(scheduledAt) || scheduledAt < now - 60_000 || scheduledAt > now + 7 * 86400_000)
+        fail("발송 예약 시간은 현재부터 7일 이내여야 합니다.");
       if (b.dry_run !== false)
-        return c.json({ count: recipients.length, recipients, existing, subject, body: message });
+        return c.json({ count: recipients.length, recipients, existing, subject, body: message, scheduled_at: scheduledAt });
       if (integer(b.expected_count, "발송 대상 인원", 1, 100) !== recipients.length || existing)
         fail("발송 대상이 변경되었거나 이미 예약되었습니다.", 409);
-      const now = Date.now();
       db.transaction(() => {
         const insert = db.prepare(`INSERT INTO broadcast_email_outbox(user_id,event_key,recipient,subject,body,next_attempt,created_at)
           VALUES(?,?,?,?,?,?,?)`);
         for (const row of recipients)
-          insert.run(row.id, `${prefix}${row.id}`, row.email, subject, message, now, now);
+          insert.run(row.id, `${prefix}${row.id}`, row.email, subject, message, scheduledAt, now);
         db.prepare("INSERT INTO admin_audit(actor_id,action,note,created_at) VALUES(?,'targeted_email',?,?)")
-          .run(admin.id, JSON.stringify({ batch_key: batchKey, user_ids: ids, count: recipients.length }), now);
+          .run(admin.id, JSON.stringify({ batch_key: batchKey, user_ids: ids, count: recipients.length, scheduled_at: scheduledAt }), now);
       })();
-      return c.json({ queued: recipients.length, batch_key: batchKey });
+      return c.json({ queued: recipients.length, batch_key: batchKey, scheduled_at: scheduledAt });
     }),
   );
   app.post(

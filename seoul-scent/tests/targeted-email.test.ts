@@ -41,6 +41,11 @@ test("targeted email verifies recipients, excludes blocked accounts, and queues 
     assert.equal((await send({ user_ids: [2], expected_emails: ["creator@example.com"], dry_run: false, expected_count: 1 })).status, 409);
     const rows = db.prepare("SELECT user_id,recipient,status FROM broadcast_email_outbox").all() as any[];
     assert.deepEqual(rows, [{ user_id: 2, recipient: "creator@example.com", status: "pending" }]);
+    const tomorrow = Date.now() + 86400_000;
+    const scheduled = await send({ batch_key: "test-tomorrow-2026", user_ids: [2], expected_emails: ["creator@example.com"], dry_run: false, expected_count: 1, scheduled_at: tomorrow });
+    assert.equal(scheduled.status, 200);
+    assert.equal((db.prepare("SELECT next_attempt FROM broadcast_email_outbox WHERE event_key=?").get("targeted:test-tomorrow-2026:2") as any).next_attempt, tomorrow);
+    assert.equal((await send({ batch_key: "test-invalid-2026", user_ids: [2], expected_emails: ["creator@example.com"], scheduled_at: Date.now() + 8 * 86400_000 })).status, 400);
   } finally {
     db.close();
     for (const [key, value] of Object.entries(previous)) {
