@@ -124,6 +124,26 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("influencer discovery hides closed and expired campaigns but keeps applied records", async () => {
+  const f = await fixture();
+  try {
+    const open = await f.create();
+    const closed = await f.create();
+    const expired = await f.create();
+    await f.apply(closed);
+    f.db.prepare("UPDATE campaigns SET status='closed' WHERE id=?").run(closed);
+    f.db.prepare("UPDATE campaigns SET recruit_due=? WHERE id=?").run(Date.now() - 1, expired);
+    const list = async (role: string) =>
+      ((await (await f.req(role, "/campaigns")).json()) as any).campaigns.map((c: any) => c.id);
+    assert.deepEqual(await list("influencer"), [open]);
+    assert.deepEqual(await list("brand"), [expired, closed, open]);
+    assert.equal((await f.req("influencer", `/campaigns/${closed}`)).status, 200);
+    const applications = (await (await f.req("influencer", "/applications")).json()) as any;
+    assert.ok(applications.applications.some((a: any) => a.campaign_id === closed));
+  } finally {
+    f.db.close();
+  }
+});
 test("admin creates a private campaign for a brand and can reassign it before applications", async () => {
   const f = await fixture();
   try {

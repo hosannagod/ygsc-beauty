@@ -403,7 +403,7 @@ export function registerWorkflow(
         u.role === "brand"
           ? "WHERE c.deleted_at=0 AND c.brand_id=?"
           : u.role === "influencer"
-            ? "WHERE c.deleted_at=0 AND c.is_draft=0"
+            ? "WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status='recruiting' AND c.recruit_due>?"
             : "WHERE c.deleted_at=0";
       const query = db.prepare(`SELECT c.*,u.name AS brand_name,
       (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id,
@@ -412,7 +412,7 @@ export function registerWorkflow(
       (SELECT COUNT(*) FROM applications a WHERE a.campaign_id=c.id AND a.status='completed') AS completed_count
       FROM campaigns c JOIN users u ON u.id=c.brand_id ${where} ORDER BY c.id DESC`);
       return c.json({
-        campaigns: u.role === "brand" ? query.all(u.id) : query.all(),
+        campaigns: u.role === "brand" ? query.all(u.id) : u.role === "influencer" ? query.all(Date.now()) : query.all(),
       });
     }),
   );
