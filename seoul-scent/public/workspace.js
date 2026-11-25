@@ -160,6 +160,7 @@
           detail.value = "";
           dialog.close();
           detail.focus();
+          requestAnimationFrame(() => detail.scrollIntoView({ block: "center", behavior: "smooth" }));
         },
       }).embed(dialog.querySelector(".postcode-frame"));
     } catch {
