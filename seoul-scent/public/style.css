@@ -1348,8 +1348,11 @@ summary {
   }
   .nav-item {
     white-space: nowrap;
-    padding: 10px;
-    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 12px;
   }
   .page-heading {
     display: block;
@@ -1375,6 +1378,27 @@ summary {
   }
   .header-actions {
     gap: 10px;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+  header {
+    height: auto;
+    min-height: 65px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header > span {
+    width: 100%;
+  }
+  .header-actions label[for="language-select"] {
+    display: none;
+  }
+  .header-actions select {
+    min-width: 0;
+  }
+  #logout {
+    min-height: 44px;
   }
   .header-actions > a {
     font-size: 11px;
@@ -1438,7 +1462,7 @@ summary {
 @media (max-width: 600px) {
   .header-actions {
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .header-actions label[for="language-select"] {
     display: none;
@@ -1759,6 +1783,62 @@ dialog.influencer-detail {
   #applicants-table td:nth-child(9) {
     grid-column: 2 / 4;
     grid-row: 5;
+  }
+}
+@media (max-width: 480px) {
+  #applicants-table tbody tr {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 14px;
+  }
+  #applicants-table td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1 / 9;
+  }
+  #applicants-table td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #applicants-table td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  #applicants-table td:nth-child(4) { grid-column: 2; grid-row: 3; }
+  #applicants-table td:nth-child(5) { grid-column: 2; grid-row: 4; }
+  #applicants-table td:nth-child(6) { grid-column: 2; grid-row: 5; }
+  #applicants-table td:nth-child(7) { grid-column: 2; grid-row: 6; }
+  #applicants-table td:nth-child(8) { grid-column: 2; grid-row: 7; }
+  #applicants-table td:nth-child(9) { grid-column: 2; grid-row: 8; }
+}
+@media (max-width: 650px) {
+  #user-results table,
+  #user-results tbody {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+  #user-results thead {
+    display: none;
+  }
+  #user-results tbody tr {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 16px;
+    border: 1px solid #e5eadf;
+    border-radius: 10px;
+    background: #fff;
+  }
+  #user-results td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  #user-results td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 5px;
+    color: #88957d;
+    font-size: 11px;
+  }
+  #user-results td button {
+    min-height: 44px;
   }
 }
 
