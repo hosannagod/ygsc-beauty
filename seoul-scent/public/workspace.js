@@ -569,9 +569,9 @@
     document.querySelector("#campaign-status").onchange = render;
     render();
     if (role === "brand") {
-      root.insertAdjacentHTML("beforeend", `<div class="section-heading"><div><h2>${t("다른 브랜드의 모집 현황")} <span class="muted">${otherCampaigns.length}</span></h2><p class="muted">${t("공개된 캠페인의 모집 인원과 신청 인원만 표시됩니다.")}</p></div></div>` +
+      root.insertAdjacentHTML("beforeend", `<div class="section-heading"><div><h2>${t("다른 브랜드의 모집 현황")} <span class="muted">${otherCampaigns.length}</span></h2><p class="muted">${t("공개된 캠페인의 썸네일과 모집·신청 인원만 표시됩니다.")}</p></div></div>` +
         (otherCampaigns.length ? `<section class="campaign-grid">${otherCampaigns.map((c) =>
-          `<article class="campaign-card"><div class="card-top">${badge(Date.now() < c.recruit_start ? "scheduled" : "recruiting")}<span class="muted">${esc(c.brand_name)}</span></div><h3>${esc(window.ScentI18n.lang === "en" && c.title_en || c.title)}</h3><p class="small muted">${t("모집 인원")} <strong>${c.capacity}${t("명")}</strong> · ${t("신청 인원")} <strong>${c.applicant_count}${t("명")}</strong></p></article>`
+          `<article class="campaign-card other-brand-card"><div class="card-top">${badge(Date.now() < c.recruit_start ? "scheduled" : "recruiting")}<span class="muted">${esc(c.brand_name)}</span></div><div class="campaign-card-intro"><div><h3>${esc(window.ScentI18n.lang === "en" && c.title_en || c.title)}</h3><p class="small muted">${t("모집 인원")} <strong>${c.capacity}${t("명")}</strong> · ${t("신청 인원")} <strong>${c.applicant_count}${t("명")}</strong></p></div>${c.thumbnail_id ? `<div class="campaign-card-thumbnail"><img src="/api/work/brand/campaigns-overview/${c.id}/thumbnail" alt="" loading="lazy" decoding="async"></div>` : ""}</div></article>`
         ).join("")}</section>` : `<p class="muted">${t("현재 다른 브랜드의 모집 중인 캠페인이 없습니다.")}</p>`));
     }
   }

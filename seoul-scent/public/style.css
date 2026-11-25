@@ -686,6 +686,12 @@ nav {
   height: 100%;
   object-fit: cover;
 }
+.other-brand-card .campaign-card-thumbnail {
+  margin-top: 18px;
+}
+.other-brand-card .campaign-card-intro > div:first-child {
+  min-width: 0;
+}
 .campaign-card h3 {
   font-size: 21px;
   letter-spacing: -0.6px;

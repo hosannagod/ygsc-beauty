@@ -24,6 +24,10 @@ test("brands see only public recruitment counts for other brands", async () => {
     insert.run(2, 2, "Other public", "Product", "Private description", now - 1000, now + 100000, 0, "recruiting", now);
     insert.run(3, 2, "Other draft", "Product", "Private description", now - 1000, now + 100000, 1, "recruiting", 0);
     insert.run(4, 2, "Other closed", "Product", "Private description", now - 1000, now + 100000, 0, "closed", now);
+    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    for (const campaignId of [1, 2, 3, 4])
+      db.prepare("INSERT INTO campaign_images(campaign_id,position,data) VALUES(?,?,?)")
+        .run(campaignId, 0, image);
     db.prepare(`INSERT INTO applications(campaign_id,influencer_id,status,consent_at,phone,address)
       VALUES(2,3,'applied',1,'01012345678','')`).run();
     const app = createApp(db);
@@ -51,10 +55,24 @@ test("brands see only public recruitment counts for other brands", async () => {
       recruit_start: now - 1000,
       recruit_due: now + 100000,
       published_at: now,
+      thumbnail_id: 2,
       applicant_count: 1,
     });
+    const thumbnail = await app.request("/api/work/brand/campaigns-overview/2/thumbnail", {
+      headers: { Cookie: brandCookie },
+    });
+    assert.equal(thumbnail.status, 200);
+    assert.equal(thumbnail.headers.get("content-type"), "image/jpeg");
+    assert.deepEqual(Buffer.from(await thumbnail.arrayBuffer()), image);
+    for (const campaignId of [1, 3, 4])
+      assert.equal((await app.request(`/api/work/brand/campaigns-overview/${campaignId}/thumbnail`, {
+        headers: { Cookie: brandCookie },
+      })).status, 404);
     assert.equal((await app.request("/api/work/campaigns/2", { headers: { Cookie: brandCookie } })).status, 403);
     assert.equal((await app.request("/api/work/brand/campaigns-overview", {
+      headers: { Cookie: await login("creator@test.com") },
+    })).status, 403);
+    assert.equal((await app.request("/api/work/brand/campaigns-overview/2/thumbnail", {
       headers: { Cookie: await login("creator@test.com") },
     })).status, 403);
   } finally {

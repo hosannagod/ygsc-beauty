@@ -424,12 +424,35 @@ export function registerWorkflow(
       return c.json({
         campaigns: db.prepare(`SELECT c.id,c.title,c.title_en,u.name AS brand_name,
           c.capacity,c.recruit_start,c.recruit_due,c.published_at,
+          (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id,
           (SELECT COUNT(*) FROM applications a
            WHERE a.campaign_id=c.id AND a.withdrawn_at=0) AS applicant_count
           FROM campaigns c JOIN users u ON u.id=c.brand_id
           WHERE c.brand_id!=? AND c.deleted_at=0 AND c.is_draft=0
             AND c.status='recruiting' AND c.recruit_due>?
           ORDER BY c.published_at DESC,c.id DESC`).all(brand.id, now),
+      });
+    }),
+  );
+  app.get(
+    "/api/work/brand/campaigns-overview/:id/thumbnail",
+    wrap((c) => {
+      const brand = role(c, "brand");
+      const campaignId = id(c);
+      const row = db.prepare(`SELECT ci.data FROM campaigns campaign
+        JOIN campaign_images ci ON ci.id=(
+          SELECT id FROM campaign_images WHERE campaign_id=campaign.id ORDER BY position,id LIMIT 1)
+        WHERE campaign.id=? AND campaign.brand_id!=? AND campaign.deleted_at=0
+          AND campaign.is_draft=0 AND campaign.status='recruiting' AND campaign.recruit_due>?`
+      ).get(campaignId, brand.id, Date.now()) as { data: Buffer } | undefined;
+      if (!row) fail("사진을 찾을 수 없습니다.", 404);
+      return new Response(new Uint8Array(row!.data), {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Disposition": "inline",
+          "Cache-Control": "private, max-age=60",
+          "X-Content-Type-Options": "nosniff",
+        },
       });
     }),
   );

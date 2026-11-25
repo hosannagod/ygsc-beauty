@@ -813,5 +813,6 @@
   "선택한 브랜드 계정에 비공개 초안이 표시됩니다. 내용을 검토한 뒤 게시해 주세요.": "The private draft will appear in the selected brand's account. Review it before publishing.",
   "브랜드 계정": "Brand account",
   "지원자가 생기기 전까지 담당 브랜드를 변경할 수 있습니다.": "You can change the assigned brand before anyone applies.",
-  "담당 브랜드 저장": "Save assigned brand"
+  "담당 브랜드 저장": "Save assigned brand",
+  "공개된 캠페인의 썸네일과 모집·신청 인원만 표시됩니다.": "Only thumbnails, capacity, and application counts are shown for public campaigns."
 }
