@@ -487,6 +487,9 @@
   }
   async function campaigns() {
     const { campaigns } = await api("/campaigns");
+    const otherCampaigns = role === "brand"
+      ? (await api("/brand/campaigns-overview")).campaigns
+      : [];
     const drafts = role === "admin" ? campaigns.filter((c) => c.is_draft) : [];
     root.innerHTML =
       heading(
@@ -552,6 +555,12 @@
     document.querySelector("#campaign-search").oninput = render;
     document.querySelector("#campaign-status").onchange = render;
     render();
+    if (role === "brand") {
+      root.insertAdjacentHTML("beforeend", `<div class="section-heading"><div><h2>${t("다른 브랜드의 모집 현황")} <span class="muted">${otherCampaigns.length}</span></h2><p class="muted">${t("공개된 캠페인의 모집 인원과 신청 인원만 표시됩니다.")}</p></div></div>` +
+        (otherCampaigns.length ? `<section class="campaign-grid">${otherCampaigns.map((c) =>
+          `<article class="campaign-card"><div class="card-top">${badge(Date.now() < c.recruit_start ? "scheduled" : "recruiting")}<span class="muted">${esc(c.brand_name)}</span></div><h3>${esc(window.ScentI18n.lang === "en" && c.title_en || c.title)}</h3><p class="small muted">${t("모집 인원")} <strong>${c.capacity}${t("명")}</strong> · ${t("신청 인원")} <strong>${c.applicant_count}${t("명")}</strong></p></article>`
+        ).join("")}</section>` : `<p class="muted">${t("현재 다른 브랜드의 모집 중인 캠페인이 없습니다.")}</p>`));
+    }
   }
   const photoStates = new WeakMap();
   function photoCard(image, index) {

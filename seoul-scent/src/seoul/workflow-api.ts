@@ -416,6 +416,23 @@ export function registerWorkflow(
       });
     }),
   );
+  app.get(
+    "/api/work/brand/campaigns-overview",
+    wrap((c) => {
+      const brand = role(c, "brand");
+      const now = Date.now();
+      return c.json({
+        campaigns: db.prepare(`SELECT c.id,c.title,c.title_en,u.name AS brand_name,
+          c.capacity,c.recruit_start,c.recruit_due,c.published_at,
+          (SELECT COUNT(*) FROM applications a
+           WHERE a.campaign_id=c.id AND a.withdrawn_at=0) AS applicant_count
+          FROM campaigns c JOIN users u ON u.id=c.brand_id
+          WHERE c.brand_id!=? AND c.deleted_at=0 AND c.is_draft=0
+            AND c.status='recruiting' AND c.recruit_due>?
+          ORDER BY c.published_at DESC,c.id DESC`).all(brand.id, now),
+      });
+    }),
+  );
   app.put(
     "/api/work/campaigns/:id/capacity",
     wrap(async (c) => {
