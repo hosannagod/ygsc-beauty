@@ -869,6 +869,46 @@ nav {
   gap: 12px;
   margin: 20px 0;
 }
+.address-region {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0 4px;
+  padding: 0;
+  border: 0;
+}
+.address-region legend {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.address-region label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #dce2d9;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.address-region label:has(input:checked) {
+  border-color: #28523e;
+  background: #edf2e5;
+  color: #28523e;
+  font-weight: 700;
+}
+.address-region input {
+  margin: 0;
+}
+[data-address-overseas] a {
+  display: inline-block;
+  margin-top: 8px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
 .address-lookup-row label {
   min-width: 0;
   font-size: 13px;

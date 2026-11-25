@@ -101,8 +101,20 @@
   };
   const input = (name, label, type = "text", attrs = "", value = "") =>
     `<label>${label}<input name="${name}" type="${type}" ${attrs} value="${esc(value)}"></label>`;
-  const addressLookupFields = (postal, address, detail) =>
-    `<div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요. 해외 배송지는 운영사에 문의해 주세요.")}</p>`;
+  const addressLookupFields = (postal, address, detail) => {
+    const overseas = !!(postal || address) && (!/^\d{5}$/.test(postal || "") || !/[가-힣]/.test(address || ""));
+    return `<fieldset class="address-region" data-address-mode><legend>${t("배송 국가")}</legend><label><input type="radio" name="shipping_region" value="domestic" ${overseas ? "" : "checked"}>${t("국내 주소")}</label><label><input type="radio" name="shipping_region" value="overseas" ${overseas ? "checked" : ""}>${t("해외 주소")}</label></fieldset><div data-address-domestic><div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요.")}</p></div><div class="warning" data-address-overseas role="status" hidden><strong>${t("해외 주소는 운영사에 문의해 주세요.")}</strong><p>${t("수령 국가와 전체 주소를 메일로 알려주시면 배송 가능 여부와 등록 방법을 안내해 드립니다.")}</p><a href="mailto:hosannagod@gmail.com">hosannagod@gmail.com ↗</a></div>`;
+  };
+  const syncAddressMode = (form) => {
+    const mode = form.querySelector('[name="shipping_region"]:checked')?.value;
+    if (!mode) return;
+    const overseas = mode === "overseas";
+    const domesticFields = form.querySelector("[data-address-domestic]");
+    domesticFields.hidden = overseas;
+    domesticFields.querySelectorAll("input,button").forEach((field) => field.disabled = overseas);
+    form.querySelector("[data-address-overseas]").hidden = !overseas;
+    form.querySelector('button[type="submit"]').hidden = overseas;
+  };
   let postcodeScriptPromise;
   const loadPostcodeScript = () => {
     if (window.daum?.Postcode) return Promise.resolve();
@@ -1785,6 +1797,7 @@
           t("페이지를 찾을 수 없습니다"),
           t("메뉴에서 다른 화면을 선택해 주세요."),
         );
+      root.querySelectorAll("[data-address-mode]").forEach((mode) => syncAddressMode(mode.closest("form")));
       if (document.body.dataset.mustChange !== "1") await refreshCount();
     } catch (e) {
       root.innerHTML =
@@ -1792,6 +1805,9 @@
         t('<a class="text-link" href="/dashboard">대시보드로 돌아가기 →</a>');
     }
   }
+  root.addEventListener("change", (event) => {
+    if (event.target.name === "shipping_region") syncAddressMode(event.target.form);
+  });
   root.addEventListener("input", (event) => {
     const field = event.target,
       action = field.form?.dataset.action;
@@ -1845,6 +1861,8 @@
         .forEach((n) => (data[n.name] = n.checked));
       if (data.brand_id !== undefined) data.brand_id = Number(data.brand_id);
       if (form.dataset.task === "profile-shipping" || form.dataset.task === "address-demo" || (form.dataset.task === "action" && form.dataset.action === "address")) {
+        if (data.shipping_region === "overseas")
+          throw new Error(t("해외 주소는 운영사에 문의해 주세요."));
         const detail = form.querySelector('[name="address_detail"]');
         detail.setCustomValidity(/[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
         if (!detail.checkValidity()) {
