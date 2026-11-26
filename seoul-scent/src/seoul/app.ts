@@ -38,7 +38,7 @@ export function createApp(
     c.header("Cache-Control", "no-store");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' blob:; script-src 'self' https://t1.daumcdn.net; frame-src https://postcode.map.daum.net https://postcode.map.kakao.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' blob:; script-src 'self' https://t1.kakaocdn.net; frame-src https://postcode.map.daum.net https://postcode.map.kakao.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
     if (!["GET", "HEAD"].includes(c.req.method)) {
       const origin = c.req.header("Origin");
