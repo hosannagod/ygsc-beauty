@@ -1240,6 +1240,70 @@ td strong {
   font-weight: 600;
   margin-left: 8px;
 }
+.promotion-assets {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  margin: 26px 0;
+  padding: 20px;
+  border: 1px solid #d8ccff;
+  border-radius: 14px;
+  background: #f6f2ff;
+}
+.promotion-assets-title { color: #4d329f; font-size: 16px; }
+.promotion-asset {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2d9fa;
+  border-radius: 10px;
+  background: white;
+}
+.promotion-step {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #6548c7;
+  color: white;
+  font-weight: 700;
+}
+.promotion-preview {
+  flex: none;
+  width: 70px;
+  height: 70px;
+  border-radius: 8px;
+  background: #f6f2ff;
+  object-fit: contain;
+}
+.promotion-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 11px 18px;
+  border-radius: 8px;
+  background: #6548c7;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.promotion-download:hover,
+.promotion-download:focus-visible { background: #4d329f; }
+.promotion-link-wrap { display: grid; gap: 4px; min-width: 0; }
+.promotion-link-wrap strong { color: #4d329f; font-size: 13px; }
+.promotion-link-wrap a { overflow-wrap: anywhere; color: #6548c7; font-size: 16px; font-weight: 700; }
+@media (max-width: 480px) {
+  .promotion-assets { padding: 14px; }
+  .promotion-asset { gap: 10px; padding: 12px; }
+  .promotion-preview { width: 52px; height: 52px; }
+  .promotion-download { padding: 10px 12px; font-size: 12px; }
+}
 .alert-row {
   display: flex;
   align-items: center;
