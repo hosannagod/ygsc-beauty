@@ -103,7 +103,7 @@
     `<label>${label}<input name="${name}" type="${type}" ${attrs} value="${esc(value)}"></label>`;
   const addressLookupFields = (postal, address, detail) => {
     const overseas = !!(postal || address) && (!/^\d{5}$/.test(postal || "") || !/[가-힣]/.test(address || ""));
-    return `<fieldset class="address-region" data-address-mode><legend>${t("배송 국가")}</legend><label><input type="radio" name="shipping_region" value="domestic" ${overseas ? "" : "checked"}>${t("국내 주소")}</label><label><input type="radio" name="shipping_region" value="overseas" ${overseas ? "checked" : ""}>${t("해외 주소")}</label></fieldset><div data-address-domestic><div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요.")}</p></div><div class="warning" data-address-overseas role="status" hidden><strong>${t("해외 주소는 운영사에 문의해 주세요.")}</strong><p>${t("수령 국가와 전체 주소를 메일로 알려주시면 배송 가능 여부와 등록 방법을 안내해 드립니다.")}</p><a href="mailto:hosannagod@gmail.com">hosannagod@gmail.com ↗</a></div>`;
+    return `<fieldset class="address-region" data-address-mode><legend>${t("배송 국가")}</legend><label><input type="radio" name="shipping_region" value="domestic" ${overseas ? "" : "checked"}>${t("국내 주소")}</label><label><input type="radio" name="shipping_region" value="overseas" ${overseas ? "checked" : ""}>${t("해외 주소")}</label></fieldset><div data-address-domestic><div class="address-lookup-row">${input("postal_code", t("우편번호"), "text", 'required readonly maxlength="5" inputmode="numeric"', overseas ? "" : postal)}<button class="secondary" type="button" data-address-search>${t("주소 검색")}</button></div>${input("address", t("주소"), "text", 'required readonly maxlength="200"', overseas ? "" : address)}${input("address_detail", t("상세주소 (동·호수 등)"), "text", 'maxlength="150"', overseas ? "" : detail)}<p class="note left">${t("주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요.")}</p></div><div data-address-overseas hidden>${input("postal_code", t("우편번호"), "text", 'required minlength="3" maxlength="12" autocomplete="postal-code"', overseas ? postal : "")}${input("address", t("국가를 포함한 전체 주소"), "text", 'required minlength="5" maxlength="200" autocomplete="street-address"', overseas ? address : "")}${input("address_detail", t("상세주소 (선택)"), "text", 'maxlength="150"', overseas ? detail : "")}</div>`;
   };
   const syncAddressMode = (form) => {
     const mode = form.querySelector('[name="shipping_region"]:checked')?.value;
@@ -112,8 +112,9 @@
     const domesticFields = form.querySelector("[data-address-domestic]");
     domesticFields.hidden = overseas;
     domesticFields.querySelectorAll("input,button").forEach((field) => field.disabled = overseas);
-    form.querySelector("[data-address-overseas]").hidden = !overseas;
-    form.querySelector('button[type="submit"]').hidden = overseas;
+    const overseasFields = form.querySelector("[data-address-overseas]");
+    overseasFields.hidden = !overseas;
+    overseasFields.querySelectorAll("input").forEach((field) => field.disabled = !overseas);
   };
   let postcodeScriptPromise;
   const loadPostcodeScript = () => {
@@ -1862,15 +1863,14 @@
         .forEach((n) => (data[n.name] = n.checked));
       if (data.brand_id !== undefined) data.brand_id = Number(data.brand_id);
       if (form.dataset.task === "profile-shipping" || form.dataset.task === "address-demo" || (form.dataset.task === "action" && form.dataset.action === "address")) {
-        if (data.shipping_region === "overseas")
-          throw new Error(t("해외 주소는 운영사에 문의해 주세요."));
-        const detail = form.querySelector('[name="address_detail"]');
-        detail.setCustomValidity(/[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
+        const overseas = data.shipping_region === "overseas";
+        const detail = form.querySelector(`${overseas ? "[data-address-overseas]" : "[data-address-domestic]"} [name="address_detail"]`);
+        detail.setCustomValidity(!overseas && /[A-Za-z]/.test(detail.value) ? t("상세주소는 한글과 숫자로 입력해 주세요. 예: 302호") : "");
         if (!detail.checkValidity()) {
           detail.reportValidity();
           return;
         }
-        if (!/^\d{5}$/.test(data.postal_code || "") || !/[가-힣]{2,}/.test(data.address || ""))
+        if (!overseas && (!/^\d{5}$/.test(data.postal_code || "") || !/[가-힣]{2,}/.test(data.address || "")))
           throw new Error(t("주소 검색으로 5자리 우편번호와 한국어 주소를 선택해 주세요."));
       }
       switch (form.dataset.task) {

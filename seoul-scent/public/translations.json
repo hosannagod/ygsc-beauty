@@ -183,6 +183,7 @@
   "배송 국가": "Shipping country",
   "국내 주소": "Address in Korea",
   "해외 주소": "International address",
+  "국가를 포함한 전체 주소": "Full address including country",
   "주소 검색에서 한국어 주소와 우편번호를 선택한 뒤 상세주소를 한글과 숫자로 입력해 주세요.": "Select a Korean address and postal code from search, then enter the address details using Korean and numbers.",
   "해외 주소는 운영사에 문의해 주세요.": "Please contact the Seoul Scent team for an international address.",
   "수령 국가와 전체 주소를 메일로 알려주시면 배송 가능 여부와 등록 방법을 안내해 드립니다.": "Email us your destination country and full address. We will confirm shipping availability and how to register it.",

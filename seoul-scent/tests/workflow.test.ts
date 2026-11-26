@@ -124,6 +124,40 @@ async function fixture() {
   };
   return { db, app, req, create, apply, action, ids };
 }
+test("influencers can save an international shipping address", async () => {
+  const f = await fixture();
+  try {
+    const response = await f.req("influencer", "/profile/shipping", "PUT", {
+      recipient_name: "Test Creator",
+      shipping_phone: "+821012345678",
+      postal_code: "SW1A 1AA",
+      address: "10 Downing Street, London, United Kingdom",
+      address_detail: "Flat 2",
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const profile = (f.db.prepare("SELECT postal_code,address,address_detail FROM influencer_profiles WHERE user_id=?").get(f.ids.influencer)) as any;
+    assert.equal(profile.postal_code, "SW1A 1AA");
+    assert.equal(profile.address, "10 Downing Street, London, United Kingdom");
+    assert.equal(profile.address_detail, "Flat 2");
+    const campaignId = await f.create();
+    const applicationId = await f.apply(campaignId);
+    assert.equal((await f.action(applicationId, "select")).status, 200);
+    const applicationAddress = await f.req("influencer", `/applications/${applicationId}/action`, "POST", {
+      action: "address",
+      recipient_name: "Test Creator",
+      phone: "+821012345678",
+      postal_code: "SW1A 1AA",
+      address: "10 Downing Street, London, United Kingdom",
+      address_detail: "Flat 2",
+      participation_confirmed: true,
+      guidelines_confirmed: true,
+      deadline_confirmed: true,
+    });
+    assert.equal(applicationAddress.status, 200, await applicationAddress.clone().text());
+  } finally {
+    f.db.close();
+  }
+});
 test("influencer discovery hides closed and expired campaigns but keeps applied records", async () => {
   const f = await fixture();
   try {

@@ -862,6 +862,8 @@ nav {
 }
 .editor > label,
 .action-form > label,
+.editor [data-address-overseas] > label,
+.action-form [data-address-overseas] > label,
 .form-grid > label {
   display: block;
   margin: 20px 0;
