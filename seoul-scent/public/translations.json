@@ -818,5 +818,18 @@
   "브랜드 계정": "Brand account",
   "지원자가 생기기 전까지 담당 브랜드를 변경할 수 있습니다.": "You can change the assigned brand before anyone applies.",
   "담당 브랜드 저장": "Save assigned brand",
-  "공개된 캠페인의 썸네일과 모집·신청 인원만 표시됩니다.": "Only thumbnails, capacity, and application counts are shown for public campaigns."
+  "공개된 캠페인의 썸네일과 모집·신청 인원만 표시됩니다.": "Only thumbnails, capacity, and application counts are shown for public campaigns.",
+  "미선정": "Not selected",
+  "선정 결과 확정": "Finalize selection results",
+  "선정 결과가 확정되었습니다. 미선정자는 내 캠페인에서 결과를 볼 수 있습니다.": "The selection results are final. Applicants who were not selected can see the result in My Campaigns.",
+  "선정을 마친 뒤 확정하면 남은 지원자에게 미선정 상태가 표시됩니다. 이메일은 발송되지 않습니다.": "After you finalize the selection, remaining applicants will be marked as not selected. No email will be sent.",
+  "콘텐츠 링크 추가": "Add content link",
+  "제출한 콘텐츠 링크": "Submitted content link",
+  "게시물 열기": "Open post",
+  "SNS 게시물 URL 수정": "Edit social post URL",
+  "링크 수정 저장": "Save link changes",
+  "이번 캠페인에는 선정되지 않았습니다. 다른 캠페인에도 지원하실 수 있습니다.": "You were not selected for this campaign. You can apply for other campaigns.",
+  "승인": "Approve",
+  "팔로워": "Followers",
+  "남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.": "Mark the remaining applicants as not selected? No email will be sent."
 }
