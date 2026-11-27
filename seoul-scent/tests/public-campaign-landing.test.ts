@@ -20,6 +20,9 @@ test("public campaigns lead to the selected campaign after authentication", asyn
     assert.match(homeHtml, /id="language-select"/);
     assert.match(homeHtml, /<option value="ko" selected>/);
     assert.doesNotMatch(homeHtml, /Hidden draft/);
+    const publicList = await app.request("/campaigns");
+    assert.equal(publicList.status, 200);
+    assert.match(await publicList.text(), /Public campaign/);
     const englishHome = await (await app.request("/", { headers: { Cookie: "scent_language=en" } })).text();
     assert.match(englishHome, /Open campaigns/);
     assert.match(englishHome, /<option value="en" selected>/);

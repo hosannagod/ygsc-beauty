@@ -38,7 +38,7 @@ export function createApp(
     c.header("Cache-Control", "no-store");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' blob:; script-src 'self' https://t1.kakaocdn.net; frame-src https://postcode.map.daum.net https://postcode.map.kakao.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' blob: https://www.google-analytics.com https://region1.google-analytics.com; script-src 'self' https://t1.kakaocdn.net https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com; frame-src https://postcode.map.daum.net https://postcode.map.kakao.com; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     );
     if (!["GET", "HEAD"].includes(c.req.method)) {
       const origin = c.req.header("Origin");
@@ -142,14 +142,17 @@ export function createApp(
     }
     return recruitingPreviews();
   };
-  app.get("/", (c) => {
-    if (c.get("user")) return c.redirect("/dashboard");
+  const openCampaigns = () => {
     const now = Date.now();
-    const campaigns = db.prepare(`SELECT c.id,c.title,c.title_en,c.product,c.recruit_date,u.name AS brand_name,
+    return db.prepare(`SELECT c.id,c.title,c.title_en,c.product,c.recruit_date,u.name AS brand_name,
       (SELECT ci.id FROM campaign_images ci WHERE ci.campaign_id=c.id ORDER BY ci.position,ci.id LIMIT 1) AS thumbnail_id
       FROM campaigns c JOIN users u ON u.id=c.brand_id
       WHERE c.deleted_at=0 AND c.is_draft=0 AND c.status='recruiting' AND c.recruit_start<=? AND c.recruit_due>?
       ORDER BY c.recruit_due,c.id`).all(now, now) as PublicCampaign[];
+  };
+  app.get("/", (c) => {
+    if (c.get("user")) return c.redirect("/dashboard");
+    const campaigns = openCampaigns();
     return c.html(publicCampaignsPage(language(c.req.header("Cookie")), campaigns, campaigns.length));
   });
   app.get("/continue/:id", (c) => {
@@ -218,7 +221,13 @@ export function createApp(
   ])
     app.get(path, (c) => {
       const user = c.get("user");
-      if (!user) return c.redirect(path === "/campaigns/:id" ? `/continue/${c.req.param("id")}` : "/login");
+      if (!user) {
+        if (path === "/campaigns") {
+          const campaigns = openCampaigns();
+          return c.html(publicCampaignsPage(language(c.req.header("Cookie")), campaigns, campaigns.length));
+        }
+        return c.redirect(path === "/campaigns/:id" ? `/continue/${c.req.param("id")}` : "/login");
+      }
       if (
         (path.startsWith("/admin/") && user.role !== "admin") ||
         (path === "/profile" && user.role !== "influencer") ||

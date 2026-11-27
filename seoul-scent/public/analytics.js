@@ -9,7 +9,7 @@
   const measurementId = "G-GS4XRHB557";
   const path = location.pathname;
   const safePath =
-    /^\/(?:login|register|dashboard(?:\/(?:admin|brand|influencer))?|campaigns(?:\/(?:new|\d+))?|applications(?:\/\d+)?|profile|notifications|admin\/(?:users|settings))\/?$/.test(
+    path === "/" || /^\/(?:login|register|dashboard(?:\/(?:admin|brand|influencer))?|campaigns(?:\/(?:new|\d+))?|continue\/\d+|applications(?:\/\d+)?|profile|notifications|admin\/(?:users|settings))\/?$/.test(
       path,
     )
       ? path

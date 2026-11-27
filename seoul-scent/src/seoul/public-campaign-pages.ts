@@ -22,7 +22,7 @@ const imageFor = (campaign: PublicCampaign) => campaign.thumbnail_id
   ? `<img src="/api/public/campaigns/${campaign.id}/thumbnail" alt="" loading="lazy" decoding="async">`
   : `<span class="public-campaign-placeholder" aria-hidden="true">S</span>`;
 
-const shell = (lang: Language, title: string, content: string) => `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">${socialPreview(lang)}<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1"><title>${title} · Seoul Scent</title><link rel="stylesheet" href="/assets/public-campaigns.css"><script src="/assets/i18n.js" defer></script></head><body>${content}</body></html>`;
+const shell = (lang: Language, title: string, content: string) => `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">${socialPreview(lang)}<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1"><title>${title} · Seoul Scent</title><link rel="stylesheet" href="/assets/public-campaigns.css"><script src="/assets/analytics.js" defer></script><script src="/assets/i18n.js" defer></script></head><body>${content}</body></html>`;
 
 const languagePicker = (lang: Language) => `<label class="public-language-label" for="language-select">Language</label><select id="language-select" aria-label="Language"><option value="ko" ${lang === "ko" ? "selected" : ""}>한국어</option><option value="en" ${lang === "en" ? "selected" : ""}>English</option></select>`;
 
