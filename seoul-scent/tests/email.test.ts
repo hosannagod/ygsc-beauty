@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb } from "../src/seoul/db.js";
+import { openDb, hashPassword } from "../src/seoul/db.js";
+import { createApp } from "../src/seoul/app.js";
 import {
   emailConfig,
   emailWorker,
@@ -35,6 +36,34 @@ function fixture() {
   ).run();
   return db;
 }
+test("admin can inspect one brand selection notice without sending a duplicate", async () => {
+  const db = fixture();
+  try {
+    const password = "Test-password-123!";
+    db.prepare("INSERT INTO users(email,name,role,password_hash) VALUES(?,?,?,?)")
+      .run("admin@example.com", "Admin", "admin", hashPassword(password));
+    db.prepare("UPDATE users SET password_hash=? WHERE id=1").run(hashPassword(password));
+    db.prepare("UPDATE campaigns SET status='closed' WHERE id=1").run();
+    assert.equal(queueBrandCampaignClosedEmail(db, 1, env), true);
+    const app = createApp(db);
+    const login = async (email: string) => {
+      const response = await app.request("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      return response.headers.get("set-cookie")!.split(";")[0];
+    };
+    const headers = { Cookie: await login("admin@example.com") };
+    const url = "/api/work/admin/campaigns/1/brand-selection-email";
+    const status = await app.request(url, { headers });
+    assert.equal(status.status, 200);
+    assert.equal((await status.json() as any).email.recipient, "brand@example.com");
+    const duplicate = await app.request(url, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(duplicate.status, 200);
+    assert.equal((await duplicate.json() as any).queued, false);
+    assert.equal((db.prepare("SELECT COUNT(*) n FROM email_outbox WHERE event_key='brand_campaign_closed:1'").get() as any).n, 1);
+    assert.equal((await app.request(url, { headers: { Cookie: await login("brand@example.com") } })).status, 403);
+  } finally {
+    db.close();
+  }
+});
 test("selection email is opt-in, unique, and rolls back with the selection transaction", () => {
   const db = fixture();
   queueSelectionEmail(db, 1, {});

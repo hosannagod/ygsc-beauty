@@ -1636,6 +1636,27 @@ export function registerWorkflow(
       return c.json(emailStatus(db));
     }),
   );
+  app.get(
+    "/api/work/admin/campaigns/:id/brand-selection-email",
+    wrap((c) => {
+      const admin = role(c, "admin");
+      const campaign = campaignFor(db, id(c), admin, true);
+      const email = db.prepare(`SELECT id,recipient,subject,status,created_at,sent_at,last_error
+        FROM email_outbox WHERE event_key=?`).get(`brand_campaign_closed:${campaign.id}`);
+      return c.json({ campaign_id: campaign.id, email: email || null });
+    }),
+  );
+  app.post(
+    "/api/work/admin/campaigns/:id/brand-selection-email",
+    wrap((c) => {
+      const admin = role(c, "admin");
+      const campaign = campaignFor(db, id(c), admin, true);
+      const queued = queueBrandCampaignClosedEmail(db, campaign.id);
+      const email = db.prepare(`SELECT id,recipient,subject,status,created_at,sent_at,last_error
+        FROM email_outbox WHERE event_key=?`).get(`brand_campaign_closed:${campaign.id}`);
+      return c.json({ campaign_id: campaign.id, queued, email: email || null });
+    }),
+  );
   app.post(
     "/api/work/admin/targeted-email",
     wrap(async (c) => {
