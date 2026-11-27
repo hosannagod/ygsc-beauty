@@ -11,6 +11,7 @@ import {
   emailStatus,
   queueSelectionEmail,
   queueBrandCampaignClosedEmail,
+  queueBrandSelectionReminderEmail,
   queueBrandCampaignShippingEmail,
 } from "../src/seoul/email.js";
 
@@ -122,6 +123,27 @@ test("brand receives one selection notice and one shipping summary per campaign"
     await worker(start + 259200000 + 2);
     assert.equal(sent.length, 2);
     assert.ok(sent.every(body => body.includes('https://seoul-scent.onrender.com/campaigns/1')));
+  } finally {
+    db.close();
+  }
+});
+test("an explicit brand selection reminder is sent at most once after the first notice", () => {
+  const db = fixture();
+  try {
+    db.prepare("UPDATE campaigns SET status='closed' WHERE id=1").run();
+    db.prepare("UPDATE applications SET status='applied' WHERE id=1").run();
+    assert.equal(queueBrandSelectionReminderEmail(db, 1, env), false);
+    assert.equal(queueBrandCampaignClosedEmail(db, 1, env), true);
+    assert.equal(queueBrandSelectionReminderEmail(db, 1, env), false);
+    db.prepare("UPDATE email_outbox SET status='sent',sent_at=? WHERE event_key='brand_campaign_closed:1'").run(Date.now());
+    assert.equal(queueBrandSelectionReminderEmail(db, 1, env), true);
+    assert.equal(queueBrandSelectionReminderEmail(db, 1, env), false);
+    const reminder = db.prepare("SELECT recipient,subject,body FROM email_outbox WHERE event_key='brand_campaign_reminder:1'").get() as any;
+    assert.equal(reminder.recipient, "brand@example.com");
+    assert.match(reminder.subject, /선정 요청 리마인드/);
+    assert.match(reminder.body, /3 days/);
+    assert.match(reminder.body, /배송 안내 메일/);
+    assert.equal((db.prepare("SELECT COUNT(*) n FROM email_outbox WHERE event_key='brand_campaign_reminder:1'").get() as any).n, 1);
   } finally {
     db.close();
   }

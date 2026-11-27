@@ -165,6 +165,44 @@ ${row.title} 캠페인 모집이 마감되었습니다. 현재 미선정 지원�
     row.brand_email, subject, body, now, now).changes > 0;
 }
 
+// An operator-requested follow-up, at most once per campaign, after the first notice was sent.
+export function queueBrandSelectionReminderEmail(
+  db: DB,
+  campaignId: number,
+  env: Env = process.env,
+  now = Date.now(),
+) {
+  if (!emailConfig(env).configured) return false;
+  const row = db.prepare(`SELECT c.title,c.status,c.is_draft,c.deleted_at,
+    b.name AS brand_name,b.email AS brand_email,b.username AS brand_username,
+    (SELECT MIN(id) FROM applications WHERE campaign_id=c.id) AS application_id,
+    (SELECT COUNT(*) FROM applications WHERE campaign_id=c.id AND status='applied') AS applicant_count,
+    (SELECT status FROM email_outbox WHERE event_key='brand_campaign_closed:' || c.id) AS closed_mail_status
+    FROM campaigns c JOIN users b ON b.id=c.brand_id WHERE c.id=?`).get(campaignId) as any;
+  if (!row || row.status !== "closed" || row.is_draft || row.deleted_at || !row.application_id ||
+      row.applicant_count < 1 || row.closed_mail_status !== "sent" ||
+      !validEmail(row.brand_email) || row.brand_email === row.brand_username) return false;
+  const subject = `[Seoul Scent] 선정 요청 리마인드 / Creator selection reminder · ${row.title}`;
+  const body = `English
+
+Hello ${row.brand_name},
+
+This is a reminder to review the ${row.applicant_count} applicant(s) still awaiting selection for ${row.title}. Please select the creators on the campaign page. Selected creators then have 3 days to confirm participation and their shipping address. Please wait for our separate shipping summary before dispatching products.
+
+--------------------
+
+한국어
+
+안녕하세요, ${row.brand_name} 담당자님.
+
+${row.title} 캠페인에서 현재 ${row.applicant_count}명의 지원자가 선정을 기다리고 있습니다. 캠페인 페이지에서 지원자를 검토하고 선정해 주세요. 선정된 인플루언서는 3일 동안 참여 의사와 배송지를 확인합니다. 제품은 별도 배송 안내 메일을 확인한 뒤 발송해 주세요.
+
+캠페인 관리: `;
+  return db.prepare(`INSERT OR IGNORE INTO email_outbox(application_id,event_key,recipient,subject,body,next_attempt,created_at)
+    VALUES(?,?,?,?,?,?,?)`).run(row.application_id, `brand_campaign_reminder:${campaignId}`,
+    row.brand_email, subject, body, now, now).changes > 0;
+}
+
 // One shipping summary per campaign after the confirmation windows have ended.
 export function queueBrandCampaignShippingEmail(
   db: DB,
@@ -233,7 +271,7 @@ export async function deliverEmail(row: any, env: Env, request: Fetch = fetch) {
   if (!config.configured) throw new DeliveryError("configuration_missing");
   if (!validEmail(row.recipient))
     throw new DeliveryError("invalid_recipient", true);
-  const campaignMail = /^brand_campaign_(?:closed|shipping):(\d+)$/.exec(String(row.event_key));
+  const campaignMail = /^brand_campaign_(?:closed|shipping|reminder):(\d+)$/.exec(String(row.event_key));
   const text = row.broadcast ? row.body :
     row.body +
     new URL(campaignMail ? `/campaigns/${campaignMail[1]}` : `/applications/${row.application_id}`, config.origin).href +
