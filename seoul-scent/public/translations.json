@@ -831,5 +831,14 @@
   "이번 캠페인에는 선정되지 않았습니다. 다른 캠페인에도 지원하실 수 있습니다.": "You were not selected for this campaign. You can apply for other campaigns.",
   "승인": "Approve",
   "팔로워": "Followers",
-  "남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.": "Mark the remaining applicants as not selected? No email will be sent."
+  "남은 지원자에게 미선정 결과를 표시할까요? 이메일은 발송되지 않습니다.": "Mark the remaining applicants as not selected? No email will be sent.",
+  "캠페인 가이드 보기": "View campaign guide",
+  "캠페인 가이드 및 참고자료": "Campaign guide and references",
+  "촬영 전 브랜드 요구사항과 참고 이미지를 확인해 주세요.": "Review the brand requirements and reference images before filming.",
+  "참고 이미지": "Reference images",
+  "이미지 저장": "Save image",
+  "영어 번역을 불러오지 못한 내용은 원문으로 표시됩니다.": "Content without an available English translation is shown in the original language.",
+  "캠페인 상세 전체 보기": "View full campaign details",
+  "캠페인 가이드를 불러오는 중입니다.": "Loading the campaign guide.",
+  "캠페인 가이드를 불러오지 못했습니다. 다시 펼쳐 주세요.": "Could not load the campaign guide. Close and reopen this section to retry."
 }

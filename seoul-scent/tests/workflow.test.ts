@@ -2644,6 +2644,12 @@ test("campaign photos enforce limits and ownership, support replacement and roll
     const image = await f.req("influencer", imagePath);
     assert.equal(image.status, 200);
     assert.equal(image.headers.get("content-type"), "image/jpeg");
+    const download = await f.req("influencer", imagePath + "?download=1");
+    assert.equal(download.status, 200);
+    assert.match(
+      download.headers.get("content-disposition") || "",
+      /attachment; filename="campaign-\d+-reference-\d+\.jpg"/,
+    );
     assert.equal(
       Buffer.from(await image.arrayBuffer()).toString("base64"),
       photo,

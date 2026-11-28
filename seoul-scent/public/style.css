@@ -1149,6 +1149,47 @@ td strong {
 .detail-grid .panel {
   margin-top: 0;
 }
+.campaign-card .application-guide-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: #28513d;
+  font-size: 13px;
+  font-weight: 700;
+}
+.campaign-guide {
+  margin: 0 0 22px;
+  border: 1px solid #cbdaca;
+  background: #f7faf5;
+}
+.campaign-guide > summary {
+  padding: 0;
+  color: #244735;
+  list-style-position: inside;
+}
+.campaign-guide > summary strong {
+  font-size: 17px;
+}
+.campaign-guide > summary span {
+  display: block;
+  margin-top: 8px;
+  color: #687b6b;
+  font-size: 13px;
+}
+.campaign-guide-body {
+  padding-top: 20px;
+}
+.campaign-guide-body h3 {
+  margin: 22px 0 10px;
+}
+.campaign-guide-images figure {
+  min-width: 0;
+  margin: 0;
+}
+.campaign-guide-images .secondary {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+}
 .review-actions {
   display: grid;
   gap: 25px;

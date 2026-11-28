@@ -990,7 +990,9 @@ export function registerWorkflow(
       return new Response(new Uint8Array(row!.data), {
         headers: {
           "Content-Type": "image/jpeg",
-          "Content-Disposition": "inline",
+          "Content-Disposition": c.req.query("download") === "1"
+            ? `attachment; filename="campaign-${campaign.id}-reference-${imageId}.jpg"`
+            : "inline",
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
         },

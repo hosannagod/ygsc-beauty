@@ -69,6 +69,9 @@
     `<span class="status status-${esc(s)}">${labels[s] || esc(s)}</span>`;
   const applicationBadge = (a) =>
     badge(a.status === "applied" && a.selection_finalized_at ? "not_selected" : a.status === "rejected" && a.withdrawn_at ? "withdrawn" : a.status === "selected" && !a.participation_confirmed_at && a.participation_due > 0 && Date.now() >= a.participation_due ? "confirmation_expired" : a.status);
+  const hasCampaignGuide = (a) =>
+    !["applied", "rejected", "no_show"].includes(a.status) &&
+    !a.campaign_deleted_at;
   const money = (n) =>
     Number(n).toLocaleString(
       window.ScentI18n.lang === "en" ? "en-US" : "ko-KR",
@@ -354,6 +357,7 @@
         >${a.status === "selected" && a.participation_due > 0 && Date.now() >= a.participation_due ? a.participation_confirmed_at ? t("진행 상황 보기") : t("기한 경과 · 상세 보기") : ({ selected: !a.review_required && a.participation_confirmed_at ? t("최종 URL 제출하기") : t("배송지 등록·확인"), shipping: a.review_required ? t("초안 제출하기") : t("최종 URL 제출하기"), draft_submitted: a.review_required ? t("진행 상황 보기") : t("최종 URL 제출하기"), revision_requested: a.review_required ? t("수정 반영하기") : t("최종 URL 제출하기"), draft_approved: t("최종 URL 제출하기") }[a.status] || t("진행 상황 보기"))}
         →</a
       >
+      ${hasCampaignGuide(a) ? `<a class="application-guide-link" href="/campaigns/${a.campaign_id}">${t("캠페인 가이드 보기")} ↗</a>` : ""}
     </article>`;
   function applicationSections(applications, preview = false) {
     const groups = [
@@ -1239,6 +1243,15 @@
   function actionForm(a, action, fields, label, confirm = "") {
     return `<form class="action-form" data-task="action" data-id="${a.id}" data-action="${action}" ${confirm ? `data-confirm="${esc(confirm)}"` : ""}>${fields}${submit(label)}</form>`;
   }
+  function campaignGuidePanel() {
+    return `<details class="panel campaign-guide" id="campaign-guide"><summary><strong>${t("캠페인 가이드 및 참고자료")}</strong><span>${t("촬영 전 브랜드 요구사항과 참고 이미지를 확인해 주세요.")}</span></summary><div class="campaign-guide-body"></div></details>`;
+  }
+  function campaignGuideContent(c) {
+    const images = c.images?.length
+      ? `<h3>${t("참고 이미지")}</h3><div class="campaign-gallery campaign-guide-images">${c.images.map((image, index) => `<figure><a href="${esc(image.url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(image.url)}" alt="${t("참고 이미지")} ${index + 1}" loading="lazy"></a><a class="secondary" href="${esc(image.url)}?download=1" download="campaign-${c.id}-reference-${index + 1}.jpg">↓ ${t("이미지 저장")}</a></figure>`).join("")}</div>`
+      : "";
+    return `<h3>${t("제품 소개")}</h3><p class="preline">${linkedText(c.description)}</p>${c.product_url ? `<p>${link(c.product_url, t("제품·브랜드 사이트 보기"))}</p>` : ""}<h3>${t("콘텐츠 가이드라인")}</h3>${c.guidelines ? `<p class="preline">${linkedText(c.guidelines)}</p>` : ""}${c.guidelines_url ? `<p>${link(c.guidelines_url, t("콘텐츠 가이드 문서 열기"))}</p>` : ""}${images}${c._translationUnavailable ? `<p class="warning">${t("영어 번역을 불러오지 못한 내용은 원문으로 표시됩니다.")}</p>` : ""}<a class="text-link" href="/campaigns/${c.id}">${t("캠페인 상세 전체 보기")} →</a>`;
+  }
   async function applicationDetail(id) {
     const influencer = role === "influencer";
     const [{ application: a, events }, savedProfile] = await Promise.all([
@@ -1432,6 +1445,7 @@
           >
         </div>
         ${a.status === "no_show" ? t('<div class="warning">노쇼 상태입니다. 지원 제한과 등급 페널티는 내 프로필에서 확인할 수 있습니다.</div>') : ""}
+        ${influencer && hasCampaignGuide(a) ? campaignGuidePanel() : ""}
         <div class="detail-grid">
           <div>
             <section class="panel">
@@ -1496,6 +1510,22 @@
             </section>
           </div>
         </div>`;
+    const guide = root.querySelector("#campaign-guide");
+    guide?.addEventListener("toggle", async () => {
+      if (!guide.open || guide.dataset.loading || guide.dataset.loaded) return;
+      const content = guide.querySelector(".campaign-guide-body");
+      guide.dataset.loading = "1";
+      content.innerHTML = `<p class="muted">${t("캠페인 가이드를 불러오는 중입니다.")}</p>`;
+      try {
+        const { campaign } = await api(`/campaigns/${a.campaign_id}`);
+        content.innerHTML = campaignGuideContent(campaign);
+        guide.dataset.loaded = "1";
+      } catch {
+        content.innerHTML = `<p class="warning">${t("캠페인 가이드를 불러오지 못했습니다. 다시 펼쳐 주세요.")}</p>`;
+      } finally {
+        delete guide.dataset.loading;
+      }
+    });
   }
   function promotionPanel(profile, data) {
     const submission = data.submission;

@@ -9,6 +9,7 @@ test("language selection translates literal UI while preserving campaign and use
   const { t, html } = translator("en");
   assert.equal(t("초안 링크 제출"), "Submit draft link");
   assert.equal(t("미선정"), "Not selected");
+  assert.equal(t("캠페인 가이드 및 참고자료"), "Campaign guide and references");
   assert.equal(
     t("이번 캠페인에는 선정되지 않았습니다. 다른 캠페인에도 지원하실 수 있습니다."),
     "You were not selected for this campaign. You can apply for other campaigns.",
